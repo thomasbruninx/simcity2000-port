@@ -34,5 +34,9 @@ constexpr size_t kOrdinances = 1000;     // @0x4C9A58  ordinance bitmask (20 bit
 constexpr size_t kSpeed = 1019;          // game speed 1..5 (app+0x308)
 constexpr size_t kCityCenterX2 = 1030;   // @0x4CA470
 constexpr size_t kCityCenterY2 = 1031;   // @0x4CA474
+constexpr size_t kC8440 = 1037;          // @0x4C8440  pollution divisor term
+constexpr size_t kPoliceBase = 1039;     // @0x4C91F4  police station strength base
+constexpr size_t kWaterFlag = 1043;      // @0x4CA3F4  set by the water scan
+constexpr size_t kFundingPercent(size_t category) { return 479 + 27 * category + 1; }   // budget[category].fundingPercent
 
 }  // namespace sc2k::misc
