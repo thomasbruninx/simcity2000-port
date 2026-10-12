@@ -33,3 +33,11 @@
 - App state machine 0x405A70 documents intro timing (presents 5 s, title ≈5 s).
 - Ghidra auto-analysis misses some code (e.g. 0x40CA90, 0x409DC0 not in functions; timeKillEvent xrefs empty). Use `tools/ghidra/Disasm.java` for forced disassembly, and consider a re-analysis pass with code-scan options.
 - **Next:** find WM_TIMER handler (message map entry for 0x113 in CSimcityApp/MainFrame), speed variable at app+? and its consumers; MIDI player 0x480BCE/0x480CEB; RNG.
+
+## 2026-10-12 — Session 3: RNG and clock
+**Found/verified:** both RNGs (LCG@0x4CCB98, 16-bit LFSR@0x4CCB94, poly 0x1BF5, seeded from `GetTickCount()|1` at 0x424CE5/0x424CF6; RNG state not in saves per decoded chunks); LFSR period from seed 1 is 57,337 (computed from the model; not maximal; low bits correlated — preserved). Located `WM_TIMER` handlers via MFC message-map scan (`{0x113,0,0,0,sig 11,fn}` ×7 in .rdata); sim pace handler 0x40BBD0; speed gating table (turtle 800 ms, llama 400 ms, cheetah 200 ms, swallow free-run); `SimulationTick` 0x412FE0: 25 ticks/month, 300/year, 25-phase dispatch; disaster dispatcher 0x45C870.
+**Code:** first native code — `src/simulation/{rng,clock}`, CMake, 14 tests (known-answer vectors from `tools/rng_model.py`, an independent model of the disassembly). Tests prove self-consistency with *our reading*, not yet with the live game.
+**Hypotheses:** mode 2 = disaster (half rate); phases 3–18 = 16 map sector passes; phase 22 = scenario/bankruptcy checks.
+**Disproven:** I first took 0x45C870 for the main sim orchestrator — it is the disaster dispatcher.
+**Tooling:** `DecompileAt.java` now creates functions on demand; `DecompileSmall.java` decompiles all small functions for constant searches (found RNG by multiplier constants).
+**Next:** census of RNG call sites by caller; decompile phases (0x4671F0, 0x46A1C0, 0x435220, 0x458040, 0x463EE0, 0x467AE0, 0x4686C0) to map each to map layers; validation experiment (Windows): speed vs. date progression per wall-clock to confirm 800/400/200 ms and 25 days/month.

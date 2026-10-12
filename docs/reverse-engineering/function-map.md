@@ -54,3 +54,12 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x0040CAC0 | `SimTimerProcFallback` (via thunk 0x401942) | Same `PostMessage(WM_TIMER,1,0)` for the `SetTimer` fallback | disassembly | VERIFIED | – |
 | 0x00409DFC | call site of `StartSimTimer` | Only direct call: `StartSimTimer(200, 200)` — period 0xC8 ms, resolution 0xC8 — from a constructor-like routine (`this`=ESI; app object 0x4C6010 registered right after) | disassembly | VERIFIED call; role of this routine UNKNOWN; speed-dependent restarts not found (no other direct callers; may be indirect) | sim clock |
 | 0x00405A70 | `AppStepMachine` (per-idle/timer state machine on app object) | Switch on `this+0x324` "program step": step 1 `presents.bmp` shown ≥5000 ms; 3 `titlescr.bmp` ≈5001 ms; 5 another ≈5001 ms screen; 7 → main menu step 0xE → New City/Load/etc.; default = in-game; handles palette-cycle toggles (+0x314/+0x318 → `ToggleColorCycling` 0x456A60) | decompile; uses `GetTickCount` | STRONG INFERENCE | app/state flow |
+| 0x0047FED0 | `SeedLCG` (thunk 0x401F37) | `state@0x4CCB98 = arg` | disasm | VERIFIED | `Lcg::seed` |
+| 0x0047FEF0 | `LCGMod(n)` (thunk 0x401163) | LCG `*0x41C64E6D+0x3039`, `(s>>16)&0x7FFF`, 16-bit `IDIV` remainder | disasm; 19 callers | VERIFIED | `Lcg::mod` |
+| 0x0047FF20 | `SeedLFSR` (thunk 0x40265D) | dword store to 0x4CCB94 | disasm | VERIFIED | `Lfsr::seed` |
+| 0x0047FF40 | `LFSRMod(n)` (thunk 0x401CA8) | 16-bit LFSR step (`<<1`, `^0x1BF5` if top bit), `% n` | disasm; 33 callers | VERIFIED | `Lfsr::mod` |
+| 0x0047FF80,FFC0,480040,4800C0,480100 | `LFSRMask1/3/F/3F/7F` | step then `& mask` | disasm | VERIFIED | `Lfsr::mask` |
+| 0x00424C30 | `AppInitDisplayAndSeed` | Display capability probe (GetDeviceCaps, OS version check), then seeds both RNGs with `GetTickCount()\|1` | decompile | VERIFIED | app init |
+| 0x0040BBB0 / 0x0040BBD0 | `OnTimer(id)` / `SimPace` | id==1 → phase counter, anim flags, speed-gated `g_simTicking` | decompile; matched against sc2kfix flag model | VERIFIED | `Clock::onTimerTick` |
+| 0x00412FE0 | `SimulationTick` | `++day`, month=(day/25)%12, year=day/300, `switch(day%25)` phase dispatch (see simulation/clock-and-calendar.md) | decompile | VERIFIED structure; per-phase roles UNKNOWN | `simulation/` |
+| 0x0045C870 | `DisasterTick` | Dispatch on pending disaster type `@0x4C9438` (1–0x12) to handlers 0x45E290, 0x45D460, 0x45DF50, … | decompile | STRONG INFERENCE | later |

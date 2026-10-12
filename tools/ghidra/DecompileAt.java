@@ -15,6 +15,7 @@ public class DecompileAt extends GhidraScript {
             for (int i = 1; i < a.length; i++) {
                 Address ad = toAddr(Long.parseLong(a[i].replace("0x", ""), 16));
                 Function f = getFunctionContaining(ad);
+                if (f == null) { disassemble(ad); f = createFunction(ad, null); }
                 if (f == null) { w.println("// no function at " + a[i]); continue; }
                 DecompileResults r = di.decompileFunction(f, 60, monitor);
                 w.println("// ==== " + f.getName() + " @ " + f.getEntryPoint() + " (requested " + a[i] + ")");
