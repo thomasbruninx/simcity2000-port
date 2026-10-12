@@ -46,3 +46,8 @@ Derived from what reconnaissance actually showed. Order is driven by dependencie
 
 ## Blockers / decisions needed from you
 None blocking. Open choices: see the final report.
+
+
+## Status update (2026-10-12, end of session 7)
+Done and verified bit-exactly against the original code on 61 cities: M3 (libsc2), M6 (RNG + clock), and in M8+ the power, water, environment, demand, finance and zone-growth/traffic subsystems. The emulator-based differential harness (docs/validation/006) is now the primary tool: port a routine, diff it, fix until zero differences.
+**Remaining simulation work, in suggested order:** destroy effects 0x458690 → military/airport/seaport zones (0x437C30 and callees) → thing system (spawners, vehicles, monsters; 0x4501D0/0x451360) → economy model 0x4686C0 and the event half of 0x467AE0 → disasters (0x45C870 handlers) → scenario goals/game over (phase 22) → message/advisor logic. Then the headless driver for the complete `SimulationTick` (0x412FE0), diff-tested end to end, followed by M4/M5 (SDL3 skeleton, renderer) and M7 (first playable).
