@@ -21,7 +21,7 @@ add_executable(sc2k-verify tools/sc2k_verify.cpp)
 target_link_libraries(sc2k-verify PRIVATE sc2k_sim)
 
 enable_testing()
-add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.cpp tests/test_power.cpp tests/test_environment.cpp tests/test_economy.cpp tests/test_main.cpp)
+add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.cpp tests/test_power.cpp tests/test_environment.cpp tests/test_economy.cpp tests/test_zone.cpp tests/test_main.cpp)
 target_link_libraries(test_sim PRIVATE sc2k_sim sc2k_save)
 add_test(NAME sim COMMAND test_sim)
 set_tests_properties(sim PROPERTIES ENVIRONMENT "SC2K_DATA_PATH=$ENV{SC2K_DATA_PATH}")

@@ -7,6 +7,7 @@
 #include "emu/emu.h"
 #include "emu/sim_image.h"
 #include "simulation/sim_context.h"
+#include "world/world_hash.h"
 #include "save/error.h"
 #include "save/misc_fields.h"
 #include "simulation/environment.h"
@@ -274,8 +275,8 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
         for (size_t i = 0; i < w.xtrf.v.size(); ++i) trafficAdded += int(ew.xtrf.v[i]) - int(w.xtrf.v[i]);
         for (int z = 1; z <= 7; ++z) popAdded += es.zonePop[static_cast<size_t>(z)] - s.zonePop[static_cast<size_t>(z)];
         tiles += 1; bad += (d || !randSame || !lfsrSame || !rideSame) ? 1 : 0;
-        std::printf("%-34s variant %d [tiles changed %ld, traffic +%ld, zonePop +%ld, rand %s->%s] rand %s lfsr %s riders %s diffs %ld%s\n", path.c_str(), variant, changed, trafficAdded, popAdded,
-                    "seed", "moved", randSame ? "same" : "DIFF", lfsrSame ? "same" : "DIFF", rideSame ? "same" : "DIFF", d, detail.c_str());
+        std::printf("%-34s variant %d [tiles changed %ld, traffic +%ld, zonePop +%ld, rand %s->%s] rand %s lfsr %s riders %s diffs %ld%s  hash %016llx\n", path.c_str(), variant, changed, trafficAdded, popAdded,
+                    "seed", "moved", randSame ? "same" : "DIFF", lfsrSame ? "same" : "DIFF", rideSame ? "same" : "DIFF", d, detail.c_str(), (unsigned long long)worldFingerprint(ew, es));
         failures += (d || !randSame || !lfsrSame || !rideSame);
     }
     return failures;
