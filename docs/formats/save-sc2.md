@@ -26,7 +26,7 @@ Whether `SCEN/PICT/TEXT/TMPL` are compressed is UNKNOWN (stored sizes vary; trea
 | Tag | Decoded bytes | Structure | Interpretation / confidence |
 |---|---|---|---|
 | `CNAM` | 32 (raw) | Pascal-style: byte0 = length, name, padding | City name. Byte0 equals real length in scenarios ("Atlanta" → 07). In `DEFAULT.SC2` byte0 is 0x1F with "New City\0" then 0xFD fill — length byte unreliable there (VERIFIED observation) |
-| `MISC` | 4800 | 1200 × 32-bit (endianness UNVERIFIED) | Global city state: dates, funds, population, RCI demand, budget, tax, etc. Layout UNKNOWN here; sc2kfix `save_vanilla.cpp` holds a field map to cross-check |
+| `MISC` | 4800 | 1200 × 32-bit (endianness UNVERIFIED) | Global city state. **Field map recovered from the game's loader: see [misc-fields.md](misc-fields.md)** (word 0 = 0x122 version, rotation, start year, day, treasury, wind, cloudiness, tile census, budget, ordinances, speed …) |
 | `ALTM` | 32768 (raw) | 128×128 × **u16 big-endian** | Altitude map. **VERIFIED on NYC.SC2:** bits 0–4 land altitude (values 4 and 6 dominate), bits 5–9 water level (6 on 99% of tiles), bits 10–15 tunnel depth (all 0); e.g. raw 198 = altitude 6 / water level 6 (flat land), 196 = altitude 4 under water level 6 |
 | `XTER` | 16384 | 128×128 × u8 | Terrain tile id |
 | `XBLD` | 16384 | 128×128 × u8 | Building/overlay tile id |

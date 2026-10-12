@@ -77,3 +77,8 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x0040CED0 | `UpdateTitleText` | title bar date/status | decompile | STRONG | UI |
 | 0x004720A0 | `PickAdvisorNeed` | advisor message from stats | partial read | MODERATE | UI |
 | 0x0048BCD8 / 0x0048BCC8 | CRT `rand` / `srand` | MSVC LCG, 335 callers / 8 callers | decompile | VERIFIED | `CrtRand` |
+| 0x00430CB0 | `LoadCityMisc` (city load, MISC → globals) | Checks version 0x122, byte-swaps, copies ~1050 MISC words into globals (docs/formats/misc-fields.md) | decompile; effects verified (rotation, wind, cloud, water factor, ordinances) | VERIFIED | `CityFile` + `misc::k*` |
+| 0x00467340 | `PowerFlood(a,b)` | two-pass FIFO flood (see simulation/power.cpp) | decompile + port verified on 61 saves | VERIFIED | `floodPower` |
+| 0x00464370 | `WaterFlood(a,b)` | two-pass flood over piped tiles (pump 0xDC, tower 0xEB, treatment 0xF4, desal 0xFA) | decompile + port verified | VERIFIED | `floodWater` |
+| 0x00413780 / 0x004137B0 / 0x00413820 | `QueueReset+Push` / `QueuePush` / `QueuePop` | 512-entry FIFO ring of (a,b) ints; overflow drops oldest | decompile | VERIFIED | `TileQueue` |
+| 0x0046B420 | `SpreadCoverage(arr,x,y,strength)` | adds strength to a cell and weighted neighbours via 0x46B3B0 (4/5, 3/4·4/5, …) | partial | MODERATE | later |

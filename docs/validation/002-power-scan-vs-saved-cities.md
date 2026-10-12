@@ -7,6 +7,8 @@
 - Cities **with** wind/solar plants: 5 of 20 differ by a handful of tiles (EGYPTFAL −1, STCHRISC −1, VIRTUALV −5, SANFRANC −4, THEBAHAM −39 of 3,850) — expected: supply shortage boundaries depend on the random terms; others match exactly.
 - Cities without plants (HERMAN, TOMG-B1..4) trivially 0 = 0.
 
+**Update — with real weather inputs from `MISC`** (wind = word 25, cloudiness = word 26, ordinances = word 1000, found via the loader decompile, see formats/misc-fields.md): the 16 files with wind/solar plants improve from 5 differing to **2** (CAPE +1, VIRTUALV +4; THEBAHAM 39 → 0, SANFRANC 4 → 0, EGYPTFAL 1 → 0, STCHRISC 1 → 0), i.e. 13 of 16 exact. Overall 5 mismatching tiles among ~284k powered tiles. The remaining few are consistent with the randomness of wind/solar output (the exact `rand()` stream is not recoverable from a save).
+
 **Interpretation.** Strong evidence (VERIFIED statistically, not for bit-exactness of RNG paths) that:
 1. XBIT bits 0x08 (mark), 0x40 (powered), 0x80 (powerable) are as documented;
 2. layer indexing `layer[a][b]` with `a` = first (outer, file-major) index and neighbour order are right;

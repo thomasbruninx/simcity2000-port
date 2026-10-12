@@ -49,3 +49,10 @@
 **Disproven:** "CRT rand unused by game logic".
 **Remaining:** read 0x435220 callees (0x436680, 0x456F70, 0x436800, 0x4376C0, 0x436F40, 0x4418B0), the flood fills (0x467340, 0x464370, 0x46B420), tables (0x4E8318, 0x4E8528, 0x4E8638, 0x4E85A8, 0x4E6468, 0x4E6428, 0x4E64D8, 0x4E6580), constants 0x4D9CE8–0x4D9D10; second half of 0x4686C0 and 0x4720A0; `MISC` field map (budget/ordinance/date fields live in MISC).
 **Next:** implement `libsc2` (container + layers) and a verification harness that recomputes power/water/pollution/land value from a saved city's XBLD/XZON/XBIT and compares to the saved layers.
+
+## 2026-10-12 — Session 5: libsc2 and first equivalence tests
+**Built:** `src/save` (RLE, CityFile, misc indices), `sc2k-save-info`, `src/world`, `src/simulation/{tile_queue,power,water}`, `tools/sc2k_verify.cpp`, tests (32 pass; data-dependent ones need `SC2K_DATA_PATH`).
+**Found:** the city loader 0x430CB0 → full MISC field map; queue discipline (FIFO ring, 512); power and water flood algorithms and the outer scans (water: 4 rotation orders).
+**Validated against the 61 saved files:** power 5 mismatching tiles of ~284k; water 4,327 of 284,009 with 41/61 files exact (remaining diffs all pipe tiles, likely stale-after-edit saves — HYPOTHESIS). New quirks confirmed in tests: plant tiles are charged one supply unit in pass 2; in shortage, flood order decides who is served.
+**Encoder note:** canonical RLE encoder reproduces 55% of original chunks bytewise (min run 2); original encoder not yet reverse-engineered — `serializeOriginal` keeps untouched chunks verbatim.
+**Next:** environment scan (0x46A1C0) port + verification against XPLT/XVAL/XCRM/XPOP/XROG/XPLC/XFIR; needs tables 0x4E85A8, 0x4E8638, 0x4E6468, coverage spreader 0x46B3B0, city centre; then demand/finance. Also: the Windows check of TOMG-C4 water (docs/validation/003).
