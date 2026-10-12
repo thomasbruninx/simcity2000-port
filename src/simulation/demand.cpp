@@ -15,6 +15,7 @@ DemandResult runDemand(CityState& s, const GameTables& t, const DemandExtra& x) 
     if (newPop10 < s.population10) res.populationDecline = s.population10 - newPop10;
     else res.populationGrowth = newPop10 - s.population10;
     s.population10 = newPop10;
+    s.populationDecline = res.populationDecline; s.populationGrowth = res.populationGrowth;
     s.popHistorySum = static_cast<int32_t>(static_cast<uint32_t>(s.popHistorySum) + newPop10);
 
     // category populations and the commercial+industrial sum (double, FILD qword of zero-extended values)
@@ -26,6 +27,7 @@ DemandResult runDemand(CityState& s, const GameTables& t, const DemandExtra& x) 
         if (i == 1 || i == 2) comInd = (static_cast<double>(a) + static_cast<double>(b)) + comInd;
     }
 
+    for (int i = 0; i < 3; ++i) s.catPop[static_cast<size_t>(i)] = cat[i];
     const double ratio = static_cast<double>(s.ratioMemory) / (1.0 + comInd);
     s.ratioMemory = cat[0];
     const int32_t q = cat[0] / 50;

@@ -14,4 +14,12 @@ World World::fromCity(const CityFile& c) {
     return w;
 }
 
+void World::writeBack(CityFile& c) const {
+    c.xbld = xbld; c.xzon = xzon; c.xbit = xbit; c.xund = xund; c.xtxt = xtxt; c.xter = xter;
+    c.altm = altm;
+    c.xmic = xmic; c.xlab = xlab; c.xthg = xthg;
+    c.xtrf = xtrf; c.xplt = xplt; c.xval = xval; c.xcrm = xcrm;
+    c.xplc = xplc; c.xfir = xfir; c.xpop = xpop; c.xrog = xrog;
+}
+
 }  // namespace sc2k

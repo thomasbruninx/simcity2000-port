@@ -1183,8 +1183,8 @@ void thingFrame(SimContext& c) {
     if (++th.animFrame > 0x3FF) th.animFrame = 0;
     th.planes = th.helis = th.ships = th.sailboats = th.visitors = 0;
     th.monsters = th.trains = th.tornados = 0;
-    if (th.trafficAverage > 0x23 && (t.randv() & 0xFF) == 0) { /* traffic sound */ }
-    if (c.s.census[0xD2] != 0 && th.crimeAverage > 0x28 && (t.randv() & 0xFF) == 0) { /* siren sound */ }
+    if (c.s.graph[4 * 52] > 0x23 && (t.randv() & 0xFF) == 0) { /* traffic sound */ }
+    if (c.s.census[0xD2] != 0 && c.s.graph[7 * 52] > 0x28 && (t.randv() & 0xFF) == 0) { /* siren sound */ }
     static const bool kActive[17] = {false, true, true, true, true, true, true, false, false, true, true, false, true, false, false, true, true};
     for (int s = 1; s < kSlots; ++s) {
         const int type = t.f(s, 0);

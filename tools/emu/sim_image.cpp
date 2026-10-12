@@ -18,8 +18,14 @@ SimImage::SimImage(Emu& emu) : e(emu) {
     e.put<uint32_t>(0x4C944C, things);
     e.put<uint32_t>(0x4C91B0, labels);
     e.put<uint32_t>(0x4CA1D0, e.alloc(12000));   // sprite table (heights only feed drawing coordinates): zeroed
-    trafficAvgPtr = e.alloc(16); crimeAvgPtr = e.alloc(16);
-    e.put<uint32_t>(0x4CB498, trafficAvgPtr); e.put<uint32_t>(0x4CB4A4, crimeAvgPtr);
+    jobsAp = e.alloc(80); jobsBp = e.alloc(80); jobsCp = e.alloc(80); s940cp = e.alloc(32); s3f8p = e.alloc(32); a408p = e.alloc(48);
+    n9d28p = e.alloc(16); n981cp = e.alloc(16); n9944p = e.alloc(16);
+    e.put<uint32_t>(0x4C84CC, jobsAp); e.put<uint32_t>(0x4C84D4, jobsBp); e.put<uint32_t>(0x4C9A88, jobsCp);
+    e.put<uint32_t>(0x4C940C, s940cp); e.put<uint32_t>(0x4CA3F8, s3f8p); e.put<uint32_t>(0x4CA408, a408p);
+    e.put<uint32_t>(0x4C9D28, n9d28p); e.put<uint32_t>(0x4C981C, n981cp); e.put<uint32_t>(0x4C9944, n9944p);
+    graphBase = e.alloc(16 * 52 * 4); graphMaxp = e.alloc(64);
+    for (int i = 0; i < 16; ++i) e.put<uint32_t>(0x4CB488 + 4u * i, graphBase + 208u * i);
+    e.put<uint32_t>(0x4CB708, graphMaxp);
     e.call(0x456CE0);   // fills the 24-entry neighbourhood offset table (static init in the game)
 }
 
@@ -45,7 +51,29 @@ void SimImage::load(const World& w, const CityState& s) {
     e.put<uint16_t>(0x4C9408, s.c9408); e.put<uint16_t>(0x4CB4F0, s.cb4f0);
     for (int i = 0; i < 3; ++i) e.put<int16_t>(0x4CB910 + 2u * i, s.demand[static_cast<size_t>(i)]);
     e.put<int16_t>(0x4CA038, int16_t(s.yearOffset())); e.put<int16_t>(0x4C960C, int16_t(s.startYear));
-    e.put<int32_t>(0x4C9E1C, s.day); e.put<int16_t>(0x4CA034, int16_t(s.month()));
+    e.put<uint32_t>(0x4C9940, s.nationalPop); e.put<uint32_t>(0x4CA02C, s.gnp);
+    e.put<int16_t>(0x4C9950, int16_t(s.rateLevel)); e.put<int16_t>(0x4C91D4, int16_t(s.era));
+    e.put<uint32_t>(0x4C94E4, s.populationGrowth); e.put<uint32_t>(0x4CA1C0, s.populationDecline);
+    e.put<uint32_t>(0x4CB4CC, s.cb4cc); e.put<uint32_t>(0x4CA428, s.ca428); e.put<uint32_t>(0x4CA478, s.ca478);
+    e.put<int16_t>(0x4C8440, int16_t(s.c8440)); e.put<int16_t>(0x4C9200, int16_t(s.c9200)); e.put<int32_t>(0x4CB928, s.pollutionTotal);
+    for (int i = 0; i < 3; ++i) e.put<int32_t>(c9948 + 4u * i, s.catPop[static_cast<size_t>(i)]);
+    for (int i = 0; i < 20; ++i) { e.put<uint32_t>(jobsAp + 4u * i, s.jobsA[static_cast<size_t>(i)]); e.put<uint32_t>(jobsBp + 4u * i, s.jobsB[static_cast<size_t>(i)]); e.put<uint32_t>(jobsCp + 4u * i, s.jobsC[static_cast<size_t>(i)]); }
+    for (int i = 0; i < 11; ++i) { e.put<int16_t>(s940cp + 2u * i, s.sec940c[static_cast<size_t>(i)]); e.put<int16_t>(s3f8p + 2u * i, s.sec3f8[static_cast<size_t>(i)]); e.put<int32_t>(a408p + 4u * i, s.sec408[static_cast<size_t>(i)]); }
+    for (int i = 0; i < 4; ++i) { e.put<uint32_t>(n9d28p + 4u * i, s.nbr9d28[static_cast<size_t>(i)]); e.put<uint32_t>(n981cp + 4u * i, s.nbr981c[static_cast<size_t>(i)]); e.put<uint32_t>(n9944p + 4u * i, s.nbr9944[static_cast<size_t>(i)]); }
+    for (int i = 0; i < 16 * 52; ++i) e.put<int32_t>(graphBase + 4u * i, s.graph[static_cast<size_t>(i)]);
+    for (int i = 0; i < 16; ++i) e.put<int32_t>(graphMaxp + 4u * i, s.graphMax[static_cast<size_t>(i)]);
+    e.put<int16_t>(0x4CA028, int16_t(s.milestone)); e.put<uint8_t>(0x4CA424, uint8_t(s.weather)); e.put<uint8_t>(0x4C9DF8, uint8_t(s.c9df8));
+    for (int i = 0; i < 17; ++i) e.put<int16_t>(0x4CA448 + 2u * i, s.eventYears[static_cast<size_t>(i)]);
+    e.put<int32_t>(0x4C84D8, s.c84d8); e.put<int32_t>(0x4CA410, s.ca410);
+    e.put<int32_t>(0x4C9458, s.landValueTotal); e.put<int32_t>(0x4CA46C, s.crimeTotal); e.put<int32_t>(0x4CB70C, s.trafficTotal);
+    e.put<int16_t>(0x4CA3F4, int16_t(s.waterFlag)); e.put<int32_t>(0x4C9A68, s.powerPct); e.put<int32_t>(0x4CB4D0, s.waterPct);
+    e.put<int32_t>(0x4C83C8, s.powerCapacity); e.put<int32_t>(0x4C83C4, s.waterSupply); e.put<int32_t>(0x4C83CC, s.developedTiles);
+    e.put<int16_t>(0x4C91F4, int16_t(s.policeBase)); e.put<int16_t>(0x4CA034, int16_t(s.month()));
+    e.put<int32_t>(0x4C9E1C, s.day);
+    e.put<int16_t>(0x4C9610, int16_t(s.c9610)); e.put<int16_t>(0x4C9448, int16_t(s.c9448));
+    e.put<int32_t>(0x4C84DC, s.extraPop); e.put<int16_t>(0x4CA41C, int16_t(s.econIndex)); e.put<int32_t>(0x4C9608, s.popHistorySum);
+    e.put<int32_t>(0x4C91AC, s.ratioMemory); e.put<int32_t>(0x4C9D44, s.budgetYearFlag);
+    e.put<int32_t>(0x4CA470, s.centerA2); e.put<int32_t>(0x4CA474, s.centerB2); e.put<int16_t>(0x4CA034, int16_t(s.month()));
 }
 
 void SimImage::loadThings(const ThingState& t, const CityState& s) {
@@ -56,7 +84,6 @@ void SimImage::loadThings(const ThingState& t, const CityState& s) {
     e.put<uint16_t>(0x4C9438, uint16_t(t.disasterRequest)); e.put<int16_t>(0x4C9834, int16_t(t.lastSpawned));
     e.put<int32_t>(0x4E70BC, t.shipTargetA); e.put<int32_t>(0x4E70C0, t.shipTargetB);
     e.put<int32_t>(0x4C9D5C, t.scenarioFlag); e.put<int16_t>(0x4E76A4, int16_t(t.fireMessageKind));
-    e.put<int32_t>(trafficAvgPtr, t.trafficAverage); e.put<int32_t>(crimeAvgPtr, t.crimeAverage);
     e.put<int32_t>(0x4CA470, s.centerA2); e.put<int32_t>(0x4CA474, s.centerB2); e.put<int32_t>(0x4CB4EC, s.cb4ec);
     if (!t.spriteHeight.empty()) {
         const uint32_t tbl = e.get<uint32_t>(0x4CA1D0);
@@ -72,7 +99,6 @@ void SimImage::storeThings(ThingState& t) const {
     t.disasterRequest = e.get<uint16_t>(0x4C9438); t.lastSpawned = e.get<int16_t>(0x4C9834);
     t.shipTargetA = e.get<int32_t>(0x4E70BC); t.shipTargetB = e.get<int32_t>(0x4E70C0);
     t.scenarioFlag = e.get<int32_t>(0x4C9D5C); t.fireMessageKind = e.get<int16_t>(0x4E76A4);
-    t.trafficAverage = e.get<int32_t>(trafficAvgPtr); t.crimeAverage = e.get<int32_t>(crimeAvgPtr);
 }
 
 void SimImage::store(World& w, CityState& s) const {
@@ -91,8 +117,50 @@ void SimImage::store(World& w, CityState& s) const {
         for (int m = 0; m < 12; ++m) { r.countMonth[static_cast<size_t>(m)] = e.get<int32_t>(b + 4u * m); r.fundMonth[static_cast<size_t>(m)] = e.get<int32_t>(b + 0x30 + 4u * m); }
         r.currentCosts = e.get<int32_t>(b + 0x60); r.fundingPercent = e.get<int32_t>(b + 0x64); r.yearToDate = e.get<int32_t>(b + 0x68);
     }
+    s.nationalPop = e.get<uint32_t>(0x4C9940); s.gnp = e.get<uint32_t>(0x4CA02C);
+    s.rateLevel = e.get<int16_t>(0x4C9950); s.era = e.get<int16_t>(0x4C91D4);
+    s.populationGrowth = e.get<uint32_t>(0x4C94E4); s.populationDecline = e.get<uint32_t>(0x4CA1C0);
+    s.cb4cc = e.get<uint32_t>(0x4CB4CC); s.ca428 = e.get<uint32_t>(0x4CA428); s.ca478 = e.get<uint32_t>(0x4CA478);
+    s.c8440 = e.get<int16_t>(0x4C8440); s.c9200 = e.get<int16_t>(0x4C9200);
+    for (int i = 0; i < 3; ++i) s.catPop[static_cast<size_t>(i)] = e.get<int32_t>(c9948 + 4u * i);
+    for (int i = 0; i < 20; ++i) { s.jobsA[static_cast<size_t>(i)] = e.get<uint32_t>(jobsAp + 4u * i); s.jobsB[static_cast<size_t>(i)] = e.get<uint32_t>(jobsBp + 4u * i); s.jobsC[static_cast<size_t>(i)] = e.get<uint32_t>(jobsCp + 4u * i); }
+    for (int i = 0; i < 11; ++i) { s.sec940c[static_cast<size_t>(i)] = e.get<int16_t>(s940cp + 2u * i); s.sec3f8[static_cast<size_t>(i)] = e.get<int16_t>(s3f8p + 2u * i); s.sec408[static_cast<size_t>(i)] = e.get<int32_t>(a408p + 4u * i); }
+    for (int i = 0; i < 4; ++i) { s.nbr9d28[static_cast<size_t>(i)] = e.get<uint32_t>(n9d28p + 4u * i); s.nbr981c[static_cast<size_t>(i)] = e.get<uint32_t>(n981cp + 4u * i); s.nbr9944[static_cast<size_t>(i)] = e.get<uint32_t>(n9944p + 4u * i); }
+    for (int i = 0; i < 16 * 52; ++i) s.graph[static_cast<size_t>(i)] = e.get<int32_t>(graphBase + 4u * i);
+    for (int i = 0; i < 16; ++i) s.graphMax[static_cast<size_t>(i)] = e.get<int32_t>(graphMaxp + 4u * i);
+    s.milestone = e.get<int16_t>(0x4CA028); s.weather = e.get<uint8_t>(0x4CA424); s.c9df8 = e.get<uint8_t>(0x4C9DF8);
+    for (int i = 0; i < 17; ++i) s.eventYears[static_cast<size_t>(i)] = e.get<int16_t>(0x4CA448 + 2u * i);
+    s.landValueTotal = e.get<int32_t>(0x4C9458); s.crimeTotal = e.get<int32_t>(0x4CA46C); s.trafficTotal = e.get<int32_t>(0x4CB70C);
+    s.waterFlag = e.get<int16_t>(0x4CA3F4); s.powerPct = e.get<int32_t>(0x4C9A68); s.waterPct = e.get<int32_t>(0x4CB4D0);
+    s.pollutionTotal = e.get<int32_t>(0x4CB928);
+    s.c9610 = e.get<int16_t>(0x4C9610); s.c9448 = e.get<int16_t>(0x4C9448);
+    s.day = e.get<int32_t>(0x4C9E1C); s.extraPop = e.get<int32_t>(0x4C84DC); s.popHistorySum = e.get<int32_t>(0x4C9608);
+    s.ratioMemory = e.get<int32_t>(0x4C91AC); s.budgetYearFlag = e.get<int32_t>(0x4C9D44); s.ordinances = e.get<uint32_t>(0x4C9A58);
+    s.wind = e.get<uint8_t>(0x4C9E24); s.cloudiness = e.get<uint8_t>(0x4CA3EC);
+    s.centerA2 = e.get<int16_t>(0x4CA470); s.centerB2 = e.get<int16_t>(0x4CA474);
+    s.developedTiles = e.get<int32_t>(0x4C83CC); s.powerCapacity = e.get<int32_t>(0x4C83C8); s.waterSupply = e.get<int32_t>(0x4C83C4);
     s.treasury = e.get<int32_t>(0x4C945C); s.c9434 = e.get<int16_t>(0x4C9434); s.population10 = e.get<uint32_t>(0x4C9A8C);
     for (int i = 0; i < 3; ++i) s.demand[static_cast<size_t>(i)] = e.get<int16_t>(0x4CB910 + 2u * i);
+}
+
+void SimImage::stubTick() {
+    for (uint32_t f : {0x40CED0u, 0x479F40u, 0x4B1243u, 0x4736C0u, 0x42FA50u, 0x406A40u, 0x413D80u, 0x469A10u, 0x414470u, 0x4143F0u, 0x414410u, 0x414430u, 0x4143D0u, 0x414450u}) e.patchRet(f);
+    // the tick sets up an SEH frame through FS:[0]; there is no TIB here, so neutralise those instructions (xor eax,eax / nops)
+    {
+        std::vector<uint8_t> code(0x700);
+        e.read(0x412FE0, code.data(), code.size());
+        for (size_t i = 0; i + 7 <= code.size(); ++i) {
+            if (code[i] == 0x64 && code[i + 1] == 0xA1 && code[i + 2] == 0 && code[i + 3] == 0 && code[i + 4] == 0 && code[i + 5] == 0) {   // mov eax, fs:[0]
+                const uint8_t p[6] = {0x31, 0xC0, 0x90, 0x90, 0x90, 0x90}; e.write(0x412FE0 + i, p, 6);
+            } else if (code[i] == 0x64 && code[i + 1] == 0xA3 && code[i + 2] == 0 && code[i + 3] == 0 && code[i + 4] == 0 && code[i + 5] == 0) {   // mov fs:[0], eax
+                const uint8_t p[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(0x412FE0 + i, p, 6);
+            } else if (code[i] == 0x64 && code[i + 1] == 0x89 && code[i + 3] == 0 && code[i + 4] == 0 && code[i + 5] == 0 && code[i + 6] == 0) {   // mov fs:[0], reg
+                const uint8_t p[7] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(0x412FE0 + i, p, 7);
+            }
+        }
+    }
+    e.patchRetN(0x424A20, 4); e.patchRetN(0x4A2347, 4); e.patchRet(0x4A1B89); e.patchRetN(0x406CA0, 4);
+    e.patchRetN(0x47FDE0, 8); e.patchRetN(0x40BEA0, 4); e.patchRetN(0x4ACFB0, 12);
 }
 
 void SimImage::stubUi() {
@@ -112,6 +180,8 @@ void SimImage::stubUi() {
     const uint8_t ret4[3] = {0xC2, 0x04, 0x00};
     e.write(stub, ret4, 3);
     e.put<uint32_t>(0x4EEE10, stub);
+    e.put<uint32_t>(0x4EED7C, stub);                    // CharLowerA(name) -> ret 4 (the city name buffer is a zeroed string)
+    e.put<uint32_t>(0x4C6148, e.alloc(64));
     const uint8_t zero32[3] = {0x31, 0xC0, 0xC3};      // GetTickCount() -> 0 (xor eax,eax; ret)
     e.write(stub + 0x10, zero32, 3);
     e.put<uint32_t>(0x4EEAD8, stub + 0x10);
@@ -157,9 +227,25 @@ long diffState(const CityState& a, const CityState& b, std::string& detail) {
     auto note = [&](bool differs, const char* what) { if (differs) { ++d; detail += std::string(" ") + what; } };
     note(a.census != b.census, "census"); if (a.zonePop != b.zonePop) { char zb[200]; std::snprintf(zb, sizeof zb, " zonePop[%d %d %d %d %d %d %d %d vs %d %d %d %d %d %d %d %d]", a.zonePop[0], a.zonePop[1], a.zonePop[2], a.zonePop[3], a.zonePop[4], a.zonePop[5], a.zonePop[6], a.zonePop[7], b.zonePop[0], b.zonePop[1], b.zonePop[2], b.zonePop[3], b.zonePop[4], b.zonePop[5], b.zonePop[6], b.zonePop[7]); detail += zb; }
     note(a.zonePop != b.zonePop, "zonePop"); note(a.militaryCounts != b.militaryCounts, "militaryCounts");
-    note(a.treasury != b.treasury, "treasury"); note(a.militaryMask != b.militaryMask, "militaryMask"); note(a.c9408 != b.c9408 || a.cb4f0 != b.cb4f0, "counters"); note(a.c9434 != b.c9434, "c9434"); note(a.population10 != b.population10, "pop10"); note(a.demand != b.demand, "demand");
+    note(a.treasury != b.treasury, ("treasury(" + std::to_string(a.treasury) + "/" + std::to_string(b.treasury) + ")").c_str()); note(a.militaryMask != b.militaryMask, "militaryMask"); note(a.c9408 != b.c9408 || a.cb4f0 != b.cb4f0, "counters"); note(a.c9434 != b.c9434, "c9434"); note(a.population10 != b.population10, "pop10"); note(a.demand != b.demand, "demand");
+    note(a.c9448 != b.c9448, "c9448");
+    note(a.day != b.day, "day"); note(a.wind != b.wind || a.cloudiness != b.cloudiness, "wind/cloud"); note(a.weather != b.weather || a.c9df8 != b.c9df8, "weather");
+    note(a.centerA2 != b.centerA2 || a.centerB2 != b.centerB2, "centre"); note(a.graph != b.graph, "graph"); note(a.graphMax != b.graphMax, "graphMax");
+    note(a.milestone != b.milestone || a.eventYears != b.eventYears, "milestone/events"); note(a.c9610 != b.c9610, "c9610");
+    note(a.landValueTotal != b.landValueTotal || a.crimeTotal != b.crimeTotal || a.trafficTotal != b.trafficTotal || a.pollutionTotal != b.pollutionTotal, "totals");
+    note(a.powerPct != b.powerPct || a.waterPct != b.waterPct || a.waterFlag != b.waterFlag, "power/water");
+    note(a.developedTiles != b.developedTiles, "developed");
+    note(a.nationalPop != b.nationalPop || a.gnp != b.gnp, "national"); note(a.rateLevel != b.rateLevel || a.era != b.era, "rate/era");
+    note(a.jobsA != b.jobsA, "jobsA"); note(a.jobsB != b.jobsB, "jobsB"); note(a.jobsC != b.jobsC, "jobsC");
+    note(a.sec940c != b.sec940c, "sec940c"); note(a.sec408 != b.sec408, "sec408");
+    note(a.nbr9d28 != b.nbr9d28 || a.nbr981c != b.nbr981c, "neighbours");
+    note(a.populationGrowth != b.populationGrowth || a.populationDecline != b.populationDecline, "growth/decline");
+    note(a.cb4cc != b.cb4cc || a.ca428 != b.ca428 || a.ca478 != b.ca478, "scores"); note(a.c8440 != b.c8440 || a.c9200 != b.c9200, "c8440/c9200");
     for (size_t k = 0; k < 16; ++k) {
-        note(a.budget[k].currentCosts != b.budget[k].currentCosts || a.budget[k].fundingPercent != b.budget[k].fundingPercent || a.budget[k].yearToDate != b.budget[k].yearToDate, "budget");
+        note(a.budget[k].currentCosts != b.budget[k].currentCosts, ("cost" + std::to_string(k) + "(" + std::to_string(a.budget[k].currentCosts) + "/" + std::to_string(b.budget[k].currentCosts) + ")").c_str());
+        note(a.budget[k].fundingPercent != b.budget[k].fundingPercent, ("pct" + std::to_string(k)).c_str());
+        note(a.budget[k].yearToDate != b.budget[k].yearToDate, ("ytd" + std::to_string(k) + "(" + std::to_string(a.budget[k].yearToDate) + "/" + std::to_string(b.budget[k].yearToDate) + ")").c_str());
+        note(a.budget[k].countMonth != b.budget[k].countMonth || a.budget[k].fundMonth != b.budget[k].fundMonth, ("month" + std::to_string(k)).c_str());
     }
     return d;
 }

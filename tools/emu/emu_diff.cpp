@@ -20,6 +20,7 @@
 using namespace sc2k;
 using namespace sc2k::emu;
 
+namespace sc2k { extern int g_econStopStage; }
 namespace {
 // Game globals (VA)
 constexpr uint32_t T_XBLD = 0x4CB508, T_XBIT = 0x4C9B28, T_ALTM = 0x4C9E28;
@@ -427,6 +428,108 @@ int thingsDiff(const std::string& exe, const std::string& path, long& tiles, lon
     return failures;
 }
 
+
+int economyDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    for (int variant = 0; variant < 6; ++variant) {
+        World w = World::fromCity(c);
+        CityState s = CityState::fromCity(c);
+        s.catPop = {int32_t(s.zonePop[1] + s.zonePop[2]), int32_t(s.zonePop[3] + s.zonePop[4]), int32_t(s.zonePop[5] + s.zonePop[6])};
+        if (s.catPop[2] == 0) s.catPop[2] = 4000;
+        if (s.rateLevel == 0) s.rateLevel = 1;   // the original divides by rateLevel*25 (a zero faults the game)
+        if (variant >= 1) {   // push the model into its different branches
+            s.populationGrowth = variant == 1 ? 3000 : 0; s.populationDecline = variant == 2 ? 5000 : (variant == 3 ? 100 : 40);
+            if (variant == 4) { s.populationGrowth = 70000; s.populationDecline = 0; }
+            s.ordinances = variant == 1 ? 0x80000 | 0x40 | 0x400 : (variant == 2 ? 0x100 | 0x200 | 0x20 : 0);
+            s.cb4cc = variant == 1 ? 140 : (variant == 2 ? 110 : 30);
+            s.population10 = variant == 5 ? 0 : s.population10 + 50000;
+            s.pollutionTotal = 300000 * variant;
+            for (size_t i = 0; i < 20; ++i) if (s.jobsA[i] == 0) { s.jobsA[i] = 500 + 37 * uint32_t(i); s.jobsB[i] = 900 + 11 * uint32_t(i); s.jobsC[i] = 20000 + 700 * uint32_t(i); }
+            for (size_t i = 0; i < 4; ++i) if (s.nbr9d28[i] == 0) { s.nbr9d28[i] = 2000000 + 100000 * uint32_t(i); s.nbr981c[i] = 1000000; }
+            for (size_t i = 0; i < 11; ++i) if (s.sec408[i] == 0) { s.sec408[i] = 3000 + 500 * int(i); s.sec940c[i] = 40; s.sec3f8[i] = 30; }
+            s.era = variant % 4; s.rateLevel = 1 + variant;
+            s.nationalPop = variant == 3 ? 6000000u : 3000000u; s.gnp = variant == 4 ? 4000000u : 2000000u;
+        }
+        const uint32_t seed = 5 + 13u * variant, lfsrSeed = 0xACE1u + 7u * variant;
+        Emu e(exe); e.installCrtRand(seed);
+        SimImage img(e);
+        img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi();
+        World pw = w; CityState ps = s;
+        CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+        std::string detail; long d = 0; int months = 0;
+        for (; months < 40 && d == 0; ++months) {
+            const int stage = std::getenv("ECONSTAGE") ? std::atoi(std::getenv("ECONSTAGE")) : 0;
+            static const uint32_t stops[] = {0, 0x468EC8, 0x4690F2, 0x469228, 0x4692D6, 0x469579};
+            g_econStopStage = stage;
+            e.call(0x4686C0, {}, 0, 0, stops[stage]); runEconomy(ctx);
+            World ew = pw; CityState es = ps; img.store(ew, es);
+            d = diffState(es, ps, detail) + (e.crtRandState() != rng.state()) + (img.lfsrState() != lf.state());
+            if (d && std::getenv("ECONDBG")) { for (size_t i = 0; i < 20; ++i) std::printf("  [%zu] A %u/%u B %u/%u C %u/%u\n", i, es.jobsA[i], ps.jobsA[i], es.jobsB[i], ps.jobsB[i], es.jobsC[i], ps.jobsC[i]); std::printf("  growth %u/%u decline %u/%u rand %d lfsr %d\n", es.populationGrowth, ps.populationGrowth, es.populationDecline, ps.populationDecline, int(e.crtRandState() != rng.state()), int(img.lfsrState() != lf.state())); }
+        }
+        tiles += 1; bad += d != 0;
+        std::printf("%-30s variant %d months %d %s%s  jobsA0 %u pop %u\n", path.c_str(), variant, months, d ? "DIVERGED" : "identical", detail.c_str(), ps.jobsA[0], ps.nationalPop);
+        failures += d != 0;
+    }
+    return failures;
+}
+
+
+// ---- the whole tick: SimulationTick 0x412FE0 in the emulator vs. simulationTick(), compared after every day ----
+int tickDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    for (int variant = 0; variant < 3; ++variant) {
+        World w = World::fromCity(c);
+        CityState s = CityState::fromCity(c);
+        s.catPop = {int32_t(s.zonePop[1] + s.zonePop[2]), int32_t(s.zonePop[3] + s.zonePop[4]), int32_t(s.zonePop[5] + s.zonePop[6])};
+        if (s.rateLevel == 0) s.rateLevel = 1;
+        if (s.econIndex == 0) s.econIndex = 1;   // the original divides by a difficulty table entry that is 0 for index 0 (it faults)
+        if (s.population10 == 0) s.population10 = 1000;
+        if (variant >= 1) {
+            s.day = 300 * (variant + 3) - 1 - (variant == 2 ? 24 : 0);   // next tick is phase 0 of January (variant 1) or of a later month
+            s.budgetYearFlag = variant == 1 ? 1 : 0;
+            s.treasury = 3000000;
+            s.ordinances = variant == 1 ? 0x40 : 0x300;
+            s.weather = 4 + variant; s.cloudiness = 30; s.wind = 40;
+            s.populationGrowth = 20; s.populationDecline = 10;
+            if (variant == 1) for (size_t sl = 1; sl < 0x96; ++sl) { const uint8_t id = w.xmic[sl * 8]; if (id >= 0xC9 && id <= 0xCF) w.xmic[sl * 8 + 1] = 0x32; }   // power plants at the end of their life
+            if (variant == 2) s.cb4ec = 1;   // replace instead of explode
+        }
+        const uint32_t seed = 9 + 17u * variant, lfsrSeed = 0xACE1u + 3u * variant, lcgSeed = 5 + variant;
+        Emu e(exe); e.installCrtRand(seed);
+        SimImage img(e);
+        img.load(w, s); img.setLfsr(lfsrSeed); img.setLcg(lcgSeed); img.stubUi(); img.stubTick();
+        ThingState th0; img.loadThings(th0, s);
+        World pw = w; CityState ps = s;
+        CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+        ctx.lcg.seed(lcgSeed);
+        std::string detail; int firstBad = -1; int ticks = std::getenv("TICKS") ? std::atoi(std::getenv("TICKS")) : 75;
+        for (int k = 0; k < ticks && firstBad < 0; ++k) {
+            try { e.call(0x412FE0); } catch (const std::exception& ex) { std::printf("%-30s variant %d tick %d: original faulted (%s)\n", path.c_str(), variant, k, ex.what()); firstBad = -2; break; }
+            simulationTick(ctx);
+            World ew = pw; CityState es = ps; ThingState et; img.store(ew, es); img.storeThings(et);
+            detail.clear();
+            long d = diffWorld(ew, pw, detail) + diffState(es, ps, detail) + diffThings(et, ctx.things, detail);
+            if (e.crtRandState() != rng.state()) { ++d; detail += " rand"; }
+            if (img.lfsrState() != lf.state()) { ++d; detail += " lfsr"; }
+            if (img.lcgState() != ctx.lcg.state()) { ++d; detail += " lcg"; }
+            if (e.get<int32_t>(0x4C75B8) != ts.bus || e.get<int32_t>(0x4C75BC) != ts.rail || e.get<int32_t>(0x4C7618) != ts.subway) { ++d; detail += " riders"; }
+            if (d) {
+                firstBad = k; std::printf("%-30s variant %d DIVERGED at tick %d (day %d, phase %d):%s\n", path.c_str(), variant, k, ps.day, ps.day % 25, detail.c_str());
+                if (std::getenv("TICKDBG")) for (int sl = 0; sl < 150; ++sl) { bool df = false; for (int q = 0; q < 8; ++q) df |= ew.xmic[sl * 8 + q] != pw.xmic[sl * 8 + q]; if (df) { std::printf("  rec %d orig", sl); for (int q = 0; q < 8; ++q) std::printf(" %02x", ew.xmic[sl * 8 + q]); std::printf(" port"); for (int q = 0; q < 8; ++q) std::printf(" %02x", pw.xmic[sl * 8 + q]); std::printf("  (before %02x)\n", w.xmic[sl * 8]); } }
+            }
+        }
+        if (firstBad == -1) std::printf("%-30s variant %d %d ticks identical  hash %016llx\n", path.c_str(), variant, ticks, (unsigned long long)worldFingerprint(pw, ps));
+        tiles += 1; bad += firstBad != -1; failures += firstBad != -1;
+    }
+    return failures;
+}
+
 int destroyRun(const std::string& exe, const GameTables& t, const CityFile& c, int animate, int stride, bool perCall, std::string& report, long& calls) {
     World w = World::fromCity(c); CityState s = CityState::fromCity(c);
     const uint32_t seed = 7 + animate, lfsrSeed = 0xBEEF;
@@ -486,6 +589,8 @@ int main(int argc, char** argv) {
             else if (mode == "water") failures += waterDiff(exe, argv[i], tiles, bad);
             else if (mode == "env") failures += envDiff(exe, argv[i], tiles, bad);
             else if (mode == "zone") failures += zoneDiff(exe, argv[i], tiles, bad);
+            else if (mode == "tick") failures += tickDiff(exe, argv[i], tiles, bad);
+            else if (mode == "economy") failures += economyDiff(exe, argv[i], tiles, bad);
             else if (mode == "things") failures += thingsDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);

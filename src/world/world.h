@@ -21,6 +21,7 @@ struct World {
     Grid<uint8_t, CityFile::kQuarter> xplc, xfir, xpop, xrog;
 
     static World fromCity(const CityFile& c);
+    void writeBack(CityFile& c) const;   // copies every layer back into a CityFile
 };
 
 inline bool inMap(int a, int b) { return a >= 0 && a < CityFile::kMap && b >= 0 && b < CityFile::kMap; }

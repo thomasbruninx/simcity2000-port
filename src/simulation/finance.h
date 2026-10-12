@@ -1,6 +1,7 @@
 // Monthly finance (phase 0, SIMCITY.EXE build .022 function 0x473980) and ordinance cost table (0x42B590).
 // Recorded evidence: docs/simulation/finance.md. UI calls of the original (budget dialog, menus) are not ported.
 #pragma once
+#include <functional>
 #include "simulation/city_state.h"
 #include "simulation/rng.h"
 #include "simulation/tables.h"
@@ -22,6 +23,7 @@ struct FinanceOutcome {
 };
 
 // One execution of the whole routine at the start of a month. `month` is derived from s.day like the original.
-FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng);
+// `yearlyUpdate` runs in the January settlement right after the treasury was credited (original: call to 0x44DD10).
+FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng, const std::function<void()>& yearlyUpdate = {});
 
 }  // namespace sc2k

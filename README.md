@@ -2,7 +2,7 @@
 
 A clean-room-style reimplementation of SimCity 2000 (Windows 95, 1995 CD Collection build .022) for macOS/Apple Silicon, loading **your own legally obtained game files**. No game assets or binaries are included or distributed.
 
-**Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (all zone types incl. military/airport/seaport), traffic router, tile primitives and destroy effects**. **thing system (ships, trains, aircraft, monsters, tornado)** and microsim allocation. Pending: economy model, random events, disasters, full-tick driver. Start with:
+**Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (all zone types incl. military/airport/seaport), traffic router, tile primitives and destroy effects**. **thing system (ships, trains, aircraft, monsters, tornado)** and microsim allocation. **economy model, random events, history graphs, the complete 25-phase tick and a headless driver (`sc2k-sim`) — verified day by day against the original code in an emulator (183 runs × 75 days identical)**. Pending: disaster handlers, scenario goals, UI/rendering/audio. Start with:
 - [docs/roadmap.md](docs/roadmap.md) — plan based on findings
 - [docs/original-file-inventory.md](docs/original-file-inventory.md)
 - [docs/executable-analysis.md](docs/executable-analysis.md), [docs/windows-api-usage.md](docs/windows-api-usage.md)
@@ -22,6 +22,8 @@ Confidence labels used everywhere: **VERIFIED**, **STRONG INFERENCE**, **HYPOTHE
 | `ghidra/*.java` | Headless Ghidra helpers: export functions, decompile, disassemble, xrefs |
 | `demand_model.py`, `rng_model.py` | Independent Python models used to cross-check ports |
 | `sc2k-save-info`, `sc2k-verify` (C++, built by CMake) | Save summary; compare scans with saved cities |
+| `sc2k-sim` (C++) | Headless simulation of a saved city: `sc2k-sim SIMCITY.EXE city.sc2 <days> [thing-frames-per-day] [out.sc2]` |
+| `sc2k-emu-diff` (C++, optional, needs Unicorn) | Differential tests against the original machine code: `power water env demand finance zone destroy things economy tick` (`tools/run_emu_diffs.sh`) |
 | `sc2k-emu-diff` + `run_emu_diffs.sh` (dev-only, needs Homebrew `unicorn`, GPL) | Run original routines of your `SIMCITY.EXE` in an emulator and diff ports against them |
 
 Build and test: `cmake -S . -B build -G Ninja && cmake --build build && SC2K_DATA_PATH=/path/to/SC2K ctest --test-dir build` (data-dependent tests skip when the variable is unset).

@@ -88,7 +88,7 @@ static void initMicrosim(SimContext& c, int slot, int id) {
                 case 0xFD: wrw(c, r + 2, 0x2D); c.w.xmic[r + 1] = 5; wrw(c, r + 6, year); break;
                 case 0xFE: wrw(c, r + 2, 0x41); c.w.xmic[r + 1] = 5; wrw(c, r + 6, year); break;
                 case 0xFF:
-                    if (!c.hooks.specialCityName()) wrw(c, r + 6, year);
+                    if (c.hooks.specialCityName()) wrw(c, r + 6, year);
                     else wrw(c, r + 6, rnd() & 0x3F);
                     break;
                 default: break;

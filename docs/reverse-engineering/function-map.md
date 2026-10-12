@@ -113,3 +113,14 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x0044C8E0 / 0x0044D740 / 0x0044F150 | microsim + label allocation / record init / population-limited capacity | | emulator-identical | VERIFIED | `allocateMicrosim`, `populationLimit` |
 | 0x00407160 | view idle handler: runs 0x450210 at most every 30–45 ms of wall-clock time | | read | VERIFIED | driver decides frames per day |
 | 0x00451360 / 0x00450530 / 0x00451880 / 0x00450A60 / 0x00450B80 / 0x00452020 / 0x00451F10 | thing drawing (some consume rand()) | presentation | read | VERIFIED | omitted |
+
+| 0x004686C0 | `EconomyModel()` | national pop/GNP drift, 4 neighbour cities, 11 sector model, 20-class job market, education/health/employment scores | emulator-identical | VERIFIED | `runEconomy` |
+| 0x00467AE0 (2nd half) | `RandomEvents()` | fire spread, advisor triggers, dated events, weather | emulator-identical | VERIFIED | `runEvents` |
+| 0x00413910 | `RecordHistory()` | 16 graph series × 52 samples + per-series maxima | emulator-identical | VERIFIED | `recordHistory` |
+| 0x00458040 | `TrafficDecay()` | v -= v>>2 on XTRF, total | emulator-identical | VERIFIED | `trafficDecay` |
+| 0x004720A0 | `AdvisorAndDisaster()` | advisor topic + random disaster request (sets MISC 28 and focus tile) | emulator-identical | VERIFIED | `chooseDisaster` |
+| 0x0044DD10 | `YearlyMicrosimUpdate()` | January: capacities of microsim buildings, power-plant aging/explosion, extra population (arcologies), ridership reset | emulator-identical | VERIFIED | `yearlyMicrosimUpdate` |
+| 0x0044F210 / 0x0044F150 | find tile of overlay / population-limited capacity | | emulator-identical | VERIFIED | `findOverlayTile`, `populationLimit` |
+| 0x00412FE0 | `SimulationTick()` | 25-phase dispatcher (UI omitted) | emulator-identical | VERIFIED | `simulationTick` |
+| 0x0047BA90 / 0x00479F40 | message queue (priority-sorted advisor/news records, MISC 946..999) | UI state | read | VERIFIED structure | hook `postMessage` |
+| 0x00469A10 / 0x00413D80 / 0x00414470 | scheduled-event UI flags / grant military base (dialog) / game over | UI | read | VERIFIED | hooks |

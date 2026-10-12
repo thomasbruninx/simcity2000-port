@@ -55,6 +55,19 @@ struct GameTables {
     std::array<int16_t, 16> shipStepX{}, shipStepY{};     // @0x4E73D0 / 0x4E73E0: ship sub-tile steps (12 units per tile)
     std::array<int16_t, 80> messagePriority{};            // @0x4E7838: priority of the disaster message by burnt-building class
     std::array<uint8_t, 256> microsimClass{};             // @0x4E6C8A: microsim slot class by building id (0 = none)
+    // Economy model (0x4686C0)
+    std::array<double, 8> econK{};                       // @0x4D9D10: 1/1200, 100, 0.75, 0.5, 0.9, 1.1, 1.2, 0.8
+    std::array<int16_t, 4> econEra{};                    // @0x4E8548
+    std::array<uint32_t, 44> econYearTab{};              // @0x4E8448: 4 rows x 11 sector targets (interpolated between 50-year rows)
+    std::array<uint32_t, 11> econFinal{};                // @0x4E84F8: targets after the last row
+    // Events / weather / milestones (phase 21-24)
+    std::array<uint8_t, 384> weatherNext{};              // @0x4DAD18: next weather state [(state + 12 * season) * 8 + (rand & 7)]
+    std::array<uint8_t, 16> weatherHaze{}, weatherWind{}, weatherCloud{};   // @0x4DAE98 / 0x4DAEA8 / 0x4DAEB8 (by weather state)
+    std::array<uint32_t, 8> milestonePop{};              // @0x4E5954: population thresholds of the city classes
+    std::array<int16_t, 4> disasterGrace{};              // @0x4E88F8: months before disasters can start, by difficulty (MISC 7)
+    std::array<int16_t, 256> plantCostIndex{};           // @0x4E6E14: index into plantCost by building id
+    int16_t milestoneCycle = 0;                          // @0x4E88F4
+    std::array<int32_t, 16> plantCost{};                 // @0x4DB030: replacement cost of a power plant that reached the end of its life
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

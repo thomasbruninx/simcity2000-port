@@ -19,7 +19,12 @@ struct ZoneHooks {
     virtual void uiFlag(int /*which*/) {}
     // 25-byte building-name template (game text, loaded from the data files) for a building id; nullptr = all zeros.
     virtual const uint8_t* labelTemplate(int /*id*/, bool /*custom*/) { return nullptr; }
-    virtual bool specialCityName() { return false; }                       // 0x44D740 id 0xFF: city name equals a built-in string                                // 0x441800 (toolbar 'rebuild' flags)
+    virtual bool specialCityName() { return false; }
+    virtual void showDialog(int /*stringId*/) {}                           // FUN_004B1243 message boxes
+    virtual void scheduledEvent(int /*index*/) {}                          // 0x469A10: a dated event fired (unlocks tools; UI only)
+    virtual void milestoneReached(int /*newIndex*/) {}                     // phase 22: city class changed (0x413D80 may grant a military base; dialogs)
+    virtual void gameOver(int /*kind*/) {}                                 // 0x414470: 0 lost scenario, 1 won, 2 bankrupt
+    virtual bool scenarioGoalsMet() { return false; }                      // phase 22 scenario goal test (scenario data is not modelled yet)                       // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)
 };
 
 // Ridership statistics written by the traffic router.
@@ -42,8 +47,6 @@ struct ThingState {
     int lastSpawned = 0;                        // 0x4C9834: slot of the thing spawned last
     int shipTargetA = 0, shipTargetB = 0;       // 0x4E70BC / 0x4E70C0: pier a ship was sent to
     int scenarioFlag = 0;                       // 0x4C9D5C (written by the game-over / scenario code)
-    int trafficAverage = 0;                     // *0x4CB498: average traffic, computed by the event half of demand
-    int crimeAverage = 0;                       // *0x4CB4A4: average crime
     std::vector<uint16_t> spriteHeight;         // word at +4 of each 8-byte sprite record (0x4CA1D0); read from the sprite archives
     int spriteHeightOf(int id) const { return id >= 0 && static_cast<size_t>(id) < spriteHeight.size() ? spriteHeight[static_cast<size_t>(id)] : 0; }
 };
@@ -111,6 +114,15 @@ bool spawnMonster(SimContext& c);                                        // 0x45
 bool spawnTornado(SimContext& c);                                        // 0x45EA00
 bool startFire(SimContext& c, int a, int b, int flag);                   // 0x460780
 void floodTile(SimContext& c, int a, int b);                             // 0x446000
+
+void runEconomy(SimContext& c);
+void yearlyMicrosimUpdate(SimContext& c);                               // 0x44DD10: January upkeep of microsim buildings (power plants age and explode, capacities, city-size bonus)
+int findOverlayTile(const SimContext& c, int overlay);                  // 0x44F210: y*256 + x of the tile carrying this XTXT overlay, or 0
+void runEvents(SimContext& c);                                           // second half of 0x467AE0: fire spread, news triggers, weather
+void recordHistory(SimContext& c);                                       // 0x413910 graph history
+void trafficDecay(SimContext& c);                                        // 0x458040 (phase 19)
+void chooseDisaster(SimContext& c);                                      // 0x4720A0: advisor topic + random disaster request (phase 24)
+void simulationTick(SimContext& c);                                      // 0x412FE0 (UI omitted)                                          // 0x4686C0 economy / job-market model (phase 21)
 
 // ---- the pass itself ----
 void runZonePass(SimContext& c, int a0, int b0);                         // 0x435220 (all zone types)

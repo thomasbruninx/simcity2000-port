@@ -12,7 +12,7 @@ struct SimImage {
     LayerRef xbld, xzon, xbit, xtxt, xund, xter, altm, xtrf, xplt, xval, xcrm, xpop, xrog, xplc, xfir, tmp;
     uint32_t census = 0, zonePop = 0, c9948 = 0, budget = 0, milCounts = 0, micro = 0, things = 0, labels = 0, fakeView = 0;
 
-    uint32_t trafficAvgPtr = 0, crimeAvgPtr = 0;
+    uint32_t graphBase = 0, graphMaxp = 0, jobsAp = 0, jobsBp = 0, jobsCp = 0, s940cp = 0, s3f8p = 0, a408p = 0, n9d28p = 0, n981cp = 0, n9944p = 0;
 
     explicit SimImage(Emu& emu);
     void load(const World& w, const CityState& s);
@@ -25,6 +25,7 @@ struct SimImage {
     uint16_t lfsrState() const { return e.get<uint16_t>(0x4CCB94); }
     // Neutralise UI / not-yet-ported callees so the original and the port skip the same things.
     void stubUi();
+    void stubTick();   // UI calls of SimulationTick 0x412FE0
 };
 
 // Compare two Worlds / CityStates; returns number of differing elements and appends a summary of the first differences.

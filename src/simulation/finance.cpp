@@ -59,7 +59,7 @@ void updateMaintenanceCosts(CityState& s) {
     b[kOrdinance].currentCosts = ord;
 }
 
-FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng) {
+FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng, const std::function<void()>& yearlyUpdate) {
     FinanceOutcome out;
     const int month = s.month();
     if (s.budgetYearFlag != 0 && month == 0) {
@@ -70,6 +70,7 @@ FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng
         }
         s.budgetYearFlag = 0;
         out.yearApplied = true;
+        if (yearlyUpdate) yearlyUpdate();
     }
     for (auto& r : s.budget) {
         r.countMonth[month] = r.currentCosts;
