@@ -1,0 +1,22 @@
+# Never commit original game data or derived binary databases
+SC2K/
+original/
+*.exe
+*.EXE
+*.dll
+*.DLL
+*.sc2
+*.SC2
+*.scn
+*.SCN
+*.mif
+*.MIF
+*.dat
+*.DAT
+*.gpr
+*.rep
+ghidra_proj/
+reverse/
+build/
+.DS_Store
+__pycache__/
