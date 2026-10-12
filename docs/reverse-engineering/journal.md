@@ -41,3 +41,11 @@
 **Disproven:** I first took 0x45C870 for the main sim orchestrator — it is the disaster dispatcher.
 **Tooling:** `DecompileAt.java` now creates functions on demand; `DecompileSmall.java` decompiles all small functions for constant searches (found RNG by multiplier constants).
 **Next:** census of RNG call sites by caller; decompile phases (0x4671F0, 0x46A1C0, 0x435220, 0x458040, 0x463EE0, 0x467AE0, 0x4686C0) to map each to map layers; validation experiment (Windows): speed vs. date progression per wall-clock to confirm 800/400/200 ms and 25 days/month.
+
+## 2026-10-12 — Session 4: decompilation of the per-tick phases
+**Read:** 0x4671F0, 0x46A1C0, 0x435220, 0x458040, 0x463EE0, 0x467AE0, 0x4686C0 (first 260 lines), 0x413910, 0x40CED0, 0x4736C0, 0x473980, 0x4720A0 (head). Full outputs in `reverse/out/ph.txt` (not in git).
+**Discoveries:** layer storage = row-pointer tables; mapped runtime arrays to XBLD/XZON/XBIT/XTXT/XUND, traffic/pollution/value/crime, density/growth/police/fire (docs/simulation/map-layers-and-globals.md); phase-to-function table (monthly-phases.md); budget record layout and category order verified by offsets (matches sc2kfix `budget_t`); XGRP = 16×52 int32 BE graph history (verified against 3 saves); ALTM u16 BE bitfields verified; **MSVC `rand()` is the main RNG (335 callers, shared state, srand from 8 UI/gen sites)** — corrected rng.md and added `CrtRand` (tests pass).
+**Hypotheses:** zone numbers 7–9; coverage-ordinance bits; unknown layer 0x4C8F70; divisor table 0x4E8EA0.
+**Disproven:** "CRT rand unused by game logic".
+**Remaining:** read 0x435220 callees (0x436680, 0x456F70, 0x436800, 0x4376C0, 0x436F40, 0x4418B0), the flood fills (0x467340, 0x464370, 0x46B420), tables (0x4E8318, 0x4E8528, 0x4E8638, 0x4E85A8, 0x4E6468, 0x4E6428, 0x4E64D8, 0x4E6580), constants 0x4D9CE8–0x4D9D10; second half of 0x4686C0 and 0x4720A0; `MISC` field map (budget/ordinance/date fields live in MISC).
+**Next:** implement `libsc2` (container + layers) and a verification harness that recomputes power/water/pollution/land value from a saved city's XBLD/XZON/XBIT and compares to the saved layers.

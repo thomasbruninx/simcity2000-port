@@ -63,3 +63,17 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x0040BBB0 / 0x0040BBD0 | `OnTimer(id)` / `SimPace` | id==1 → phase counter, anim flags, speed-gated `g_simTicking` | decompile; matched against sc2kfix flag model | VERIFIED | `Clock::onTimerTick` |
 | 0x00412FE0 | `SimulationTick` | `++day`, month=(day/25)%12, year=day/300, `switch(day%25)` phase dispatch (see simulation/clock-and-calendar.md) | decompile | VERIFIED structure; per-phase roles UNKNOWN | `simulation/` |
 | 0x0045C870 | `DisasterTick` | Dispatch on pending disaster type `@0x4C9438` (1–0x12) to handlers 0x45E290, 0x45D460, 0x45DF50, … | decompile | STRONG INFERENCE | later |
+| 0x004671F0 | `PowerSupplyScan` | clear flags, flood power from plants (ids 0xC6–0xCF), % powered | decompile | STRONG | later |
+| 0x00467340 | `PowerFloodFrom(x,y)` | called by the scan; not yet read | – | HYPOTHESIS | later |
+| 0x00463EE0 | `WaterSupplyScan` | 4 rotation-dependent iteration orders, flood water (0x464370) | decompile | STRONG | later |
+| 0x00458040 | `DecayTraffic` | `v -= v>>2` on 64×64 | decompile | VERIFIED | later |
+| 0x0046A1C0 | `EnvironmentScan` | pollution, land value, pop density, growth rate, crime, coverage | decompile | STRONG | later |
+| 0x00435220 | `ZoneTilePass(a,b)` | per-sector tile growth/decay pass | decompile | STRONG | later |
+| 0x00467AE0 | `DemandAndEvents` | RCI demand (x87), random events/messages | decompile | STRONG | later |
+| 0x004686C0 | `EconomyModel` | national/economic variables | partial read | MODERATE | later |
+| 0x00413910 | `RecordGraphHistory` | 16×52 int32 shift registers | decompile + XGRP check | VERIFIED | simple |
+| 0x00473980 | `MonthlyFinance` | budget roll-up, treasury, maintenance from tile census, random ordinance | decompile | STRONG | later |
+| 0x004736C0 | `ShowBudgetDialog` | annual budget dialog | decompile | MODERATE | UI |
+| 0x0040CED0 | `UpdateTitleText` | title bar date/status | decompile | STRONG | UI |
+| 0x004720A0 | `PickAdvisorNeed` | advisor message from stats | partial read | MODERATE | UI |
+| 0x0048BCD8 / 0x0048BCC8 | CRT `rand` / `srand` | MSVC LCG, 335 callers / 8 callers | decompile | VERIFIED | `CrtRand` |

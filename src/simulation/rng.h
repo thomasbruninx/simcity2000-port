@@ -31,4 +31,17 @@ private:
     uint16_t state_;
 };
 
+// MSVC CRT rand(): state = state * 0x343FD + 0x269EC3; return (state >> 16) & 0x7FFF.
+// This is the generator used by most game logic (335 direct call sites in build .022, vs 19 LCG / 33 LFSR).
+// The CRT keeps the state per thread, initialised to 1; the game calls srand() from 8 places (docs/simulation/rng.md).
+class CrtRand {
+public:
+    explicit CrtRand(uint32_t seed = 1) : state_(seed) {}
+    void seed(uint32_t s) { state_ = s; }
+    uint32_t state() const { return state_; }
+    int next() { state_ = state_ * 0x343FDu + 0x269EC3u; return static_cast<int>((state_ >> 16) & 0x7FFFu); }
+private:
+    uint32_t state_;
+};
+
 }  // namespace sc2k

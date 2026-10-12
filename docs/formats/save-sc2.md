@@ -27,7 +27,7 @@ Whether `SCEN/PICT/TEXT/TMPL` are compressed is UNKNOWN (stored sizes vary; trea
 |---|---|---|---|
 | `CNAM` | 32 (raw) | Pascal-style: byte0 = length, name, padding | City name. Byte0 equals real length in scenarios ("Atlanta" → 07). In `DEFAULT.SC2` byte0 is 0x1F with "New City\0" then 0xFD fill — length byte unreliable there (VERIFIED observation) |
 | `MISC` | 4800 | 1200 × 32-bit (endianness UNVERIFIED) | Global city state: dates, funds, population, RCI demand, budget, tax, etc. Layout UNKNOWN here; sc2kfix `save_vanilla.cpp` holds a field map to cross-check |
-| `ALTM` | 32768 (raw) | 128×128 × u16 | Altitude map. Bitfield *(sc2kfix, UNVERIFIED)*: bits 0–4 land altitude, 5–9 water level, 10–15 tunnel levels. Endianness of the u16 UNKNOWN (check against known flat map) |
+| `ALTM` | 32768 (raw) | 128×128 × **u16 big-endian** | Altitude map. **VERIFIED on NYC.SC2:** bits 0–4 land altitude (values 4 and 6 dominate), bits 5–9 water level (6 on 99% of tiles), bits 10–15 tunnel depth (all 0); e.g. raw 198 = altitude 6 / water level 6 (flat land), 196 = altitude 4 under water level 6 |
 | `XTER` | 16384 | 128×128 × u8 | Terrain tile id |
 | `XBLD` | 16384 | 128×128 × u8 | Building/overlay tile id |
 | `XZON` | 16384 | 128×128 × u8 | Zone type (low nibble) + corner flags (high nibble) *(sc2kfix; bit order UNVERIFIED)* |
@@ -39,7 +39,7 @@ Whether `SCEN/PICT/TEXT/TMPL` are compressed is UNKNOWN (stored sizes vary; trea
 | `XTHG` | 480 | 40 × 12 | "Things": ships, helicopters, monsters, units *(sc2kfix `map_XTHG_t`, 12 bytes: type, dir, state, x, y, z, px, py, dx, dy, label, goal)* — size matches exactly |
 | `XTRF` `XPLT` `XVAL` `XCRM` | 4096 each | 64×64 × u8 | Half-resolution maps: traffic, pollution, land value, crime (names by community convention; UNVERIFIED in exe) |
 | `XPLC` `XFIR` `XPOP` `XROG` | 1024 each | 32×32 × u8 | Quarter-resolution maps: police coverage, fire coverage, population density, rate of growth (UNVERIFIED) |
-| `XGRP` | 3328 | UNKNOWN | Graph/history data (name suggests graphs) |
+| `XGRP` | 3328 | **16 series × 52 × int32 big-endian** (VERIFIED size = 16·52·4 and plausible values: NYC series 0 starts 81,380 = population×10) | Graph history, written by 0x413910: series order City Size, Residential, Commercial, Industrial, Traffic, Pollution, Value, Crime, Power, Water, Health, Education, Unemployment, GNP, Nat'l Population, Fed Rate; window layout per series: [0..11] monthly, [12..31] 6-monthly, [32..51] 5-yearly (STRONG INFERENCE from the shift code; order from the in-game graph dialog) |
 | `SCEN` | 52 or 56 | UNKNOWN | Scenario parameters (disaster, time limit, goals) — scenarios only |
 | `PICT` | 4298 / 4364 | UNKNOWN | Scenario picture (size suggests small bitmap; possibly Mac PICT remnant by name) |
 | `TEXT` (×2) | 105–131 / ~300 | text | Scenario description/briefing strings |
@@ -49,6 +49,9 @@ A `.sc2kfix` extension ("SC2X") exists in the patch as a ZIP+JSON container; it 
 
 ## Native implementation plan
 `src/save/sc2_container.{h,cpp}`: chunk reader + RLE decode/encode (round-trip test: decode→encode→decode equality; byte-identical re-encode is *not* assumed because RLE encodings aren't unique). Keep unknown chunks verbatim. CLI `sc2k-save-info` built on it (this Python prototype is its reference). Next step: reconstruct `MISC` offsets from the exe's load routine and compare with sc2kfix before trusting them.
+
+## Endianness (VERIFIED)
+All multi-byte values observed in saves are **big-endian** (XGRP int32, ALTM u16). The game flips arrays on load (`FlipDWORDArrayEndianness`, sc2kfix name) — the format is the Mac layout.
 
 ## Open questions
 Endianness of `MISC`/`ALTM`/`XMIC` words; bit order of `XZON`/`XBIT`/`ALTM` bitfields (check by loading a known city and counting); `XGRP`, `SCEN`, `PICT`, `TMPL` layouts; whether the game requires specific chunk order.

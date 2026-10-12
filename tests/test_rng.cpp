@@ -44,3 +44,12 @@ TEST(lfsr_period_from_seed1_is_57337) {
     do { r.step(); ++n; } while (r.state() != 1 && n < 70000);
     CHECK(n == 57337);
 }
+
+TEST(crt_rand_default_seed_sequence) {
+    CrtRand r;  // CRT default seed 1: the classic MSVC sequence
+    for (int w : {41, 18467, 6334, 26500, 19169, 15724, 11478, 29358, 26962, 24464}) CHECK(r.next() == w);
+}
+TEST(crt_rand_srand_resets) {
+    CrtRand r; r.next(); r.next(); r.seed(1);
+    CHECK(r.next() == 41);
+}

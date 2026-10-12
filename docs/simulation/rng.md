@@ -33,7 +33,10 @@ SeedLFSR(GetTickCount() | 1);  SeedLCG(GetTickCount() | 1);
 ```
 Both seeds come from wall-clock time; there is no fixed seed and **the RNG state is not stored in saves** (not present in any chunk we decoded — UNVERIFIED for `MISC`). Consequently a city advanced N ticks is not reproducible in the original; validation must compare statistics, not exact states (see [validation notes](../validation/)).
 
-### CRT `rand` (0x48BCD8): `s = s*0x343FD + 0x269EC3; return (s>>16)&0x7FFF` (MSVC). Use by game code: none found (CRT-internal).
+### MSVC CRT `rand` / `srand` — **the dominant generator** (corrects an earlier note that it was unused)
+- `rand` @0x48BCD8: `state = state*0x343FD + 0x269EC3; return (state>>16)&0x7FFF`; state is **per-thread** (`_getptd()+0x14`, default 1). `srand` @0x48BCC8 stores the argument there.
+- **335 direct call sites** of `rand` vs 33 (LFSR) and 19 (LCG). Zone growth, random events, demand messages, newspaper, terrain all use it.
+- `srand` is called from 8 sites, all in the 0x478xxx–0x47Axxx range, seeded with locals/constants (e.g. `local+0x1C`, `+0x15`, `+0x2A`, `+0x23`, `idx*7+local`, a stored value at 0x4E9140, an argument) — role (newspaper/terrain generation) is a HYPOTHESIS. Nothing seeds it from the clock, so **simulation `rand()` starts from seed 1** on a fresh thread and is perturbed by every `rand`/`srand` call in the UI code. The simulation timer runs on the main thread (WM_TIMER), so state is shared.
 
 ## Native implementation
 `src/simulation/rng.{h,cpp}`: `Lcg`, `Lfsr` with exactly the semantics above; tests with known-answer vectors from an independent model. Seeding is explicit (the app seeds from time like the original; tests/validation seed deterministically). `n == 0` is a precondition violation (original faults).

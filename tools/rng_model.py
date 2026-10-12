@@ -18,7 +18,12 @@ class Lfsr:
     def mod(s, n): n = s16(n); assert n != 0; return s16(s.step() % abs(n))   # state >= 0
     def mask(s, m): return s.step() & m
 
+class CrtRand:
+    def __init__(s, seed=1): s.s = seed & M32
+    def next(s): s.s = (s.s * 0x343FD + 0x269EC3) & M32; return (s.s >> 16) & 0x7FFF
+
 if __name__ == '__main__':
+    c = CrtRand(); print('crt rand seed 1:', [c.next() for _ in range(10)])
     l = Lcg(1); print('lcg seed 1 mod 100  :', [l.mod(100) for _ in range(8)])
     l = Lcg(0x12345679); print('lcg seed 0x12345679 mod 200:', [l.mod(200) for _ in range(8)])
     f = Lfsr(1); print('lfsr seed 1 raw     :', [f.step() for _ in range(8)])
