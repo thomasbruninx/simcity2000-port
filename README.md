@@ -2,7 +2,7 @@
 
 A clean-room-style reimplementation of SimCity 2000 (Windows 95, 1995 CD Collection build .022) for macOS/Apple Silicon, loading **your own legally obtained game files**. No game assets or binaries are included or distributed.
 
-**Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (zones 0–6), traffic router and tile primitives**. Pending: military/airport/seaport zones, destroy effects, things (ships/trains/aircraft), economy model, random events. Start with:
+**Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (all zone types incl. military/airport/seaport), traffic router, tile primitives and destroy effects**. Pending: things (ships/trains/aircraft/monsters), economy model, random events, full-tick driver. Start with:
 - [docs/roadmap.md](docs/roadmap.md) — plan based on findings
 - [docs/original-file-inventory.md](docs/original-file-inventory.md)
 - [docs/executable-analysis.md](docs/executable-analysis.md), [docs/windows-api-usage.md](docs/windows-api-usage.md)
