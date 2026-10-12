@@ -27,4 +27,4 @@ analyzeHeadless <projdir> sc2k95 -import SC2K/SIMCITY.EXE -overwrite
 ```
 
 ## Licence & attribution
-Research draws on the MIT-licensed [sc2kfix](https://sc2kfix.net) project (OpenCity Foundation); credited per fact in the docs. Licence for this repo: TBD by the owner.
+Research draws on the MIT-licensed [sc2kfix](https://sc2kfix.net) project (OpenCity Foundation); credited per fact in the docs. Licence for this repo: MIT (see LICENSE).
