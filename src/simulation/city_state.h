@@ -18,6 +18,8 @@ enum BudgetCategory { kRes, kCom, kInd, kOrdinance, kBond, kPolice, kFire, kHeal
 
 struct CityState {
     int32_t day = 0;
+    int32_t startYear = 0;             // MISC 3 @0x4C960C
+
     int32_t treasury = 0;
     int32_t debt = 0;                  // MISC 6 @0x4CB500
     int32_t econIndex = 0;             // MISC 7
@@ -35,6 +37,7 @@ struct CityState {
     int32_t seaLevel = 0;              // MISC 912 @0x4C9830 (int16): altitude of the water surface (called 'water factor' in the water-scan docs)
     int32_t militaryMask = 0;          // MISC 1034 @0x4CB4F8 (int16)
     uint16_t c9408 = 0, cb4f0 = 0;     // @0x4C9408 / 0x4CB4F0: counters of text-overlay objects (not stored in MISC)
+    int32_t centerA2 = 0, centerB2 = 0; // MISC 1030/1031 @0x4CA470/74: city centre, as computed by the environment scan
     int32_t rotation = 0;              // MISC 2 @0x4C8444 view rotation 0..3
     int32_t wind = 0;                  // MISC 25 (byte)
     int32_t cloudiness = 0;            // MISC 26 (byte)
@@ -44,6 +47,7 @@ struct CityState {
     std::array<int16_t, 256> census{}; // MISC 124..379: count of each XBLD id
     std::array<BudgetRecord, 16> budget{};
 
+    int yearOffset() const { return day / 300; }     // 0x4CA038
     int month() const { return (day / 25) % 12; }     // game: ((day / 0x19) % 0xC), signed division
     int phase() const { return day % 25; }
 

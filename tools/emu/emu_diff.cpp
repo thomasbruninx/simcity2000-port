@@ -1,5 +1,5 @@
 // sc2k-emu-diff: run original routines in the emulator and compare with the C++ ports on saved cities.
-// Usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy <SIMCITY.EXE> <city files...>
+// Usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy|things <SIMCITY.EXE> <city files...>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -265,7 +265,7 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
         Emu e(exe);
         e.installCrtRand(seed);
         SimImage img(e);
-        img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi();
+        img.load(w, s); img.setLfsr(lfsrSeed); img.setLcg(1); img.stubUi(); { ThingState z; img.loadThings(z, s); }
         const int sweeps = std::getenv("SWEEPS") ? std::atoi(std::getenv("SWEEPS")) : (variant >= 3 ? 12 : 3);
         for (int sweep = 0; sweep < sweeps; ++sweep)
             for (int a0 = 0; a0 < 4; ++a0) for (int b0 = 0; b0 < 4; ++b0) e.call(0x435220, {uint32_t(a0), uint32_t(b0)});
@@ -292,7 +292,8 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
         }
 
         std::string detail;
-        long d = diffWorld(ew, pw, detail) + diffState(es, ps, detail);
+        ThingState et; img.storeThings(et);
+        long d = diffWorld(ew, pw, detail) + diffState(es, ps, detail) + diffThings(et, ctx.things, detail) + (img.lcgState() != ctx.lcg.state());
         const bool randSame = e.crtRandState() == rng.state(), lfsrSame = img.lfsrState() == lf.state();
         const int32_t rideBus = e.get<int32_t>(0x4C75B8), rideRail = e.get<int32_t>(0x4C75BC), rideSub = e.get<int32_t>(0x4C7618);
         const bool rideSame = rideBus == ts.bus && rideRail == ts.rail && rideSub == ts.subway;
@@ -308,6 +309,124 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
     }
     return failures;
 }
+
+// ---- thing system: original spawners/updater in the emulator vs. the port, frame by frame ----
+struct ThingRun {
+    Emu e; SimImage img; World w; CityState s; CrtRand rng; Lfsr lf; TrafficStats ts; ZoneHooks hooks; GameTables t; SimContext ctx;
+    ThingRun(const std::string& exe, const GameTables& tables, const World& w0, const CityState& s0, uint32_t seed, uint32_t lfsrSeed, uint32_t lcgSeed, const ThingState& th)
+        : e(exe), img((e.installCrtRand(seed), e)), w(w0), s(s0), rng(seed), lf(lfsrSeed), t(tables), ctx{w, s, t, rng, lf, hooks, ts, {}} {
+        img.stubUi();
+        ctx.things = th;
+        ctx.lcg.seed(lcgSeed);
+        img.load(w, s); img.setLfsr(lfsrSeed); img.setLcg(lcgSeed); img.loadThings(th, s);
+    }
+    // compare the emulated game with the port; returns number of differing items
+    long compare(std::string& detail) {
+        World ew = w; CityState es = s; ThingState et;
+        img.store(ew, es); img.storeThings(et);
+        long d = diffWorld(ew, w, detail) + diffState(es, s, detail) + diffThings(et, ctx.things, detail);
+        if (ew.xthg != w.xthg) {
+            for (int sl = 0; sl < 40; ++sl) {
+                bool differs = false; for (int k = 0; k < 12; ++k) differs |= ew.xthg[sl * 12 + k] != w.xthg[sl * 12 + k];
+                if (!differs) continue;
+                char buf[200]; int n = std::snprintf(buf, sizeof buf, " [slot %d orig", sl);
+                for (int k = 0; k < 12; ++k) n += std::snprintf(buf + n, sizeof buf - n, " %02x", ew.xthg[sl * 12 + k]);
+                n += std::snprintf(buf + n, sizeof buf - n, " | port");
+                for (int k = 0; k < 12; ++k) n += std::snprintf(buf + n, sizeof buf - n, " %02x", w.xthg[sl * 12 + k]);
+                detail += buf; detail += "]";
+            }
+        }
+        if (e.crtRandState() != rng.state()) { ++d; detail += " rand"; }
+        if (img.lfsrState() != lf.state()) { ++d; detail += " lfsr"; }
+        if (img.lcgState() != ctx.lcg.state()) { ++d; detail += " lcg"; }
+        return d;
+    }
+};
+
+int thingsDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables tables = GameTables::fromExe(exe);
+    const World w0 = World::fromCity(c);
+    CityState s0 = CityState::fromCity(c);
+    int failures = 0;
+    for (int variant = 0; variant < 4; ++variant) {
+        const uint32_t seed = 3 + 7u * variant, lfsrSeed = 0xACE1u + 29u * variant, lcgSeed = 11 + 5u * variant;
+        World w1 = w0;
+        if (variant >= 1) {   // clear the saved things and keep the world; spawn a fresh mix through the spawners instead
+            std::fill(w1.xthg.begin(), w1.xthg.end(), 0);
+            for (auto& v : w1.xtxt.v) if (v >= 0xC9 && v < 0xF1) v = 0;
+        }
+        ThingState th0;
+        // sprite heights: give buildings a height so the aircraft collision code is exercised
+        th0.spriteHeight.assign(1400, 0);
+        for (size_t i = 0; i < th0.spriteHeight.size(); ++i) th0.spriteHeight[i] = static_cast<uint16_t>((i * 37) % 90);
+        ThingRun r(exe, tables, w1, s0, seed, lfsrSeed, lcgSeed, th0);
+        std::string detail; long d = 0;
+        if (variant >= 1) {
+            // pick spawn spots from the map
+            std::vector<std::pair<int,int>> rails, waters, lands;
+            for (int a = 4; a < 124; ++a) for (int b = 4; b < 124; ++b) {
+                const int id = w1.xbld.at(a, b);
+                if (id >= 0x2C && id <= 0x35) rails.push_back({a, b});
+                else if ((w1.xbit.at(a, b) & 4) && id == 0) waters.push_back({a, b});
+                else if (id == 0 && !(w1.xbit.at(a, b) & 4)) lands.push_back({a, b});
+            }
+            std::vector<std::pair<int,int>> inner; for (auto& q : lands) if (q.first > 24 && q.first < 104 && q.second > 24 && q.second < 104) inner.push_back(q);
+            auto pick = [&](const std::vector<std::pair<int,int>>& v, int k) { return v.empty() ? std::pair<int,int>{64, 64} : v[(static_cast<size_t>(k) * 2654435761u + variant * 97u) % v.size()]; };
+            r.e.put<int32_t>(0x4C9A70, 0); (void)0;
+            auto setFocus = [&](int a, int b) { r.ctx.things.focusA = a; r.ctx.things.focusB = b; r.e.put<int32_t>(0x4C9A70, a); r.e.put<int32_t>(0x4C9A74, b); };
+            for (int k = 0; k < 6; ++k) {   // trains
+                auto p = pick(rails, k);
+                r.e.call(0x452F60, {uint32_t(p.first), uint32_t(p.second)}); spawnTrain(r.ctx, p.first, p.second);
+            }
+            for (int k = 0; k < 6; ++k) {   // sailboats via the marina routine on water tiles
+                auto p = pick(waters, k);
+                r.e.call(0x452CE0, {uint32_t(p.first), uint32_t(p.second)}); spawnSailboatsNearMarina(r.ctx, p.first, p.second);
+            }
+            { auto p = pick(lands, 1); r.e.call(0x452190, {uint32_t(p.first), uint32_t(p.second), 0u}); spawnPlane(r.ctx, p.first, p.second, 0); }
+            { auto p = pick(lands, 2); r.e.call(0x452190, {uint32_t(p.first), uint32_t(p.second), 2u}); spawnPlane(r.ctx, p.first, p.second, 2); }
+            { auto p = pick(lands, 3); r.e.call(0x452500, {uint32_t(p.first), uint32_t(p.second)}); spawnHelicopter(r.ctx, p.first, p.second); }
+            { auto p = pick(waters, 9); r.e.call(0x452660, {uint32_t(p.first), uint32_t(p.second)}); spawnShip(r.ctx, p.first, p.second); }
+            if (variant >= 2) {
+                auto p = pick(inner, 5); setFocus(p.first, p.second);
+                if (variant == 2) { r.e.call(0x45E780); spawnMonster(r.ctx); }
+                if (variant == 3) { r.e.call(0x45EA00); spawnTornado(r.ctx); }
+                r.e.call(0x452900, {uint32_t(variant == 2 ? 5 : 2)}); spawnVisitor(r.ctx, variant == 2 ? 5 : 2);
+                auto q = pick(lands, 8);
+                r.e.call(0x452BE0, {uint32_t(q.first), uint32_t(q.second), 3u, 0u, 1u}); spawnEffect(r.ctx, q.first, q.second, 3, 0, 1);
+            }
+            d = r.compare(detail);
+            if (d) { std::printf("%-30s variant %d spawn: diffs %ld%s\n", path.c_str(), variant, d, detail.c_str()); tiles += 1; bad += 1; ++failures; continue; }
+        }
+        long spawned = 0; for (int sl = 1; sl < 40; ++sl) spawned += r.w.xthg[static_cast<size_t>(sl) * 12] != 0;
+        const int frames = 160;
+        int firstBad = -1, framesDone = 0;
+        for (int f = 0; f < frames && firstBad < 0; ++f) {
+            const auto before = r.w.xthg;
+            try { r.e.call(0x450210); } catch (const std::exception&) { firstBad = -2; framesDone = f; break; }
+            thingFrame(r.ctx);
+            detail.clear();
+            if (r.compare(detail)) {
+                firstBad = f; d = 1;
+                char buf[200]; int n = std::snprintf(buf, sizeof buf, " (before:");
+                for (int sl = 1; sl < 40; ++sl) if (before[sl * 12] == 3 || before[sl * 12] == 9) { n += std::snprintf(buf + n, sizeof buf - n, " s%d", sl); for (int k = 0; k < 12; ++k) n += std::snprintf(buf + n, sizeof buf - n, "%02x", before[sl * 12 + k]); }
+                detail += buf; detail += ")";
+            }
+        }
+        if (firstBad == -2) {   // the original read outside its arrays (undefined behaviour, e.g. a thing at the map edge)
+            std::printf("%-30s variant %d skipped: original faulted after %d frames (out-of-bounds read at the map edge)\n", path.c_str(), variant, framesDone);
+            continue;
+        }
+        long active = 0; for (int sl = 1; sl < 40; ++sl) active += r.w.xthg[static_cast<size_t>(sl) * 12] != 0;
+        char hb[40] = "";
+        if (firstBad < 0) std::snprintf(hb, sizeof hb, " hash %016llx", (unsigned long long)thingFingerprint(r.w, r.ctx.things, r.rng.state(), r.lf.state(), r.ctx.lcg.state()));
+        std::printf("%-30s variant %d things %ld->%ld frames %d %s%s%s\n", path.c_str(), variant, spawned, active, firstBad < 0 ? frames : firstBad,
+                    firstBad < 0 ? "identical" : "DIVERGED at frame ", firstBad < 0 ? "" : (std::to_string(firstBad) + ":" + detail).c_str(), hb);
+        tiles += 1; bad += firstBad >= 0; failures += firstBad >= 0;
+    }
+    return failures;
+}
+
 int destroyRun(const std::string& exe, const GameTables& t, const CityFile& c, int animate, int stride, bool perCall, std::string& report, long& calls) {
     World w = World::fromCity(c); CityState s = CityState::fromCity(c);
     const uint32_t seed = 7 + animate, lfsrSeed = 0xBEEF;
@@ -358,7 +477,7 @@ int destroyDiff(const std::string& exe, const std::string& path, long& tiles, lo
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 4) { std::fprintf(stderr, "usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy <SIMCITY.EXE> <files...>\n"); return 2; }
+    if (argc < 4) { std::fprintf(stderr, "usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy|things <SIMCITY.EXE> <files...>\n"); return 2; }
     const std::string mode = argv[1], exe = argv[2];
     long tiles = 0, bad = 0; int failures = 0;
     for (int i = 3; i < argc; ++i) {
@@ -367,6 +486,7 @@ int main(int argc, char** argv) {
             else if (mode == "water") failures += waterDiff(exe, argv[i], tiles, bad);
             else if (mode == "env") failures += envDiff(exe, argv[i], tiles, bad);
             else if (mode == "zone") failures += zoneDiff(exe, argv[i], tiles, bad);
+            else if (mode == "things") failures += thingsDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);

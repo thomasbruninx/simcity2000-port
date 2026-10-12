@@ -41,8 +41,105 @@ void clearSpecialBuilding(SimContext& c, int a, int b) {
     }
 }
 
-// Microsim/label allocation (0x44C8E0) returns 0 for every building id that the zone 7..9 code places (none of
-// 0xDD..0xF9 placed here has a microsim class in the table at 0x4E6C8A), so no overlay is allocated.
+namespace {
+uint16_t rdw(const SimContext& c, size_t o) { return static_cast<uint16_t>(c.w.xmic[o] | (c.w.xmic[o + 1] << 8)); }
+void wrw(SimContext& c, size_t o, int v) { c.w.xmic[o] = static_cast<uint8_t>(v); c.w.xmic[o + 1] = static_cast<uint8_t>(v >> 8); }
+}  // namespace
+
+// 0x44F150: how many of a kind the city can currently support, capped at `limit`
+int populationLimit(const SimContext& c, int limit, int divisor) {
+    if (static_cast<int16_t>(divisor) == 0) divisor = 100;
+    const auto& n = c.s.census;
+    const int sum = n[0xFE] + n[0xFB] + n[0xFC] + n[0xFD];
+    const uint32_t q16 = static_cast<uint32_t>((sum + ((sum >> 31) & 0xF)) >> 4);
+    int bonus = 0;
+    if (q16 > 0x8C) bonus = static_cast<int>(q16 * 20000u) - 2800000;
+    const uint64_t quot = static_cast<uint64_t>(static_cast<uint32_t>(c.s.extraPop + bonus + static_cast<int32_t>(c.s.population10))) / static_cast<uint32_t>(static_cast<int16_t>(divisor));
+    if (static_cast<int16_t>(limit) <= static_cast<int>(quot & 0xFFFF)) return static_cast<int16_t>(limit);
+    return static_cast<int>(static_cast<uint32_t>(quot));
+}
+
+// 0x44D740: initial contents of a freshly allocated microsim record
+static void initMicrosim(SimContext& c, int slot, int id) {
+    const size_t r = static_cast<size_t>(slot) * 8;
+    const int cls = c.t.microsimClass[static_cast<size_t>(id)];
+    const int year = static_cast<int16_t>(c.s.yearOffset() + c.s.startYear);
+    auto rnd = [&] { return c.rng.next(); };
+    if (cls < 0x11) {
+        wrw(c, r + 2, 0); wrw(c, r + 4, 0); wrw(c, r + 6, 0); c.w.xmic[r + 1] = 0;
+        if (static_cast<unsigned>(id - 0xC9) < 0x37u) {
+            switch (id) {
+                case 0xC9: wrw(c, r + 2, 0x32); break;
+                case 0xCA: wrw(c, r + 2, 0xDC); break;
+                case 0xCB: wrw(c, r + 2, 500); break;
+                case 0xCC: wrw(c, r + 2, 0x32); break;
+                case 0xCD: wrw(c, r + 2, 0x640); break;
+                case 0xCE: wrw(c, r + 2, 0x9C4); break;
+                case 0xCF: wrw(c, r + 2, 200); break;
+                case 0xD0: wrw(c, r + 2, populationLimit(c, 200, 900)); wrw(c, r + 4, year); break;
+                case 0xD1: case 0xD6: case 0xD9: c.w.xmic[r + 1] = 6; wrw(c, r + 4, 0); wrw(c, r + 2, 0); break;
+                case 0xD2: wrw(c, r + 2, populationLimit(c, static_cast<int16_t>(c.s.budget[kPolice].fundingPercent) * 2, 0x5A)); break;
+                case 0xD3: wrw(c, r + 2, populationLimit(c, static_cast<int16_t>(c.s.budget[kFire].fundingPercent >> 1), 0x46)); wrw(c, r + 4, 4); break;
+                case 0xD4: c.w.xmic[r + 1] = 100; break;
+                case 0xDB: wrw(c, r + 2, year); break;
+                case 0xF3: wrw(c, r + 2, year); wrw(c, r + 4, static_cast<int>(static_cast<uint32_t>(rnd() & 0xFFFF) % 0x1E) + 10); wrw(c, r + 6, static_cast<int>(static_cast<uint32_t>(rnd() & 0xFFFF) % 0x3C)); break;
+                case 0xFB: wrw(c, r + 2, 0x37); c.w.xmic[r + 1] = 5; wrw(c, r + 6, year); break;
+                case 0xFC: wrw(c, r + 2, 0x1E); c.w.xmic[r + 1] = 5; wrw(c, r + 6, year); break;
+                case 0xFD: wrw(c, r + 2, 0x2D); c.w.xmic[r + 1] = 5; wrw(c, r + 6, year); break;
+                case 0xFE: wrw(c, r + 2, 0x41); c.w.xmic[r + 1] = 5; wrw(c, r + 6, year); break;
+                case 0xFF:
+                    if (!c.hooks.specialCityName()) wrw(c, r + 6, year);
+                    else wrw(c, r + 6, rnd() & 0x3F);
+                    break;
+                default: break;
+            }
+        }
+    } else if (static_cast<unsigned>(id - 0xC6) < 0x28u) {
+        switch (id) {
+            case 0xC6: case 0xC7: wrw(c, r + 2, rdw(c, r + 2) + 1); wrw(c, r + 4, rdw(c, r + 4) + 0x14); break;
+            case 0xC8: wrw(c, r + 2, rdw(c, r + 2) + 1); wrw(c, r + 4, rdw(c, r + 4) + 4); break;
+            case 0xD5: wrw(c, r + 4, rdw(c, r + 4) + 9); break;
+            case 0xE9: case 0xEC: case 0xED: wrw(c, r + 2, rdw(c, r + 2) + 1); break;
+            default: break;
+        }
+    }
+}
+
+// 0x44C8E0: reserve a microsim record (and label) for building `id`; returns the XTXT overlay value (slot + 0x33) or 0
+int allocateMicrosim(SimContext& c, int id) {
+    if (id < 0xC6) return 0;
+    const int cls = c.t.microsimClass[static_cast<size_t>(id)];
+    if (cls == 0) return 0;
+    int slot;
+    if (cls < 0x11) {
+        slot = 10;
+        do { if (c.w.xmic[static_cast<size_t>(slot) * 8] == 0) break; ++slot; } while (slot < 0x96);
+    } else {
+        slot = cls - 0x10;
+    }
+    if (slot > 0x95) {
+        if (id < 0xFB) return 0;
+        slot = 10;
+        do { if (c.w.xmic[static_cast<size_t>(slot) * 8] < 0xFB) break; ++slot; } while (slot < 0x96);
+        if (slot > 0x95) return 0;
+        for (int i = 0; i < 0x80; ++i)
+            for (int j = 0; j < 0x80; ++j)
+                if (c.w.xtxt.at(i, j) - slot == 0x33) c.w.xtxt.at(i, j) = 0;
+    }
+    c.w.xmic[static_cast<size_t>(slot) * 8] = static_cast<uint8_t>(id);
+    initMicrosim(c, slot, id);
+    uint8_t* label = &c.w.xlab[static_cast<size_t>(slot + 0x33) * 25];
+    auto copyLabel = [&](bool custom) {
+        const uint8_t* src = c.hooks.labelTemplate(id, custom);
+        for (int i = 0; i < 25; ++i) label[i] = src ? src[i] : 0;
+    };
+    // the original keeps a table of 500 optional custom name pointers (indexed by id % 500) and a built-in name table
+    const bool hasCustom = c.hooks.labelTemplate(id, true) != nullptr;
+    if (hasCustom) { copyLabel(true); return slot + 0x33; }
+    if (cls < 0x11 || label[0] == 0) copyLabel(false);
+    return slot + 0x33;
+}
+
 bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size) {
     int sz = size - 1;
     if (sz > 1) { --a; --b; }
@@ -63,12 +160,14 @@ bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size) {
     if (id == 0xF8 && (waterCount == 0 || waterCount == 9)) return false;   // original posts message 0x6B
     const int flags = (id == 0xD5 || id == 0xD) ? 0x20 : 0xE0;
     if (id == 0xD && bldAt(c, a, b) > 0xC) return false;
+    const int overlay = allocateMicrosim(c, id);
     for (int x = a; x <= a1; ++x)
         for (int y = b; y <= b1; ++y) {
             c.w.xbit.at(x, y) = static_cast<uint8_t>((c.w.xbit.at(x, y) & 0x1F) | flags);
             setTile(c, x, y, id);
             c.w.xzon.at(x, y) &= 0xF0;
             c.w.xzon.at(x, y) &= 0x0F;
+            if (overlay != 0) c.w.xtxt.at(x, y) = static_cast<uint8_t>(overlay);
         }
     const uint8_t* corner = &c.t.rotationCorner[static_cast<size_t>(c.s.rotation & 3) * 8];
     if (sz == 0) orZone(c, a, b, 0xF0);

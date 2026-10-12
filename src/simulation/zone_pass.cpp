@@ -18,9 +18,9 @@ void specialSection(SimContext& c, int a, int b, int id) {
     auto powered = [&] { return inMap(a, b) && (w.xbit.at(a, b) & kPowered); };
     auto quarter = [](int v) { return static_cast<int16_t>((v + ((v >> 31) & 3)) >> 2); };
     if (id == 0xED && powered() && c.lfsr.mask(3) == 0) {
-        if (c.hooks.thingLimitA() < quarter(c.s.census[0xED])) c.hooks.spawnHelicopterOrShip(a, b);
+        if (c.things.trains < quarter(c.s.census[0xED])) spawnTrainNearStation(c, a, b);
     } else if (id == 0xF8 && powered() && c.lfsr.mask(3) == 0) {
-        if (c.hooks.thingLimitB() < c.s.census[0xF8] / 9) c.hooks.spawnTrain(a, b);
+        if (c.things.sailboats < c.s.census[0xF8] / 9) spawnSailboatsNearMarina(c, a, b);
     } else if (id > 0xFA && id < 0xFF && (w.xzon.at(a, b) & 0xF0) == 0x80) {
         const int micro = w.xtxt.at(a, b);
         if (micro > 0x32 && micro < 0xC9) {
@@ -95,7 +95,7 @@ void seaportZone(SimContext& c, int a, int b, int id) {
         } else pick = 0xE0;
         if (!placeZoneBuilding(c, a, b, pick, 9)) placeZoneBuilding(c, a, b, 0xE3, 9);
     } else if (id == 0xE0 && (c.rng.next() & 3) == 0) {
-        c.hooks.spawnSeaTraffic(a, b);
+        spawnShip(c, a, b);
     }
 }
 
@@ -117,11 +117,11 @@ void airportZone(SimContext& c, int a, int b, int id) {
         placeZoneBuilding(c, a, b, pick, 8);
     } else if (id == 0xDD && static_cast<int>(c.rng.next() & 0xFFFF) % 30 == 0 && inMap(a, b) && (w.xbit.at(a, b) & xbit::kPowered)) {
         if (static_cast<int>(c.rng.next() & 0xFFFF) % 10 < 4) {
-            c.hooks.spawnAircraft(a, b);
+            spawnHelicopter(c, a, b);
         } else {
             const bool flipped = (w.xbit.at(a, b) & xbit::kFlipped) != 0;
-            if ((c.s.rotation & 1) == 0) c.hooks.spawnPlane(a, b, flipped ? 2 : 0);
-            else c.hooks.spawnPlane(a, b, flipped ? 0 : 2);
+            if ((c.s.rotation & 1) == 0) spawnPlane(c, a, b, flipped ? 2 : 0);
+            else spawnPlane(c, a, b, flipped ? 0 : 2);
         }
     }
 }

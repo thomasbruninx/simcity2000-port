@@ -7,6 +7,7 @@ namespace sc2k {
 CityState CityState::fromCity(const CityFile& c) {
     CityState s;
     s.day = c.miscInt(misc::kDay);
+    s.startYear = c.miscInt(misc::kStartYear);
     s.treasury = c.miscInt(misc::kTreasury);
     s.debt = c.miscInt(misc::kDebt);
     s.econIndex = c.miscInt(misc::kEconIndex);
@@ -23,6 +24,8 @@ CityState CityState::fromCity(const CityFile& c) {
     s.seaLevel = static_cast<int16_t>(c.miscWord(misc::kWaterFactor));
     s.militaryMask = static_cast<int16_t>(c.miscWord(misc::kMilitaryMask));
     s.rotation = c.miscInt(misc::kRotation);
+    s.centerA2 = c.miscInt(misc::kCityCenterX2);
+    s.centerB2 = c.miscInt(misc::kCityCenterY2);
     s.wind = static_cast<uint8_t>(c.miscWord(misc::kWind));
     s.cloudiness = static_cast<uint8_t>(c.miscWord(misc::kCloudiness));
     s.militaryType = static_cast<uint8_t>(c.miscWord(misc::kMilitaryType));
@@ -45,6 +48,7 @@ void CityState::writeBack(CityFile& c) const {
     auto put = [&](size_t i, int32_t v) { c.setMiscWord(i, static_cast<uint32_t>(v)); };
     // 16-bit globals: the game stores them in a 32-bit word; keep whatever the upper half held in the file.
     auto put16 = [&](size_t i, int16_t v) { c.setMiscWord(i, (c.miscWord(i) & 0xFFFF0000u) | static_cast<uint16_t>(v)); };
+    put(misc::kCityCenterX2, centerA2); put(misc::kCityCenterY2, centerB2);
     put(misc::kDay, day); put(misc::kTreasury, treasury); put(misc::kDebt, debt); put(misc::kEconIndex, econIndex);
     put(misc::kPopHistorySum, popHistorySum); put(misc::kRatioMemory, ratioMemory);
     c.setMiscWord(misc::kOrdinances, ordinances);

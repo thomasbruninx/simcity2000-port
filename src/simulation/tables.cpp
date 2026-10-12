@@ -28,7 +28,16 @@ GameTables GameTables::fromExe(const std::string& path) {
     sh(0x4E6428, t.buildingSize); sh(0x4E6580, t.sizePop); sh(0x4E652E, t.buildBase); sh(0x4E6556, t.buildRange);
     sh(0x4E75C8, t.footprint); sh(0x4E6A58, t.shoreDx); sh(0x4E6A70, t.shoreDy); sh(0x4E6AB0, t.shoreBit); sh(0x4E6948, t.shoreType);
     sh(0x4DB328, t.rotationZoneMask); sh(0x4DB330, t.rotationCorner);
+    sh(0x4E7838, t.messagePriority); sh(0x4E6C8A, t.microsimClass);
     sh(0x4E6590, t.pierDx); sh(0x4E6598, t.pierDy);
+    sh(0x4E70D0, t.dir8Dx); sh(0x4E70E0, t.dir8Dy); sh(0x4E70F0, t.startAlt); sh(0x4E71E8, t.speed);
+    sh(0x4E7268, t.sailDx); sh(0x4E7270, t.sailDy); sh(0x4E7278, t.stationDx); sh(0x4E7280, t.stationDy);
+    sh(0x4E7288, t.trainInitDx); sh(0x4E7290, t.trainInitDy); sh(0x4E72A8, t.turnOffsets);
+    sh(0x4E72B0, t.probeDx); sh(0x4E72C0, t.probeDy); sh(0x4E72D0, t.quadDx); sh(0x4E72E0, t.quadDy);
+    sh(0x4E72F0, t.trainTurnSprite); sh(0x4E7300, t.trainSearch); sh(0x4E7308, t.nbDx); sh(0x4E7310, t.nbDy);
+    sh(0x4E7340, t.sailStepX); sh(0x4E7348, t.sailStepY); sh(0x4E7350, t.boatDx); sh(0x4E7360, t.boatDy);
+    sh(0x4E7370, t.turnA); sh(0x4E7380, t.turnB); sh(0x4E7390, t.pierDx2); sh(0x4E7398, t.pierDy2);
+    sh(0x4E73A0, t.shipDx); sh(0x4E73B0, t.shipDy); sh(0x4E73C0, t.shipTiles); sh(0x4E73D0, t.shipStepX); sh(0x4E73E0, t.shipStepY);
     std::memcpy(t.budgetDivisor.data(), pe.bytesAt(0x4E8EA0, 2 * t.budgetDivisor.size()).data(), 2 * t.budgetDivisor.size());
     return t;
 }

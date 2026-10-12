@@ -1,5 +1,7 @@
 // Shared context of the tile-level simulation routines (zone growth, traffic, building placement).
 #pragma once
+#include <vector>
+
 #include "simulation/city_state.h"
 #include "simulation/rng.h"
 #include "simulation/tables.h"
@@ -14,14 +16,10 @@ struct ZoneHooks {
     virtual ~ZoneHooks() = default;
     virtual void scrollTo(int /*a*/, int /*b*/) {}                       // 0x440C90 (UI)
     virtual void postMessage(int /*id*/, int /*arg*/) {}                 // 0x47BA90 (advisor/news queue)
-    virtual void uiFlag(int /*which*/) {}                                // 0x441800 (toolbar 'rebuild' flags)
-    virtual void spawnHelicopterOrShip(int /*a*/, int /*b*/) {}          // 0x452EF0
-    virtual void spawnTrain(int /*a*/, int /*b*/) {}                     // 0x452CE0
-    virtual void spawnAircraft(int /*a*/, int /*b*/) {}                  // 0x452500 (airport)
-    virtual void spawnPlane(int /*a*/, int /*b*/, int /*dir*/) {}        // 0x452190 (airport)
-    virtual void spawnSeaTraffic(int /*a*/, int /*b*/) {}                // 0x452660 (seaport pier)
-    virtual int thingLimitA() { return 0; }                              // DAT_004E89C8 (read by the 0xED handler)
-    virtual int thingLimitB() { return 0; }                              // DAT_004E89C0 (read by the 0xF8 handler)
+    virtual void uiFlag(int /*which*/) {}
+    // 25-byte building-name template (game text, loaded from the data files) for a building id; nullptr = all zeros.
+    virtual const uint8_t* labelTemplate(int /*id*/, bool /*custom*/) { return nullptr; }
+    virtual bool specialCityName() { return false; }                       // 0x44D740 id 0xFF: city name equals a built-in string                                // 0x441800 (toolbar 'rebuild' flags)
 };
 
 // Ridership statistics written by the traffic router.
@@ -29,6 +27,25 @@ struct TrafficStats {
     int32_t bus = 0;      // @0x4C75B8
     int32_t rail = 0;     // @0x4C75BC
     int32_t subway = 0;   // @0x4C7618
+};
+
+// Runtime globals of the thing system (ships, aircraft, trains, monsters, ...). None of them is stored in a save file.
+struct ThingState {
+    int animFrame = 0;                          // 0x4E70CC frame counter (wraps at 0x400)
+    int planes = 0, helis = 0, ships = 0;       // 0x4E89B0 / B4 / B8 (counted again every frame by the updaters)
+    int visitors = 0, sailboats = 0;            // 0x4E89BC / C0
+    int monsters = 0, trains = 0, tornados = 0; // 0x4E89C4 / C8 / CC
+    int soundGate = 0;                          // 0x4E89D0 (real-time gate of a traffic-report sound; not simulated)
+    int focusA = 0, focusB = 0;                 // 0x4C9A70 / 74: location of the latest disaster / event
+    int disasterRequest = 0;                    // 0x4C9438: disaster kind requested by a thing (consumed by 0x45C870)
+    int fireMessageKind = -1;                   // 0x4E76A4: highest-priority burning building class since the last report (-1 = none)
+    int lastSpawned = 0;                        // 0x4C9834: slot of the thing spawned last
+    int shipTargetA = 0, shipTargetB = 0;       // 0x4E70BC / 0x4E70C0: pier a ship was sent to
+    int scenarioFlag = 0;                       // 0x4C9D5C (written by the game-over / scenario code)
+    int trafficAverage = 0;                     // *0x4CB498: average traffic, computed by the event half of demand
+    int crimeAverage = 0;                       // *0x4CB4A4: average crime
+    std::vector<uint16_t> spriteHeight;         // word at +4 of each 8-byte sprite record (0x4CA1D0); read from the sprite archives
+    int spriteHeightOf(int id) const { return id >= 0 && static_cast<size_t>(id) < spriteHeight.size() ? spriteHeight[static_cast<size_t>(id)] : 0; }
 };
 
 struct SimContext {
@@ -40,6 +57,8 @@ struct SimContext {
     ZoneHooks& hooks;
     TrafficStats& traffic;
     TileQueue queue;
+    ThingState things{};
+    Lcg lcg{1};
 };
 
 // Tile-id classes shared by several routines (VERIFIED ranges; they overlap on purpose).
@@ -71,8 +90,27 @@ void destroyTile(SimContext& c, int a, int b, int animate);              // 0x45
 
 // ---- military / airport / seaport placement (docs/simulation/special-zones.md) ----
 void clearSpecialBuilding(SimContext& c, int a, int b);                  // 0x438C20
-bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size);   // 0x440600 (microsim allocation: see special.cpp)
+bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size);   // 0x440600
+int allocateMicrosim(SimContext& c, int id);                             // 0x44C8E0 (+0x44D740): XTXT overlay value of the new record, or 0
+int populationLimit(const SimContext& c, int limit, int divisor);        // 0x44F150
 bool placeZoneBuilding(SimContext& c, int a, int b, int id, int zone);   // 0x437C30
+
+// ---- thing system (docs/simulation/things.md); drawing is omitted ----
+void thingFrame(SimContext& c);                                          // 0x450210: one animation frame of every active thing
+void removeThing(SimContext& c, int slot);                               // 0x450150
+int freeThingSlot(const SimContext& c);                                  // 0x4501D0: 1..0x27, or 0 when the table is full
+void spawnHelicopter(SimContext& c, int a, int b);                       // 0x452500
+void spawnPlane(SimContext& c, int a, int b, int dir);                   // 0x452190
+void spawnShip(SimContext& c, int pierA, int pierB);                     // 0x452660
+void spawnVisitor(SimContext& c, int kind);                              // 0x452900
+void spawnEffect(SimContext& c, int a, int b, int alt, int state, int extra);   // 0x452BE0
+void spawnSailboatsNearMarina(SimContext& c, int a, int b);              // 0x452CE0
+void spawnTrainNearStation(SimContext& c, int a, int b);                 // 0x452EF0
+bool spawnTrain(SimContext& c, int a, int b);                            // 0x452F60
+bool spawnMonster(SimContext& c);                                        // 0x45E780
+bool spawnTornado(SimContext& c);                                        // 0x45EA00
+bool startFire(SimContext& c, int a, int b, int flag);                   // 0x460780
+void floodTile(SimContext& c, int a, int b);                             // 0x446000
 
 // ---- the pass itself ----
 void runZonePass(SimContext& c, int a0, int b0);                         // 0x435220 (all zone types)

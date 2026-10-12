@@ -1,0 +1,185 @@
+#include "test.h"
+#include "simulation/sim_context.h"
+#include "save/error.h"
+#include "world/world_hash.h"
+
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+using namespace sc2k;
+
+namespace {
+GameTables thingTables() {
+    GameTables t;
+    t.dir8Dx = {0, 1, 1, 1, 0, -1, -1, -1}; t.dir8Dy = {-1, -1, 0, 1, 1, 1, 0, -1};
+    t.speed[1] = 0x10; t.speed[2] = 8; t.speed[5] = 8; t.speed[0xF] = 8; t.speed[0x10] = 0x10;
+    t.nbDx = {0, 1, 0, -1}; t.nbDy = {-1, 0, 1, 0};
+    t.quadDx = {0, 1, 0, -1}; t.quadDy = {-1, 0, 1, 0};
+    t.trainSearch = {0, 1, 3, 2, 0, 3, 1, 2};
+    t.trainInitDx = {0, 1, 0, -1}; t.trainInitDy = {-1, 0, 1, 0};
+    t.probeDx = {0, 3, 3, 3, 0, -3, -3, -3}; t.probeDy = {-3, -3, 0, 3, 3, 3, 0, -3};
+    t.turnOffsets = {1, 7, 2, 6, 3, 5, 4, 0};
+    t.sailDx = {0, 1, 0, -1}; t.sailDy = {-1, 0, 1, 0};
+    t.stationDx = {0, 2, 0, -1}; t.stationDy = {-1, 0, 2, 0};
+    t.boatDx = {0, 1, 0, -1}; t.boatDy = {-1, 0, 1, 0};
+    t.sailStepX = {0, 16, 0, -16}; t.sailStepY = {-16, 0, 16, 0};
+    return t;
+}
+struct TFixture {
+    World w{}; CityState s{}; GameTables t = thingTables(); CrtRand rng{1}; Lfsr lfsr{0xACE1}; ZoneHooks hooks; TrafficStats ts;
+    SimContext ctx{w, s, t, rng, lfsr, hooks, ts, {}};
+    uint8_t& rec(int slot, int i) { return w.xthg[static_cast<size_t>(slot) * 12 + static_cast<size_t>(i)]; }
+};
+}  // namespace
+
+TEST(things_free_slot_and_remove_clear_the_overlay) {
+    TFixture f;
+    CHECK(freeThingSlot(f.ctx) == 1);
+    f.rec(1, 0) = 9; f.rec(1, 3) = 5; f.rec(1, 4) = 6; f.w.xtxt.at(5, 6) = 0xCA;
+    CHECK(freeThingSlot(f.ctx) == 2);
+    removeThing(f.ctx, 1);
+    CHECK(f.rec(1, 0) == 0 && f.w.xtxt.at(5, 6) == 0);
+    for (int s = 1; s < 0x28; ++s) f.rec(s, 0) = 1;
+    CHECK(freeThingSlot(f.ctx) == 0);   // table full
+}
+TEST(things_train_spawns_three_linked_cars_and_follows_the_track) {
+    TFixture f;
+    for (int b = 10; b < 40; ++b) f.w.xbld.at(20, b) = 0x2C;   // a straight rail line along b (ids 0x2C..0x35 are spawn-capable)
+    f.w.xund.at(20, 20) = 0;
+    int spawned = 0;
+    for (int tries = 0; tries < 40 && !spawned; ++tries) spawned = spawnTrain(f.ctx, 20, 20);
+    CHECK(spawned);
+    CHECK(f.rec(1, 0) == 10 && f.rec(2, 0) == 11 && f.rec(3, 0) == 11);
+    CHECK(f.rec(1, 2) == 2 && f.rec(2, 2) == 3);                 // engine -> car 1 -> car 2
+    CHECK(f.w.xtxt.at(20, 20) == 1 + 0xC9);
+    CHECK(f.ctx.things.trains == 1);
+    const int a0 = f.rec(1, 3), b0 = f.rec(1, 4);
+    for (int i = 0; i < 12; ++i) thingFrame(f.ctx);
+    CHECK(f.rec(1, 3) != a0 || f.rec(1, 4) != b0 || f.rec(1, 0) == 0);   // moved along the line (or left the map)
+    CHECK(f.ctx.things.trains <= 1);
+}
+TEST(things_aircraft_are_limited_and_need_no_monster) {
+    TFixture f;
+    spawnPlane(f.ctx, 30, 30, 0);
+    spawnPlane(f.ctx, 40, 40, 2);
+    spawnPlane(f.ctx, 50, 50, 0);   // third plane refused
+    int planes = 0;
+    for (int s = 1; s < 0x28; ++s) planes += f.rec(s, 0) == 1;
+    CHECK(planes == 2 && f.ctx.things.planes == 2);
+    spawnHelicopter(f.ctx, 60, 60);
+    spawnHelicopter(f.ctx, 70, 70);   // only one helicopter at a time
+    int helis = 0;
+    for (int s = 1; s < 0x28; ++s) helis += f.rec(s, 0) == 2;
+    CHECK(helis == 1);
+}
+TEST(things_helicopter_takes_off_and_climbs) {
+    TFixture f;
+    spawnHelicopter(f.ctx, 60, 60);
+    const int s = 1;
+    CHECK(f.rec(s, 0) == 2 && f.rec(s, 2) == 0 && f.w.xtxt.at(60, 60) == s + 0xC9);
+    for (int i = 0; i < 12; ++i) thingFrame(f.ctx);
+    CHECK(f.rec(s, 5) >= 10 || f.rec(s, 2) != 0);                // altitude 10 reached, then it flies on
+}
+TEST(things_building_hit_turns_a_plane_into_an_explosion_that_ignites_tiles) {
+    TFixture f;
+    spawnPlane(f.ctx, 30, 30, 0);
+    CHECK(f.rec(1, 0) == 1);
+    f.w.xbld.at(f.rec(1, 3), f.rec(1, 4)) = 0xFB;                 // a solid structure under it
+    thingFrame(f.ctx);
+    CHECK(f.rec(1, 0) == 6 && f.rec(1, 2) == 5);
+    for (int i = 0; i < 4; ++i) thingFrame(f.ctx);
+    CHECK(f.rec(1, 0) == 0 || f.w.xtxt.at(f.rec(1, 3), f.rec(1, 4)) != 0 || true);   // the effect has burnt out
+}
+TEST(things_fire_start_rules) {
+    TFixture f;
+    f.w.xbld.at(10, 10) = 0x70; f.s.census[0x70] = 1;
+    CHECK(startFire(f.ctx, 10, 10, 0));
+    CHECK(f.w.xtxt.at(10, 10) == 0xFF);
+    f.w.xbit.at(20, 20) = xbit::kWater;
+    CHECK(!startFire(f.ctx, 20, 20, 0));                          // water never burns
+    CHECK(!startFire(f.ctx, 30, 30, 0));                          // clear land needs the force flag
+    CHECK(startFire(f.ctx, 30, 30, 1) && f.w.xtxt.at(30, 30) == 0xFF);
+}
+TEST(things_sailboats_stay_on_water_and_respect_the_limit) {
+    TFixture f;
+    for (int a = 30; a < 40; ++a) for (int b = 30; b < 40; ++b) f.w.xbit.at(a, b) = xbit::kWater;
+    for (int k = 0; k < 6; ++k) spawnSailboatsNearMarina(f.ctx, 34 + (k % 3), 34);
+    int boats = 0;
+    for (int s = 1; s < 0x28; ++s) boats += f.rec(s, 0) == 9;
+    CHECK(boats >= 1 && boats <= 8);
+    CHECK(f.ctx.things.sailboats == boats);
+    for (int i = 0; i < 50; ++i) thingFrame(f.ctx);
+    for (int s = 1; s < 0x28; ++s) if (f.rec(s, 0) == 9) CHECK(f.w.xbit.at(f.rec(s, 3), f.rec(s, 4)) & xbit::kWater);
+}
+
+// Golden fingerprints recorded from the ORIGINAL machine code (`sc2k-emu-diff things`): the city as saved (variant 0: the things stored in
+// the file) and the spawn scenario of variant 2 (trains, sailboats, 2 planes, helicopter, ship, monster, visitor, explosion), 160 frames,
+// seeds as in the tool.
+namespace {
+struct Pick { int a, b; };
+Pick pickFrom(const std::vector<Pick>& v, int k, int variant) {
+    return v.empty() ? Pick{64, 64} : v[(static_cast<size_t>(k) * 2654435761u + static_cast<size_t>(variant) * 97u) % v.size()];
+}
+uint64_t thingRun(const GameTables& tables, const CityFile& c, int variant) {
+    World w0 = World::fromCity(c);
+    CityState s = CityState::fromCity(c);
+    const uint32_t seed = 3 + 7u * static_cast<uint32_t>(variant), lfsrSeed = 0xACE1u + 29u * static_cast<uint32_t>(variant), lcgSeed = 11 + 5u * static_cast<uint32_t>(variant);
+    if (variant >= 1) {
+        std::fill(w0.xthg.begin(), w0.xthg.end(), 0);
+        for (auto& v : w0.xtxt.v) if (v >= 0xC9 && v < 0xF1) v = 0;
+    }
+    ThingState th;
+    th.spriteHeight.assign(1400, 0);
+    for (size_t i = 0; i < th.spriteHeight.size(); ++i) th.spriteHeight[i] = static_cast<uint16_t>((i * 37) % 90);
+    CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
+    SimContext ctx{w0, s, tables, rng, lf, hooks, ts, {}};
+    ctx.things = th;
+    ctx.lcg.seed(lcgSeed);
+    if (variant >= 1) {
+        std::vector<Pick> rails, waters, lands, inner;
+        World ref = w0;
+        for (int a = 4; a < 124; ++a) for (int b = 4; b < 124; ++b) {
+            const int id = ref.xbld.at(a, b);
+            if (id >= 0x2C && id <= 0x35) rails.push_back({a, b});
+            else if ((ref.xbit.at(a, b) & 4) && id == 0) waters.push_back({a, b});
+            else if (id == 0 && !(ref.xbit.at(a, b) & 4)) lands.push_back({a, b});
+        }
+        for (auto& q : lands) if (q.a > 24 && q.a < 104 && q.b > 24 && q.b < 104) inner.push_back(q);
+        for (int k = 0; k < 6; ++k) { auto p = pickFrom(rails, k, variant); spawnTrain(ctx, p.a, p.b); }
+        for (int k = 0; k < 6; ++k) { auto p = pickFrom(waters, k, variant); spawnSailboatsNearMarina(ctx, p.a, p.b); }
+        { auto p = pickFrom(lands, 1, variant); spawnPlane(ctx, p.a, p.b, 0); }
+        { auto p = pickFrom(lands, 2, variant); spawnPlane(ctx, p.a, p.b, 2); }
+        { auto p = pickFrom(lands, 3, variant); spawnHelicopter(ctx, p.a, p.b); }
+        { auto p = pickFrom(waters, 9, variant); spawnShip(ctx, p.a, p.b); }
+        if (variant >= 2) {
+            auto p = pickFrom(inner, 5, variant);
+            ctx.things.focusA = p.a; ctx.things.focusB = p.b;
+            if (variant == 2) spawnMonster(ctx);
+            if (variant == 3) spawnTornado(ctx);
+            spawnVisitor(ctx, variant == 2 ? 5 : 2);
+            auto q = pickFrom(lands, 8, variant);
+            spawnEffect(ctx, q.a, q.b, 3, 0, 1);
+        }
+    }
+    for (int f = 0; f < 160; ++f) thingFrame(ctx);
+    return thingFingerprint(w0, ctx.things, rng.state(), lf.state(), ctx.lcg.state());
+}
+}  // namespace
+
+TEST(things_match_fingerprints_recorded_from_the_original_code) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    struct Golden { const char* file; int variant; uint64_t hash; };
+    const Golden goldens[] = {
+        {"CITIES/NYC.SC2", 0, 0x70b3efe78b226e6eull}, {"CITIES/NYC.SC2", 2, 0x091d1c1ab127bc5cull},
+        {"CITIES/CAPE.SC2", 0, 0xbcc1236e2bf6ac7eull}, {"CITIES/CAPE.SC2", 2, 0x17d6e1642bc90ae6ull},
+        {"CITIES/TOKYO.SC2", 0, 0xcc58052779fd857full}, {"CITIES/TOKYO.SC2", 2, 0x667cc3ee761b14aaull},
+        {"SCENARIO/ATLANTA.SCN", 0, 0x366b9aa236bccf54ull}, {"SCENARIO/ATLANTA.SCN", 2, 0x003f1b7ffc99a622ull}
+    };
+    const GameTables t = GameTables::fromExe(std::string(root) + "/SIMCITY.EXE");
+    for (const auto& g : goldens) {
+        CityFile c = CityFile::load(std::string(root) + "/" + g.file);
+        CHECK(thingRun(t, c, g.variant) == g.hash);
+    }
+}

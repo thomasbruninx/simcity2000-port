@@ -18,6 +18,8 @@ SimImage::SimImage(Emu& emu) : e(emu) {
     e.put<uint32_t>(0x4C944C, things);
     e.put<uint32_t>(0x4C91B0, labels);
     e.put<uint32_t>(0x4CA1D0, e.alloc(12000));   // sprite table (heights only feed drawing coordinates): zeroed
+    trafficAvgPtr = e.alloc(16); crimeAvgPtr = e.alloc(16);
+    e.put<uint32_t>(0x4CB498, trafficAvgPtr); e.put<uint32_t>(0x4CB4A4, crimeAvgPtr);
     e.call(0x456CE0);   // fills the 24-entry neighbourhood offset table (static init in the game)
 }
 
@@ -42,7 +44,35 @@ void SimImage::load(const World& w, const CityState& s) {
     e.put<int32_t>(0x4C9444, s.mode); e.put<int16_t>(0x4C9830, int16_t(s.seaLevel)); e.put<int16_t>(0x4CB4F8, int16_t(s.militaryMask));
     e.put<uint16_t>(0x4C9408, s.c9408); e.put<uint16_t>(0x4CB4F0, s.cb4f0);
     for (int i = 0; i < 3; ++i) e.put<int16_t>(0x4CB910 + 2u * i, s.demand[static_cast<size_t>(i)]);
+    e.put<int16_t>(0x4CA038, int16_t(s.yearOffset())); e.put<int16_t>(0x4C960C, int16_t(s.startYear));
     e.put<int32_t>(0x4C9E1C, s.day); e.put<int16_t>(0x4CA034, int16_t(s.month()));
+}
+
+void SimImage::loadThings(const ThingState& t, const CityState& s) {
+    e.put<int32_t>(0x4E70CC, t.animFrame);
+    const int32_t counters[9] = {t.planes, t.helis, t.ships, t.visitors, t.sailboats, t.monsters, t.trains, t.tornados, t.soundGate};
+    for (int i = 0; i < 9; ++i) e.put<int32_t>(0x4E89B0 + 4u * i, counters[i]);
+    e.put<int32_t>(0x4C9A70, t.focusA); e.put<int32_t>(0x4C9A74, t.focusB);
+    e.put<uint16_t>(0x4C9438, uint16_t(t.disasterRequest)); e.put<int16_t>(0x4C9834, int16_t(t.lastSpawned));
+    e.put<int32_t>(0x4E70BC, t.shipTargetA); e.put<int32_t>(0x4E70C0, t.shipTargetB);
+    e.put<int32_t>(0x4C9D5C, t.scenarioFlag); e.put<int16_t>(0x4E76A4, int16_t(t.fireMessageKind));
+    e.put<int32_t>(trafficAvgPtr, t.trafficAverage); e.put<int32_t>(crimeAvgPtr, t.crimeAverage);
+    e.put<int32_t>(0x4CA470, s.centerA2); e.put<int32_t>(0x4CA474, s.centerB2); e.put<int32_t>(0x4CB4EC, s.cb4ec);
+    if (!t.spriteHeight.empty()) {
+        const uint32_t tbl = e.get<uint32_t>(0x4CA1D0);
+        for (size_t i = 0; i < t.spriteHeight.size() && i < 1400; ++i) e.put<uint16_t>(tbl + 8u * uint32_t(i) + 4, t.spriteHeight[i]);
+    }
+}
+
+void SimImage::storeThings(ThingState& t) const {
+    t.animFrame = e.get<int32_t>(0x4E70CC);
+    int32_t* counters[9] = {&t.planes, &t.helis, &t.ships, &t.visitors, &t.sailboats, &t.monsters, &t.trains, &t.tornados, &t.soundGate};
+    for (int i = 0; i < 9; ++i) *counters[i] = e.get<int32_t>(0x4E89B0 + 4u * i);
+    t.focusA = e.get<int32_t>(0x4C9A70); t.focusB = e.get<int32_t>(0x4C9A74);
+    t.disasterRequest = e.get<uint16_t>(0x4C9438); t.lastSpawned = e.get<int16_t>(0x4C9834);
+    t.shipTargetA = e.get<int32_t>(0x4E70BC); t.shipTargetB = e.get<int32_t>(0x4E70C0);
+    t.scenarioFlag = e.get<int32_t>(0x4C9D5C); t.fireMessageKind = e.get<int16_t>(0x4E76A4);
+    t.trafficAverage = e.get<int32_t>(trafficAvgPtr); t.crimeAverage = e.get<int32_t>(crimeAvgPtr);
 }
 
 void SimImage::store(World& w, CityState& s) const {
@@ -67,10 +97,11 @@ void SimImage::store(World& w, CityState& s) const {
 
 void SimImage::stubUi() {
     // presentation / UI routines (plain `ret`)
-    for (uint32_t f : {0x440C90u, 0x47BA90u, 0x452500u, 0x452190u, 0x452EF0u, 0x452CE0u, 0x452660u,           // scroll, messages, thing spawners
+    for (uint32_t f : {0x440C90u, 0x47BA90u, 0x47FAC0u, 0x47F6C0u,                                             // scroll, messages, begin/end paint
                        0x435100u, 0x4857F0u, 0x45AA50u, 0x4351F0u, 0x45AEC0u, 0x439EB0u, 0x439710u, 0x441800u, 0x451360u})   // drawing, dirty rects, delays
         e.patchRet(f);
     e.patchRetN(0x40ED80, 8);     // InvalidateRect wrapper (thiscall, 2 args)
+    e.patchRetN(0x412050, 12);    // recentre the view (thiscall, 3 args)
     e.patchRetN(0x424AA0, 4);     // play sound (thiscall, 1 arg)
     const uint8_t zeroEax[3] = {0x31, 0xC0, 0xC3};
     e.write(0x475D70, zeroEax, 3);                       // acquire window DC -> 0
@@ -81,6 +112,9 @@ void SimImage::stubUi() {
     const uint8_t ret4[3] = {0xC2, 0x04, 0x00};
     e.write(stub, ret4, 3);
     e.put<uint32_t>(0x4EEE10, stub);
+    const uint8_t zero32[3] = {0x31, 0xC0, 0xC3};      // GetTickCount() -> 0 (xor eax,eax; ret)
+    e.write(stub + 0x10, zero32, 3);
+    e.put<uint32_t>(0x4EEAD8, stub + 0x10);
 }
 
 namespace {
@@ -100,9 +134,21 @@ long diffWorld(const World& a, const World& b, std::string& detail) {
     d += diffGrid("ALTM", a.altm, b.altm, detail);
     d += diffGrid("XTRF", a.xtrf, b.xtrf, detail); d += diffGrid("XPLT", a.xplt, b.xplt, detail); d += diffGrid("XVAL", a.xval, b.xval, detail); d += diffGrid("XCRM", a.xcrm, b.xcrm, detail);
     d += diffGrid("XPOP", a.xpop, b.xpop, detail); d += diffGrid("XROG", a.xrog, b.xrog, detail); d += diffGrid("XPLC", a.xplc, b.xplc, detail); d += diffGrid("XFIR", a.xfir, b.xfir, detail);
-    if (a.xmic != b.xmic) { ++d; detail += " XMIC"; }
+    if (a.xmic != b.xmic) { ++d; detail += " XMIC"; for (size_t i = 0; i < a.xmic.size(); ++i) if (a.xmic[i] != b.xmic[i]) { detail += "@rec" + std::to_string(i / 8) + "+" + std::to_string(i % 8) + "(" + std::to_string(a.xmic[i]) + "/" + std::to_string(b.xmic[i]) + ")"; break; } }
     if (a.xlab != b.xlab) { ++d; detail += " XLAB"; }
     if (a.xthg != b.xthg) { ++d; detail += " XTHG"; }
+    return d;
+}
+
+long diffThings(const ThingState& a, const ThingState& b, std::string& detail) {
+    long d = 0;
+    auto chk = [&](const char* n, long x, long y) { if (x != y) { ++d; detail += std::string(" ") + n + "(" + std::to_string(x) + "/" + std::to_string(y) + ")"; } };
+    chk("animFrame", a.animFrame, b.animFrame); chk("planes", a.planes, b.planes); chk("helis", a.helis, b.helis); chk("ships", a.ships, b.ships);
+    chk("visitors", a.visitors, b.visitors); chk("sailboats", a.sailboats, b.sailboats); chk("monsters", a.monsters, b.monsters);
+    chk("trains", a.trains, b.trains); chk("tornados", a.tornados, b.tornados); chk("soundGate", a.soundGate, b.soundGate);
+    chk("focusA", a.focusA, b.focusA); chk("focusB", a.focusB, b.focusB); chk("disasterRequest", a.disasterRequest, b.disasterRequest);
+    chk("lastSpawned", a.lastSpawned, b.lastSpawned); chk("shipTargetA", a.shipTargetA, b.shipTargetA); chk("shipTargetB", a.shipTargetB, b.shipTargetB);
+    chk("fireMessageKind", a.fireMessageKind, b.fireMessageKind);
     return d;
 }
 

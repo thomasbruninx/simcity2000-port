@@ -33,6 +33,28 @@ struct GameTables {
     std::array<uint8_t, 256> shoreType{};      // @0x4E6948: terrain tile type for a neighbour-altitude mask
     // Special buildings (military / airport / seaport placement)
     std::array<int16_t, 4> pierDx{}, pierDy{};   // @0x4E6590 / 0x4E6598: the 4 directions searched for water next to a pier
+    // Thing system (ships, aircraft, trains, monsters): small direction/step tables @0x4E70D0..0x4E73E0, see docs/simulation/things.md
+    std::array<int16_t, 16> dir8Dx{}, dir8Dy{};          // @0x4E70D0 / 0x4E70E0: step vectors of the 8 compass directions
+    std::array<uint8_t, 24> startAlt{};                  // @0x4E70F0: initial altitude by thing type
+    std::array<uint8_t, 24> speed{};                     // @0x4E71E8: sub-tile speed by movement kind
+    std::array<int16_t, 4> sailDx{}, sailDy{};           // @0x4E7268 / 0x4E7270: tiles examined around a marina
+    std::array<int16_t, 4> stationDx{}, stationDy{};     // @0x4E7278 / 0x4E7280: tiles examined around a rail station
+    std::array<int16_t, 16> trainInitDx{}, trainInitDy{}; // @0x4E7288 / 0x4E7290: next-tile offset of a new train by heading
+    std::array<uint8_t, 8> turnOffsets{};                // @0x4E72A8: heading offsets tried by the obstacle avoider
+    std::array<int16_t, 16> probeDx{}, probeDy{};         // @0x4E72B0 / 0x4E72C0: 3-tile look-ahead by heading
+    std::array<int16_t, 16> quadDx{}, quadDy{};           // @0x4E72D0 / 0x4E72E0: train steps by heading 0..3
+    std::array<uint8_t, 32> trainTurnSprite{};           // @0x4E72F0: [heading * 4 + new heading]
+    std::array<uint8_t, 8> trainSearch{};                // @0x4E7300: two 4-entry search orders
+    std::array<int16_t, 16> nbDx{}, nbDy{};               // @0x4E7308 / 0x4E7310
+    std::array<int16_t, 16> sailStepX{}, sailStepY{};     // @0x4E7340 / 0x4E7348: 16-unit steps per heading
+    std::array<int16_t, 16> boatDx{}, boatDy{};           // @0x4E7350 / 0x4E7360: sailboat steps
+    std::array<int16_t, 16> turnA{}, turnB{};             // @0x4E7370 / 0x4E7380: ship turn preferences
+    std::array<int16_t, 4> pierDx2{}, pierDy2{};         // @0x4E7390 / 0x4E7398: tiles examined for a pier head
+    std::array<int16_t, 16> shipDx{}, shipDy{};           // @0x4E73A0 / 0x4E73B0: ship look-ahead per heading
+    std::array<uint8_t, 9> shipTiles{};                  // @0x4E73C0: XBLD ids a ship may sail through
+    std::array<int16_t, 16> shipStepX{}, shipStepY{};     // @0x4E73D0 / 0x4E73E0: ship sub-tile steps (12 units per tile)
+    std::array<int16_t, 80> messagePriority{};            // @0x4E7838: priority of the disaster message by burnt-building class
+    std::array<uint8_t, 256> microsimClass{};             // @0x4E6C8A: microsim slot class by building id (0 = none)
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

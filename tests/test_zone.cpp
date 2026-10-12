@@ -128,10 +128,10 @@ TEST(zone_pass_matches_fingerprints_recorded_from_the_original_code) {
     if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
     struct Golden { const char* file; int variant; uint64_t hash; };
     const Golden goldens[] = {
-        {"CITIES/NYC.SC2", 0, 0xc6c1a9a7b7df8b4full}, {"CITIES/NYC.SC2", 4, 0x47b788f44a997068ull}, {"CITIES/NYC.SC2", 6, 0xc2224ac6046fdd29ull},
-        {"CITIES/CAPE.SC2", 0, 0x45f2fbbd6607ba63ull}, {"CITIES/CAPE.SC2", 4, 0x8ae3ef419e5b7e5eull}, {"CITIES/CAPE.SC2", 6, 0x6e69d428310046d0ull},
-        {"CITIES/TOKYO.SC2", 0, 0x0d333cc2161512a6ull}, {"CITIES/TOKYO.SC2", 4, 0x20ba5b7031ecb155ull}, {"CITIES/TOKYO.SC2", 6, 0x8cf96022d440d70dull},
-        {"SCENARIO/ATLANTA.SCN", 0, 0xd4ac80f0640e7fb4ull}, {"SCENARIO/ATLANTA.SCN", 4, 0xde6d6a81ae5ef8f9ull}, {"SCENARIO/ATLANTA.SCN", 6, 0xc6d059b36edb2951ull}};
+        {"CITIES/NYC.SC2", 0, 0xdd216a5e94b12992ull}, {"CITIES/NYC.SC2", 4, 0x496597f4ff046d24ull}, {"CITIES/NYC.SC2", 6, 0x664ff6243314dbaeull},
+        {"CITIES/CAPE.SC2", 0, 0x8b751278fa35757bull}, {"CITIES/CAPE.SC2", 4, 0xa83deeda419290e9ull}, {"CITIES/CAPE.SC2", 6, 0x246955e43f459f21ull},
+        {"CITIES/TOKYO.SC2", 0, 0x9ee33fa88bfd835aull}, {"CITIES/TOKYO.SC2", 4, 0xe5ed3da69eb3db36ull}, {"CITIES/TOKYO.SC2", 6, 0xe08b01774d474bd3ull},
+        {"SCENARIO/ATLANTA.SCN", 0, 0xd145f701fc73d403ull}, {"SCENARIO/ATLANTA.SCN", 4, 0x177550114a0bcb4dull}, {"SCENARIO/ATLANTA.SCN", 6, 0xc6e4e95c47fa0f22ull}};
     const GameTables t = GameTables::fromExe(std::string(root) + "/SIMCITY.EXE");
     for (const auto& g : goldens) {
         CityFile c = CityFile::load(std::string(root) + "/" + g.file);
