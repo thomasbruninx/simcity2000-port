@@ -63,7 +63,8 @@ public:
     struct Extra { size_t position; RawChunk chunk; };
     std::vector<Extra> extras;
 
-    uint32_t miscWord(size_t i) const;   // big-endian word i of MISC (i < 1200)
+    uint32_t miscWord(size_t i) const;   // big-endian word i of MISC (i < 1200); indices in save/misc_fields.h
+    int32_t miscInt(size_t i) const { return static_cast<int32_t>(miscWord(i)); }
     std::string name() const;            // decoded CNAM (empty if absent)
 
 private:

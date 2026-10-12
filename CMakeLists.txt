@@ -8,7 +8,7 @@ add_library(sc2k_save src/save/rle.cpp src/save/city.cpp)
 target_include_directories(sc2k_save PUBLIC src)
 target_compile_options(sc2k_save PRIVATE -Wall -Wextra -Wpedantic)
 
-add_library(sc2k_sim src/simulation/rng.cpp src/simulation/clock.cpp src/simulation/power.cpp src/world/world.cpp)
+add_library(sc2k_sim src/simulation/rng.cpp src/simulation/clock.cpp src/simulation/power.cpp src/simulation/water.cpp src/world/world.cpp)
 target_link_libraries(sc2k_sim PUBLIC sc2k_save)
 target_include_directories(sc2k_sim PUBLIC src)
 target_compile_options(sc2k_sim PRIVATE -Wall -Wextra -Wpedantic)

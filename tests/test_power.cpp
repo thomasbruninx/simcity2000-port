@@ -74,3 +74,47 @@ TEST(power_scan_reproduces_saved_powered_bits_in_original_cities) {
         CHECK(mismatches <= 2);
     }
 }
+
+#include "simulation/water.h"
+#include "save/misc_fields.h"
+
+TEST(water_pump_supplies_pipes_and_consumers) {
+    World w = World{};
+    // powered pump at (10,10) fed by waterFactor 2 (=10 units) next to a consumer chain along piped tiles
+    w.xbld.at(10, 10) = 0xDC; w.xbit.at(10, 10) = xbit::kPiped | xbit::kPowered;
+    for (int b = 11; b < 31; ++b) { w.xbld.at(10, b) = 0x70; w.xbit.at(10, b) = xbit::kPiped; }
+    WaterInputs in; in.waterFactor = 2;   // pump output = 0 + 2*5 = 10
+    WaterResult r = runWaterScan(w, in);
+    CHECK(r.supply == 10);
+    CHECK(r.served == 10);
+    CHECK(r.percent == 100);
+    for (int b = 11; b < 21; ++b) CHECK(w.xbit.at(10, b) & xbit::kWatered);
+    for (int b = 21; b < 31; ++b) CHECK(!(w.xbit.at(10, b) & xbit::kWatered));
+    CHECK(w.xbit.at(10, 10) & xbit::kWatered);
+}
+TEST(water_unpowered_pump_gives_nothing) {
+    World w = World{};
+    w.xbld.at(3, 3) = 0xDC; w.xbit.at(3, 3) = xbit::kPiped;   // not powered -> never a flood source
+    w.xbld.at(3, 4) = 0x70; w.xbit.at(3, 4) = xbit::kPiped;
+    WaterInputs in; in.waterFactor = 9;
+    WaterResult r = runWaterScan(w, in);
+    CHECK(r.supply == 0 && r.wateredTiles == 0 && r.percent == 100);
+}
+
+TEST(water_scan_reproduces_saved_watered_bits_in_original_cities) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    // cities whose saved state matches a fresh scan exactly (see docs/validation/003); covers rotations 0..3
+    for (const char* name : {"CITIES/NYC.SC2", "CITIES/TOKYO.SC2", "CITIES/LONDON.SC2", "CITIES/SPIRALOP.SC2",
+                             "CITIES/CAPE.SC2", "CITIES/BAYVIEW.SC2", "CITIES/EM.SC2", "SCENARIO/MANHATTA.SCN"}) {
+        CityFile c = CityFile::load(std::string(root) + "/" + name);
+        World w = World::fromCity(c);
+        PowerInputs pin; pin.ordinances = c.miscWord(misc::kOrdinances); pin.wind = uint8_t(c.miscWord(misc::kWind)); pin.cloudiness = uint8_t(c.miscWord(misc::kCloudiness));
+        CrtRand rng; runPowerScan(w, pin, rng);
+        WaterInputs in; in.rotation = c.miscInt(misc::kRotation); in.cloudiness = pin.cloudiness; in.waterFactor = int16_t(c.miscWord(misc::kWaterFactor));
+        runWaterScan(w, in);
+        int mismatches = 0;
+        for (size_t i = 0; i < w.xbit.v.size(); ++i) mismatches += ((w.xbit.v[i] ^ c.xbit.v[i]) & xbit::kWatered) != 0;
+        CHECK(mismatches <= 2);
+    }
+}
