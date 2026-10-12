@@ -30,6 +30,8 @@ constexpr size_t kBudget = 479;          // 16 x 27 words: currentCosts, funding
 constexpr size_t kBudgetRecordWords = 27;
 constexpr size_t kBudgetYearFlag = 911;  // @0x4C9D44
 constexpr size_t kWaterFactor = 912;     // @0x4C9830  (pump output = cloudiness/2 + this*5 + 10 per adjacent fresh-water tile)
+constexpr size_t kMilitaryType = 915;     // @0x4CB4FC (byte) military base type selector (2..5 used by the zone pass)
+constexpr size_t kMilitaryCounts = 1002;  // 16 x int16 @0x4C994C: military buildings by type
 constexpr size_t kOrdinances = 1000;     // @0x4C9A58  ordinance bitmask (20 bits)
 constexpr size_t kSpeed = 1019;          // game speed 1..5 (app+0x308)
 constexpr size_t kCityCenterX2 = 1030;   // @0x4CA470

@@ -17,6 +17,9 @@ public:
     }
     bool empty() const { return head_ == tail_; }
     Item pop() { Item it = buf_[head_]; head_ = (head_ + 1) & 0x1FF; return it; }
+    // Stack-style use by the traffic router (0x413870 / 0x4138B0): pop/peek the most recently pushed entry.
+    Item popBack() { tail_ = (tail_ - 1) & 0x1FF; return buf_[tail_]; }
+    Item peekBack() const { return buf_[(tail_ - 1) & 0x1FF]; }
 private:
     std::array<Item, 512> buf_{};
     uint16_t head_ = 0, tail_ = 0;

@@ -31,6 +31,11 @@ struct CityState {
     uint32_t population10 = 0;         // MISC 1035 @0x4C9A8C
     int32_t c9200 = 0;                 // MISC 1036 (int16)
     std::array<int32_t, 8> zonePop{};  // MISC 380..387 @0x4C9440
+    int32_t rotation = 0;              // MISC 2 @0x4C8444 view rotation 0..3
+    int32_t wind = 0;                  // MISC 25 (byte)
+    int32_t cloudiness = 0;            // MISC 26 (byte)
+    int32_t militaryType = 0;          // MISC 915 (byte)
+    std::array<int16_t, 16> militaryCounts{};   // MISC 1002..1017
     std::array<int16_t, 8> demand{};   // MISC 454..461 @0x4CB910 (R, C, I, ...)
     std::array<int16_t, 256> census{}; // MISC 124..379: count of each XBLD id
     std::array<BudgetRecord, 16> budget{};

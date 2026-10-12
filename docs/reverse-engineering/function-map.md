@@ -88,3 +88,12 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x00473980 | `MonthlyFinance` | roll, January settlement, maintenance units, random ordinance | decompile; maintenance exact on 6 saves | VERIFIED | `runMonthlyFinance` |
 | 0x0042B590 | `OrdinanceCost(i)` | switch of 20 ordinance yearly costs | decompile; ordinance sum exact on saves | VERIFIED | `ordinanceCost` |
 | 0x0048C38C | `_ftol` | x87 truncating double→int | demand code | STRONG | `static_cast<int>` |
+| 0x00435220 | `ZoneTilePass(a0,b0)` | zone/tile update pass (zones 0..6 ported; 7–9 pending) | decompile; **bit-identical in emulator on 61 cities** | VERIFIED | `runZonePass` |
+| 0x00456F70 | `RouteTraffic(a,b,zone,kind,maxSteps)` | DFS traffic router, adds traffic to XTRF along the found path | decompile; emulator-identical | VERIFIED | `routeTraffic` |
+| 0x004418B0 | `SetTile(a,b,id)` | XBLD write with tile census / military counters | emulator-identical | VERIFIED | `setTile` |
+| 0x00436800 / 0x004376C0 / 0x00436F40 / 0x00436C90 / 0x00437AE0 / 0x00437910 | `StampBuilding` / `CollapseBuilding` / `GrowBuilding` / `ClearLotForArcology` / `CanBuildAt` / `DemolishSmall` | building placement primitives | emulator-identical | VERIFIED | `tile_ops.cpp` |
+| 0x00456E80 / 0x00436680 / 0x00441D20 | `HasRoadNearby` / `PoweredNearby` / `SetUnderground` | helpers | emulator-identical | VERIFIED | `tile_ops.cpp` |
+| 0x00456CE0 | `InitNeighbourOffsets` | fills the 24-pair offset table at 0x4C82D8 | decompile | VERIFIED | constants |
+| 0x00458690 | `DestroyTileEffect(this,a,b,mode)` (thiscall, `ret 0xC`) | collapse/fire/explosion effects (761 lines) | not yet read | — | hook |
+| 0x00437C30 | `PlaceMilitaryOrSpecial(a,b,id,zone)` | military base building placement (428 lines) | not yet read | — | pending |
+| 0x00452500 / 0x00452190 / 0x00452EF0 / 0x00452CE0 / 0x00452660 | thing spawners (ships, planes, trains, ...) | write 12-byte records into the things array | read | STRONG | hooks |

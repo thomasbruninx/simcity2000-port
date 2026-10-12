@@ -5,6 +5,8 @@
 #include <string>
 
 #include "emu/emu.h"
+#include "emu/sim_image.h"
+#include "simulation/sim_context.h"
 #include "save/error.h"
 #include "save/misc_fields.h"
 #include "simulation/environment.h"
@@ -233,6 +235,51 @@ int financeDiff(const std::string& exe, const std::string& path, long& tiles, lo
     }
     return failures;
 }
+int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    for (int variant = 0; variant < 3; ++variant) {
+        World w = World::fromCity(c);
+        CityState s = CityState::fromCity(c);
+        for (auto& z : w.xzon.v) if ((z & 0xF) > 6) z &= 0xF0;      // zone types 7-9 not ported yet
+        if (variant >= 1) {   // push the economy around so growth, decline and decay branches all fire
+            s.demand = {int16_t(variant == 1 ? 1500 : -1200), int16_t(variant == 1 ? -800 : 1900), int16_t(900), 0, 0, 0, 0, 0};
+            for (int k = 10; k <= 15; ++k) s.budget[static_cast<size_t>(k)].fundingPercent = variant == 1 ? 40 : 75;
+            s.population10 = variant == 1 ? 5000000 : 0;   // big-city flag on/off
+        }
+        const uint32_t seed = 1 + 11u * variant, lfsrSeed = 0xACE1u + 17u * variant;
+        Emu e(exe);
+        e.installCrtRand(seed);
+        SimImage img(e);
+        img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi();
+        for (int sweep = 0; sweep < 3; ++sweep)
+            for (int a0 = 0; a0 < 4; ++a0) for (int b0 = 0; b0 < 4; ++b0) e.call(0x435220, {uint32_t(a0), uint32_t(b0)});
+        World ew = w; CityState es = s;
+        img.store(ew, es);
+
+        World pw = w; CityState ps = s;
+        CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+        for (int sweep = 0; sweep < 3; ++sweep)
+            for (int a0 = 0; a0 < 4; ++a0) for (int b0 = 0; b0 < 4; ++b0) runZonePass(ctx, a0, b0);
+
+        std::string detail;
+        long d = diffWorld(ew, pw, detail) + diffState(es, ps, detail);
+        const bool randSame = e.crtRandState() == rng.state(), lfsrSame = img.lfsrState() == lf.state();
+        const int32_t rideBus = e.get<int32_t>(0x4C75B8), rideRail = e.get<int32_t>(0x4C75BC), rideSub = e.get<int32_t>(0x4C7618);
+        const bool rideSame = rideBus == ts.bus && rideRail == ts.rail && rideSub == ts.subway;
+        long changed = 0, trafficAdded = 0, popAdded = 0;
+        for (size_t i = 0; i < w.xbld.v.size(); ++i) changed += w.xbld.v[i] != ew.xbld.v[i];
+        for (size_t i = 0; i < w.xtrf.v.size(); ++i) trafficAdded += int(ew.xtrf.v[i]) - int(w.xtrf.v[i]);
+        for (int z = 1; z <= 7; ++z) popAdded += es.zonePop[static_cast<size_t>(z)] - s.zonePop[static_cast<size_t>(z)];
+        tiles += 1; bad += (d || !randSame || !lfsrSame || !rideSame) ? 1 : 0;
+        std::printf("%-34s variant %d [tiles changed %ld, traffic +%ld, zonePop +%ld, rand %s->%s] rand %s lfsr %s riders %s diffs %ld%s\n", path.c_str(), variant, changed, trafficAdded, popAdded,
+                    "seed", "moved", randSame ? "same" : "DIFF", lfsrSame ? "same" : "DIFF", rideSame ? "same" : "DIFF", d, detail.c_str());
+        failures += (d || !randSame || !lfsrSame || !rideSame);
+    }
+    return failures;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -244,6 +291,7 @@ int main(int argc, char** argv) {
             if (mode == "power") failures += powerDiff(exe, argv[i], tiles, bad);
             else if (mode == "water") failures += waterDiff(exe, argv[i], tiles, bad);
             else if (mode == "env") failures += envDiff(exe, argv[i], tiles, bad);
+            else if (mode == "zone") failures += zoneDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);
         } catch (const std::exception& ex) { std::fprintf(stderr, "%s: %s\n", argv[i], ex.what()); ++failures; }

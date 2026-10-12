@@ -14,6 +14,7 @@ constexpr uint8_t kSaltWater = 0x01, kFlipped = 0x02, kWater = 0x04, kMark = 0x0
 struct World {
     Grid<uint8_t, CityFile::kMap> xbld, xzon, xbit, xund, xtxt, xter;
     Grid<uint16_t, CityFile::kMap> altm;
+    std::array<uint8_t, 1200> xmic{};   // 150 microsim records x 8 bytes
     Grid<uint8_t, CityFile::kHalf> xtrf, xplt, xval, xcrm;
     Grid<uint8_t, CityFile::kQuarter> xplc, xfir, xpop, xrog;
 

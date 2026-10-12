@@ -19,6 +19,11 @@ CityState CityState::fromCity(const CityFile& c) {
     s.extraPop = c.miscInt(misc::kExtraPop);
     s.population10 = c.miscWord(misc::kPopulation10);
     s.c9200 = static_cast<int16_t>(c.miscWord(misc::kC9200));
+    s.rotation = c.miscInt(misc::kRotation);
+    s.wind = static_cast<uint8_t>(c.miscWord(misc::kWind));
+    s.cloudiness = static_cast<uint8_t>(c.miscWord(misc::kCloudiness));
+    s.militaryType = static_cast<uint8_t>(c.miscWord(misc::kMilitaryType));
+    for (size_t i = 0; i < 16; ++i) s.militaryCounts[i] = static_cast<int16_t>(c.miscWord(misc::kMilitaryCounts + i));
     for (size_t i = 0; i < 8; ++i) {
         s.zonePop[i] = c.miscInt(misc::kZonePop + i);
         s.demand[i] = static_cast<int16_t>(c.miscWord(misc::kDemand + i));
@@ -44,6 +49,8 @@ void CityState::writeBack(CityFile& c) const {
     c.setMiscWord(misc::kPopulation10, population10); put16(misc::kC9200, static_cast<int16_t>(c9200));
     for (size_t i = 0; i < 8; ++i) { put(misc::kZonePop + i, zonePop[i]); put16(misc::kDemand + i, demand[i]); }
     for (size_t i = 0; i < 256; ++i) put16(misc::kTileCensus + i, census[i]);
+    for (size_t i = 0; i < 16; ++i) put16(misc::kMilitaryCounts + i, militaryCounts[i]);
+    // rotation/wind/cloudiness/militaryType are read-only inputs here (their MISC words are left untouched)
     for (size_t k = 0; k < 16; ++k) {
         const size_t b = misc::kBudget + k * misc::kBudgetRecordWords;
         const BudgetRecord& r = budget[k];
