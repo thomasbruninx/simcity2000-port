@@ -109,7 +109,8 @@ long diffWorld(const World& a, const World& b, std::string& detail) {
 long diffState(const CityState& a, const CityState& b, std::string& detail) {
     long d = 0;
     auto note = [&](bool differs, const char* what) { if (differs) { ++d; detail += std::string(" ") + what; } };
-    note(a.census != b.census, "census"); note(a.zonePop != b.zonePop, "zonePop"); note(a.militaryCounts != b.militaryCounts, "militaryCounts");
+    note(a.census != b.census, "census"); if (a.zonePop != b.zonePop) { char zb[200]; std::snprintf(zb, sizeof zb, " zonePop[%d %d %d %d %d %d %d %d vs %d %d %d %d %d %d %d %d]", a.zonePop[0], a.zonePop[1], a.zonePop[2], a.zonePop[3], a.zonePop[4], a.zonePop[5], a.zonePop[6], a.zonePop[7], b.zonePop[0], b.zonePop[1], b.zonePop[2], b.zonePop[3], b.zonePop[4], b.zonePop[5], b.zonePop[6], b.zonePop[7]); detail += zb; }
+    note(a.zonePop != b.zonePop, "zonePop"); note(a.militaryCounts != b.militaryCounts, "militaryCounts");
     note(a.treasury != b.treasury, "treasury"); note(a.militaryMask != b.militaryMask, "militaryMask"); note(a.c9408 != b.c9408 || a.cb4f0 != b.cb4f0, "counters"); note(a.c9434 != b.c9434, "c9434"); note(a.population10 != b.population10, "pop10"); note(a.demand != b.demand, "demand");
     for (size_t k = 0; k < 16; ++k) {
         note(a.budget[k].currentCosts != b.budget[k].currentCosts || a.budget[k].fundingPercent != b.budget[k].fundingPercent || a.budget[k].yearToDate != b.budget[k].yearToDate, "budget");

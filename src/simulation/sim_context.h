@@ -17,6 +17,9 @@ struct ZoneHooks {
     virtual void uiFlag(int /*which*/) {}                                // 0x441800 (toolbar 'rebuild' flags)
     virtual void spawnHelicopterOrShip(int /*a*/, int /*b*/) {}          // 0x452EF0
     virtual void spawnTrain(int /*a*/, int /*b*/) {}                     // 0x452CE0
+    virtual void spawnAircraft(int /*a*/, int /*b*/) {}                  // 0x452500 (airport)
+    virtual void spawnPlane(int /*a*/, int /*b*/, int /*dir*/) {}        // 0x452190 (airport)
+    virtual void spawnSeaTraffic(int /*a*/, int /*b*/) {}                // 0x452660 (seaport pier)
     virtual int thingLimitA() { return 0; }                              // DAT_004E89C8 (read by the 0xED handler)
     virtual int thingLimitB() { return 0; }                              // DAT_004E89C0 (read by the 0xF8 handler)
 };
@@ -66,7 +69,12 @@ void releaseTextOverlay(SimContext& c, int overlay);                     // 0x44
 void fixShore(SimContext& c, int a, int b);                              // 0x4469C0
 void destroyTile(SimContext& c, int a, int b, int animate);              // 0x458690 (animation drawing is a presentation hook; its rand() calls are kept)   // 0x456F70, returns 1 if a destination was reached
 
+// ---- military / airport / seaport placement (docs/simulation/special-zones.md) ----
+void clearSpecialBuilding(SimContext& c, int a, int b);                  // 0x438C20
+bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size);   // 0x440600 (microsim allocation: see special.cpp)
+bool placeZoneBuilding(SimContext& c, int a, int b, int id, int zone);   // 0x437C30
+
 // ---- the pass itself ----
-void runZonePass(SimContext& c, int a0, int b0);                         // 0x435220 (zones 0..6; zones >= 7 not ported yet)
+void runZonePass(SimContext& c, int a0, int b0);                         // 0x435220 (all zone types)
 
 }  // namespace sc2k

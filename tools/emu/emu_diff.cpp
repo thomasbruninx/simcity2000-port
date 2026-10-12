@@ -1,6 +1,7 @@
 // sc2k-emu-diff: run original routines in the emulator and compare with the C++ ports on saved cities.
 // Usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy <SIMCITY.EXE> <city files...>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -240,21 +241,33 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
     CityFile c = CityFile::load(path);
     GameTables t = GameTables::fromExe(exe);
     int failures = 0;
-    for (int variant = 0; variant < 3; ++variant) {
+    for (int variant = 0; variant < 7; ++variant) {
         World w = World::fromCity(c);
         CityState s = CityState::fromCity(c);
-        for (auto& z : w.xzon.v) if ((z & 0xF) > 6) z &= 0xF0;      // zone types 7-9 not ported yet
+        if (variant >= 3) {   // paint military / airport / seaport zone blocks over clear land and cycle the military base type
+            s.militaryType = variant - 1;   // 2..5
+            for (int ba = 0; ba + 12 <= 128; ba += 12) for (int bb = 0; bb + 12 <= 128; bb += 12) {
+                const unsigned h = static_cast<unsigned>((ba / 12) * 31 + (bb / 12) * 17 + variant) * 2654435761u >> 28;
+                if (h % 3 != 0) continue;
+                bool clear = true;   // the 3x3 command centre can spill 2 tiles past a zone edge, so keep a margin free of other zones
+                for (int a = ba; a < ba + 12; ++a) for (int b = bb; b < bb + 12; ++b) if ((w.xzon.at(a, b) & 0xF) != 0) clear = false;
+                if (!clear) continue;
+                for (int a = ba + 3; a < ba + 9; ++a) for (int b = bb + 3; b < bb + 9; ++b)
+                    if (w.xbld.at(a, b) <= 0x1C) w.xzon.at(a, b) = static_cast<uint8_t>((w.xzon.at(a, b) & 0xF0) | (7 + (h / 3) % 3));
+            }
+        }
         if (variant >= 1) {   // push the economy around so growth, decline and decay branches all fire
             s.demand = {int16_t(variant == 1 ? 1500 : -1200), int16_t(variant == 1 ? -800 : 1900), int16_t(900), 0, 0, 0, 0, 0};
             for (int k = 10; k <= 15; ++k) s.budget[static_cast<size_t>(k)].fundingPercent = variant == 1 ? 40 : 75;
             s.population10 = variant == 1 ? 5000000 : 0;   // big-city flag on/off
         }
-        const uint32_t seed = 1 + 11u * variant, lfsrSeed = 0xACE1u + 17u * variant;
+        const uint32_t seed = 1 + 11u * variant, lfsrSeed = 0xACE1u + 17u * variant;   // variants 3..6 also paint zones 7-9
         Emu e(exe);
         e.installCrtRand(seed);
         SimImage img(e);
         img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi();
-        for (int sweep = 0; sweep < 3; ++sweep)
+        const int sweeps = std::getenv("SWEEPS") ? std::atoi(std::getenv("SWEEPS")) : (variant >= 3 ? 12 : 3);
+        for (int sweep = 0; sweep < sweeps; ++sweep)
             for (int a0 = 0; a0 < 4; ++a0) for (int b0 = 0; b0 < 4; ++b0) e.call(0x435220, {uint32_t(a0), uint32_t(b0)});
         World ew = w; CityState es = s;
         img.store(ew, es);
@@ -262,20 +275,34 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
         World pw = w; CityState ps = s;
         CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
         SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
-        for (int sweep = 0; sweep < 3; ++sweep)
+        for (int sweep = 0; sweep < sweeps; ++sweep)
             for (int a0 = 0; a0 < 4; ++a0) for (int b0 = 0; b0 < 4; ++b0) runZonePass(ctx, a0, b0);
+        if (std::getenv("LOCKSTEP") && std::atoi(std::getenv("LOCKSTEP")) == variant) {   // re-run both sides pass by pass and report the first divergence
+            Emu e2(exe); e2.installCrtRand(seed); SimImage i2(e2);
+            World w2 = w; CityState s2 = s; i2.load(w2, s2); i2.setLfsr(lfsrSeed); i2.stubUi();
+            World qw = w; CityState qs = s; CrtRand r2(seed); Lfsr l2(lfsrSeed); TrafficStats t2; SimContext c2{qw, qs, t, r2, l2, hooks, t2, {}};
+            bool found = false;
+            for (int sweep = 0; sweep < sweeps && !found; ++sweep)
+                for (int a0 = 0; a0 < 4 && !found; ++a0) for (int b0 = 0; b0 < 4 && !found; ++b0) {
+                    e2.call(0x435220, {uint32_t(a0), uint32_t(b0)}); runZonePass(c2, a0, b0);
+                    World xw = qw; CityState xs = qs; i2.store(xw, xs);
+                    std::string dd; long n = diffWorld(xw, qw, dd) + diffState(xs, qs, dd);
+                    if (n) { std::printf("  lockstep: first divergence at sweep %d pass (%d,%d): %s\n", sweep, a0, b0, dd.c_str()); found = true; }
+                }
+        }
 
         std::string detail;
         long d = diffWorld(ew, pw, detail) + diffState(es, ps, detail);
         const bool randSame = e.crtRandState() == rng.state(), lfsrSame = img.lfsrState() == lf.state();
         const int32_t rideBus = e.get<int32_t>(0x4C75B8), rideRail = e.get<int32_t>(0x4C75BC), rideSub = e.get<int32_t>(0x4C7618);
         const bool rideSame = rideBus == ts.bus && rideRail == ts.rail && rideSub == ts.subway;
-        long changed = 0, trafficAdded = 0, popAdded = 0;
+        long changed = 0, trafficAdded = 0, popAdded = 0, special = 0;
+        for (size_t i = 0; i < ew.xbld.v.size(); ++i) special += (ew.xzon.v[i] & 0xF) >= 7 && ew.xbld.v[i] >= 0xDD && ew.xbld.v[i] != w.xbld.v[i];
         for (size_t i = 0; i < w.xbld.v.size(); ++i) changed += w.xbld.v[i] != ew.xbld.v[i];
         for (size_t i = 0; i < w.xtrf.v.size(); ++i) trafficAdded += int(ew.xtrf.v[i]) - int(w.xtrf.v[i]);
         for (int z = 1; z <= 7; ++z) popAdded += es.zonePop[static_cast<size_t>(z)] - s.zonePop[static_cast<size_t>(z)];
         tiles += 1; bad += (d || !randSame || !lfsrSame || !rideSame) ? 1 : 0;
-        std::printf("%-34s variant %d [tiles changed %ld, traffic +%ld, zonePop +%ld, rand %s->%s] rand %s lfsr %s riders %s diffs %ld%s  hash %016llx\n", path.c_str(), variant, changed, trafficAdded, popAdded,
+        std::printf("%-34s variant %d [special %ld, tiles changed %ld, traffic +%ld, zonePop +%ld, rand %s->%s] rand %s lfsr %s riders %s diffs %ld%s  hash %016llx\n", path.c_str(), variant, special, changed, trafficAdded, popAdded,
                     "seed", "moved", randSame ? "same" : "DIFF", lfsrSame ? "same" : "DIFF", rideSame ? "same" : "DIFF", d, detail.c_str(), (unsigned long long)worldFingerprint(ew, es));
         failures += (d || !randSame || !lfsrSame || !rideSame);
     }

@@ -28,6 +28,7 @@ GameTables GameTables::fromExe(const std::string& path) {
     sh(0x4E6428, t.buildingSize); sh(0x4E6580, t.sizePop); sh(0x4E652E, t.buildBase); sh(0x4E6556, t.buildRange);
     sh(0x4E75C8, t.footprint); sh(0x4E6A58, t.shoreDx); sh(0x4E6A70, t.shoreDy); sh(0x4E6AB0, t.shoreBit); sh(0x4E6948, t.shoreType);
     sh(0x4DB328, t.rotationZoneMask); sh(0x4DB330, t.rotationCorner);
+    sh(0x4E6590, t.pierDx); sh(0x4E6598, t.pierDy);
     std::memcpy(t.budgetDivisor.data(), pe.bytesAt(0x4E8EA0, 2 * t.budgetDivisor.size()).data(), 2 * t.budgetDivisor.size());
     return t;
 }

@@ -1,6 +1,6 @@
-// Zone/tile update pass: literal port of SIMCITY.EXE build .022 function 0x435220 for zone types 0..6.
-// Zone types 7 (military), 8 (airport), 9 (seaport) call into code that is not ported yet and are skipped, as are the
-// underground-decay branch for zone types >= 10. See docs/simulation/zone-growth.md.
+// Zone/tile update pass: literal port of SIMCITY.EXE build .022 function 0x435220.
+// Zone types 1..6 grow buildings, 7 = military, 8 = airport, 9 = seaport (special.cpp), >= 10 = subway decay.
+// See docs/simulation/zone-growth.md and docs/simulation/special-zones.md.
 #include "simulation/sim_context.h"
 
 namespace sc2k {
@@ -34,6 +34,94 @@ void specialSection(SimContext& c, int a, int b, int id) {
                 if (static_cast<int16_t>(v) > 0xC) v = 0xC;
                 w.xmic[rec + 1] = static_cast<uint8_t>(v);
             }
+        }
+    }
+}
+
+int quarter(int v) { return static_cast<int16_t>((v + ((v >> 31) & 3)) >> 2); }   // signed v / 4 as the compiler emits it
+
+// Zone type 7: military base, driven by MISC militaryType (a byte) and the military tile counters.
+void militaryZone(SimContext& c, int a, int b, int id) {
+    const auto& m = c.s.militaryCounts;
+    switch (c.s.militaryType) {
+        case 2:
+            if ((c.rng.next() & 3) == 0) {
+                const int pick = (m[13] / 12 < quarter(m[3])) ? 0xE8 : 0xEF;
+                if (!placeZoneBuilding(c, a, b, pick, 7)) placeZoneBuilding(c, a, b, 0xE8, 7);
+            }
+            break;
+        case 3:
+            if ((c.rng.next() & 3) == 0) {
+                const int q = static_cast<int16_t>((m[2] + m[1]) / 5);
+                int pick;
+                if (quarter(m[3]) < q) {
+                    if (m[11] * 2 < q) pick = 0xE2;
+                    else if (m[5] * 2 < q) pick = 0xEA;
+                    else if (m[12] < q) pick = 0xE7;
+                    else if (static_cast<int16_t>(m[7] / 2) < q) pick = 0xE4;
+                    else if (static_cast<int16_t>(m[8] / 2) < q) pick = 0xE5;
+                    else { pick = 0xF6; if (q <= quarter(m[14])) pick = 0xEF; }
+                } else pick = 0xDD;
+                placeZoneBuilding(c, a, b, pick, 7);
+            }
+            break;
+        case 4:
+            if ((c.rng.next() & 3) == 0) {
+                const int q = m[10];
+                int pick;
+                if (quarter(m[4]) < q) {
+                    if (quarter(m[9]) < q) pick = 0xF1;
+                    else { pick = 0xE3; if (q <= m[6] / 3) pick = 0xF2; }
+                } else pick = 0xE0;
+                if (!placeZoneBuilding(c, a, b, pick, 7)) placeZoneBuilding(c, a, b, 0xE3, 7);
+            }
+            break;
+        case 5:
+            if (id != 0xF9) placeZoneBuilding(c, a, b, 0xF9, 7);
+            break;
+        default: break;
+    }
+}
+
+// Zone type 9: seaport.
+void seaportZone(SimContext& c, int a, int b, int id) {
+    const auto& n = c.s.census;
+    if ((c.rng.next() & 3) == 0) {
+        const int q = n[0xE0];
+        int pick;
+        if (quarter(n[0xF2]) < q) {
+            if (quarter(n[0xF0]) < q) pick = 0xF0;
+            else { pick = 0xE3; if (q <= n[0xE3] / 3) pick = 0xF2; }
+        } else pick = 0xE0;
+        if (!placeZoneBuilding(c, a, b, pick, 9)) placeZoneBuilding(c, a, b, 0xE3, 9);
+    } else if (id == 0xE0 && (c.rng.next() & 3) == 0) {
+        c.hooks.spawnSeaTraffic(a, b);
+    }
+}
+
+// Zone type 8: airport.
+void airportZone(SimContext& c, int a, int b, int id) {
+    const auto& n = c.s.census;
+    World& w = c.w;
+    if ((c.rng.next() & 3) == 0) {
+        const int q = static_cast<int16_t>((n[0xDE] + n[0xDD]) / 5);
+        int pick;
+        if (quarter(n[0xEE]) < q) {
+            if (n[0xE1] * 2 < q) pick = 0xE1;
+            else if (n[0xEA] * 2 < q) pick = 0xEA;
+            else if (n[0xE6] < q) pick = 0xE6;
+            else if (static_cast<int16_t>(n[0xE4] / 2) < q) pick = 0xE4;
+            else if (static_cast<int16_t>(n[0xE5] / 2) < q) pick = 0xE5;
+            else { pick = 0xF6; if (q <= quarter(n[0xF6])) pick = 0xEE; }
+        } else pick = 0xDD;
+        placeZoneBuilding(c, a, b, pick, 8);
+    } else if (id == 0xDD && static_cast<int>(c.rng.next() & 0xFFFF) % 30 == 0 && inMap(a, b) && (w.xbit.at(a, b) & xbit::kPowered)) {
+        if (static_cast<int>(c.rng.next() & 0xFFFF) % 10 < 4) {
+            c.hooks.spawnAircraft(a, b);
+        } else {
+            const bool flipped = (w.xbit.at(a, b) & xbit::kFlipped) != 0;
+            if ((c.s.rotation & 1) == 0) c.hooks.spawnPlane(a, b, flipped ? 2 : 0);
+            else c.hooks.spawnPlane(a, b, flipped ? 0 : 2);
         }
     }
 }
@@ -102,7 +190,22 @@ void runZonePass(SimContext& c, int a0, int b0) {
                 }
                 continue;
             }
-            if (zone > 6) continue;   // military / airport / seaport / underground decay: not ported yet
+            if (zone > 6) {
+                if (zone == 7) militaryZone(c, a, b, id);
+                else if (zone == 9) seaportZone(c, a, b, id);
+                else if (zone == 8) airportZone(c, a, b, id);
+                else {   // subway decay (zone nibble >= 10)
+                    const int u = w.xund.at(a, b);
+                    if (c.lfsr.mask(0x7F) == 0 && isSubwayPiece(u)) {
+                        const int p = fund(kSubway);
+                        if (p != 100 && p <= randMod(c, 100)) {
+                            if (u == 0x23) destroyTile(c, a, b, 0);
+                            else setUnderground(c, a, b, 0);
+                        }
+                    }
+                }
+                continue;
+            }
 
             int sizeIdx = 0, size = 0;
             bool enter = false;

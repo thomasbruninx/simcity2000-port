@@ -31,6 +31,8 @@ struct GameTables {
     std::array<int16_t, 8> shoreDx{}, shoreDy{};  // @0x4E6A58 / 0x4E6A70: the 8 neighbours examined by the shoreline fixer
     std::array<uint8_t, 8> shoreBit{};         // @0x4E6AB0: mask bit contributed by each neighbour
     std::array<uint8_t, 256> shoreType{};      // @0x4E6948: terrain tile type for a neighbour-altitude mask
+    // Special buildings (military / airport / seaport placement)
+    std::array<int16_t, 4> pierDx{}, pierDy{};   // @0x4E6590 / 0x4E6598: the 4 directions searched for water next to a pier
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

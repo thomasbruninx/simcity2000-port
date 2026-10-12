@@ -13,6 +13,7 @@
 | Monthly finance 0x473980 | `runMonthlyFinance` | 1,464 so far (61 × 6 + 4 × 24 incl. January settlement, December flag, random ordinance enactment) | all 16 budget records (cost, %, YTD, 12+12 monthly values), treasury, year flag, ordinances, `rand()` state | **identical** (3 random enactments exercised) |
 
 | Zone/tile pass 0x435220 + traffic router 0x456F70 + tile primitives | `runZonePass` (zones 0–6) | 183 (61 cities × 3 economies; 16 sub-passes × 3 sweeps each) | all map layers, census, zone populations, military counters, `rand()`/LFSR end state, ridership counters | **identical** (92,739 tile changes exercised) |
+| Zone types 7–9 and underground decay: 0x437C30, 0x438C20, 0x440600 | `placeZoneBuilding`, `clearSpecialBuilding`, `placeSpecialBuilding`, `militaryZone/airportZone/seaportZone` | 427 (61 cities × 7 variants: as saved, 2 perturbed economies, 4 with zone 7/8/9 blocks painted and militaryType 2..5, 12 sweeps) | same as above | **identical** (≈10,300 special-building tiles placed in the painted variants) |
 | Destroy effects 0x458690 + footprint, bridge classifier, label/microsim cleanup, shoreline fixer | `destroyTile` & helpers | 122 (61 cities × animate on/off; every 5th built tile demolished in scan order, ≈ 200,000 demolitions; tiles within 3 of the border skipped) | all layers, census, labels, microsim, things, counters, `rand()`/LFSR end state | **identical** |
 
 **Consequences for earlier reports.**

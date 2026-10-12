@@ -101,3 +101,7 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x0045AB10 / 0x004635D0 / 0x0044C850 / 0x004469C0 | `FootprintOf` / `BridgeSegment` / `ReleaseTextOverlay` / `FixShore` | helpers (shoreline fixer = water-level fixer, uses sea level MISC 912) | emulator-identical | VERIFIED | `destroy.cpp` |
 | 0x00439EB0 / 0x00451360 / 0x0045AA50 / 0x00435100 / 0x004351F0 / 0x00439710 / 0x0040ED80 / 0x0045AEC0 / 0x00475D70 / 0x004857F0 / 0x00424AA0 / 0x00441800 | tile/thing redraw, dirty rects, clip setup, redraw view, InvalidateRect wrapper, delay+message pump, DC acquire, DrawSprite, sound, toolbar flags | presentation only (no simulation state) | read | VERIFIED | omitted (stubs in emulator) |
 | 0x004138F0 | `QueueSize` | `(tail-head)&0x1FF` | decompile | VERIFIED | `TileQueue::size` |
+| 0x00437C30 | `PlaceZoneBuilding(a,b,id,zone)` (cdecl, returns 0/1) | places runway/pier/1×1/2×2/3×3 military, airport and seaport buildings | emulator-identical | VERIFIED | `placeZoneBuilding` |
+| 0x00438C20 | `ClearSpecialBuilding(a,b)` | clears a 2×2 block or single special tile | emulator-identical | VERIFIED | `clearSpecialBuilding` |
+| 0x00440600 | `PlaceSpecialBuilding(a,b,id,size)` | validate + stamp footprint (rejects tiles with zone nibble 7!) | emulator-identical | VERIFIED | `placeSpecialBuilding` |
+| 0x0044C8E0 / 0x0044D740 | `AllocateMicrosim(a,b,id)` / `InitMicrosimRecord(slot,id)` | microsim + label allocation; returns 0 for all ids placed by 0x437C30 | read; not needed yet | STRONG INFERENCE (class table 0x4E6C8A) | – |

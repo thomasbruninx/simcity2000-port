@@ -1,6 +1,6 @@
 # Zone growth pass, tile primitives and traffic router (phases 3–18)
 
-Status: **ported and bit-verified against the original machine code** (docs/validation/006) for zone types 0..6. Not ported yet: zone types 7–9 (military, airport, seaport — they call 0x437C30), the underground-decay branch (zone nibble ≥ 10), and the hooks for thing spawners 0x452xxx and UI scroll/message calls. The destroy effects (0x458690) are ported: see destroy-effects.md. Code: `src/simulation/{zone_pass,tile_ops,traffic}.cpp`, `sim_context.h`.
+Status: **ported and bit-verified against the original machine code** (docs/validation/006) for all zone types. Zone types 7–9 (military, airport, seaport) and the underground-decay branch (nibble ≥ 10) are documented in special-zones.md. Not ported yet: the thing spawners 0x452xxx and UI scroll/message calls (hooks). The destroy effects (0x458690) are ported: see destroy-effects.md. Code: `src/simulation/{zone_pass,tile_ops,traffic}.cpp`, `sim_context.h`.
 
 ## Structure of `0x435220(a0, b0)`
 `SimulationTick` calls it 16 times, phases 3..18, with `(a0, b0) = (0..3, 0..3)`; each call visits tiles `(a0 + 4i, b0 + 4j)` — every tile once per month. Per tile (zone nibble `z` of XZON, building id `id` of XBLD):
@@ -9,7 +9,8 @@ Status: **ported and bit-verified against the original machine code** (docs/vali
 |---|---|
 | `z == 0`, `id ≤ 0x1C` | nothing |
 | `z == 0`, `id > 0x1C` | with probability 127/128 (`LFSR & 0x7F ≠ 0`) go straight to the special-building section; otherwise **infrastructure upkeep**: a road / rail tile is replaced by rubble (`(rand&3)+1`, powerable bit cleared) when `fund != 100 && fund <= rand()%100` (funding % of budget categories road 10, rail 13); a highway 2×2 block (only at even coordinates) turns to rubble/water with `rand()%100 >= fund(11)`; bridges (`(rand%50 + wind) >= fund(12)`) and tunnels (`rand%100 >= fund(15)`) call the destroy effect; then the special section |
-| `z ≥ 7` | military / airport / seaport / underground decay (not ported) |
+| `z = 7, 8, 9` | military / airport / seaport (special-zones.md) |
+| `z ≥ 10` | underground decay of subway pieces (special-zones.md) |
 | `1 ≤ z ≤ 6`, empty lot (`id < 0x1D`) next to a road/station within the 24-neighbourhood | may start a building |
 | `1 ≤ z ≤ 6`, building anchor tile (`XZON` corner bit == view-rotation mask) | may decline, finish construction, be rebuilt, or upgrade |
 
@@ -38,4 +39,4 @@ Depth-first search with an explicit stack (the 512-entry queue ring used as a st
 `sc2k-emu-diff zone`: original `0x435220` (all 16 sub-passes × 3 sweeps) in the emulator vs. the port, 61 cities × 3 perturbed economies (growth/decline weights, funding, big-city flag), with zone types 7–9 stripped from the input and the same UI/spawner stubs on both sides: **183/183 runs identical** in every layer (XBLD, XZON, XBIT, XTXT, XUND, XTRF, XMIC, …), census, zone populations, military counters, `rand()` state, LFSR state and ridership counters (92,739 tiles changed in total).
 
 ## Open
-Zone 7–9 branches, the destroy effect (0x458690), thing spawners, and what writes `DAT_004E89C0/C8`.
+Thing spawners, and what writes `DAT_004E89C0/C8`.
