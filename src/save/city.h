@@ -65,6 +65,7 @@ public:
 
     uint32_t miscWord(size_t i) const;   // big-endian word i of MISC (i < 1200); indices in save/misc_fields.h
     int32_t miscInt(size_t i) const { return static_cast<int32_t>(miscWord(i)); }
+    void setMiscWord(size_t i, uint32_t v);
     std::string name() const;            // decoded CNAM (empty if absent)
 
 private:

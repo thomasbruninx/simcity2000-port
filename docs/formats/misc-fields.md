@@ -24,7 +24,7 @@ Sanity check on all 61 samples: word 0 = `0x122` (the loader rejects anything el
 | 26 | 0x4CA3EC (byte) | **cloudiness** | VERIFIED (solar output, pump output) |
 | 27 | 0x4CA424 (byte) | weather-table state | STRONG |
 | 28 | 0x4C9438 | pending disaster type (1–0x12) | STRONG |
-| 29 | 0x4C91AC | economy scalar | UNKNOWN |
+| 29 | 0x4C91AC | demand "ratio memory": residential population of the previous demand pass in build .022; **other builds store last month's residential graph value (10·pop + extraPop/2)** — 23 sample files follow .022, the rest the other convention | VERIFIED (both conventions observed) |
 | 30 | 0x4E8A14 | flag (triggers a UI call when it changes) | UNKNOWN |
 | 31–90 | 0x4C84CC/84D4/9A88 [20] | 20 interleaved triples (3 arrays of 20 dwords) | UNKNOWN |
 | 91–123 | 0x4C940C[11] (short), 0x4CA3F8[11] (short), 0x4CA408[11] (dword) | 11 interleaved triples — industry/sector model arrays used by the economy phase | STRONG |
@@ -43,13 +43,14 @@ Sanity check on all 61 samples: word 0 = `0x122` (the loader rejects anything el
 | 1000 | 0x4C9A58 | **ordinance bitmask** (20 bits) | VERIFIED (energy-conservation bit 0x10000 used by power scan) |
 | 1001 | 0x4C9610 | military/unemployment style percentage | UNKNOWN |
 | 1002–1017 | 0x4C994C[16] (short) | per-category counters | UNKNOWN |
-| 1018 | 0x4C9434 | counter | UNKNOWN |
+| 1018 | 0x4C9434 (short) | added to the subway maintenance class | VERIFIED (maintenance check at phase 0) |
 | 1019 | app+0x308 | **game speed** | VERIFIED |
 | 1020–1027 | 0x4CB4C8, 0x4C95F0, app+0x1E4, app+0x1E0, 0x4CB4EC, 0x4CA3E8, 0x4CB4D4, 0x4C9820 | misc flags (newspaper subscription, etc.) | UNKNOWN |
 | 1028 | – | scroll position (0xFFFF = default 0x40/0x80; low 7 bits and high byte) | STRONG |
 | 1029 | 0x4C6CB0 | zoom/scale | UNKNOWN |
 | 1030, 1031 | 0x4CA470, 0x4CA474 | city centre ×2 (row, col) | STRONG (produced by environment scan) |
-| 1032–1050 | 0x4C84DC, 0x4C9DF4, 0x4CB4F8, 0x4C9A8C, 0x4C9200, 0x4C8440, 0x4C9448, 0x4C91F4, 0x4C9834, 0x4C9954, 0x4C8F00, 0x4CA3F4 | misc state (4C9A8C = population ×10; 4C8F00 = disaster-in-progress; 4CA3F4 = water-shortage flag) | mixed |
+| 1032 | 0x4C84DC | extra residents/population added to the R/C/I budget costs (÷6, ÷12, ÷12) and to the city-size graph | VERIFIED (phase-21 saves) |
+| 1033–1043 | 0x4C9DF4, 0x4CB4F8, 0x4C9A8C, 0x4C9200, 0x4C8440, 0x4C9448, 0x4C91F4, 0x4C9834, 0x4C9954, 0x4C8F00, 0x4CA3F4 | 1035 = population×10 (VERIFIED), 1036 = demand term (c9200), 1037 = pollution divisor term, 1039 = police strength base (VERIFIED by exact coverage), 1042 = disaster-in-progress, 1043 = water-shortage flag; others UNKNOWN | mixed |
 
 Note: the tile census is stored one 16-bit value per 32-bit word, so `MISC[124+id]` is the count for building id `id`.
 

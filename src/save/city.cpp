@@ -150,6 +150,10 @@ std::vector<uint8_t> CityFile::serialize() const {
 
 uint32_t CityFile::miscWord(size_t i) const { return be32(misc.data() + 4 * i); }
 
+void CityFile::setMiscWord(size_t i, uint32_t v) {
+    misc[4 * i] = uint8_t(v >> 24); misc[4 * i + 1] = uint8_t(v >> 16); misc[4 * i + 2] = uint8_t(v >> 8); misc[4 * i + 3] = uint8_t(v);
+}
+
 std::string CityFile::name() const {
     if (!cnam) return {};
     const size_t n = std::min<size_t>((*cnam)[0], 31);

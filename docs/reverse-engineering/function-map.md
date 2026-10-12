@@ -82,3 +82,9 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x00464370 | `WaterFlood(a,b)` | two-pass flood over piped tiles (pump 0xDC, tower 0xEB, treatment 0xF4, desal 0xFA) | decompile + port verified | VERIFIED | `floodWater` |
 | 0x00413780 / 0x004137B0 / 0x00413820 | `QueueReset+Push` / `QueuePush` / `QueuePop` | 512-entry FIFO ring of (a,b) ints; overflow drops oldest | decompile | VERIFIED | `TileQueue` |
 | 0x0046B420 | `SpreadCoverage(arr,x,y,strength)` | adds strength to a cell and weighted neighbours via 0x46B3B0 (4/5, 3/4·4/5, …) | partial | MODERATE | later |
+| 0x0046A1C0 | `EnvironmentScan` | pollution/land value/density/coverage/crime (8 stages) | decompile + port validated (docs/validation/004) | VERIFIED structure | `runEnvironmentScan` |
+| 0x0046B420 / 0x0046B3B0 | `SpreadCoverage` / `AddSaturating` | footprint of 41 cells with decaying weights; saturating add into 32×32 layer | decompile; coverage layers reproduce exactly | VERIFIED | `spread`/`addCell` |
+| 0x00467AE0 (first half) | `DemandValves` | RCI valve computation (x87 doubles, caps from census, tax table, ±2000 clamp) | disassembly; model cross-check; census/pop fields exact on saves | VERIFIED reading | `runDemand` |
+| 0x00473980 | `MonthlyFinance` | roll, January settlement, maintenance units, random ordinance | decompile; maintenance exact on 6 saves | VERIFIED | `runMonthlyFinance` |
+| 0x0042B590 | `OrdinanceCost(i)` | switch of 20 ordinance yearly costs | decompile; ordinance sum exact on saves | VERIFIED | `ordinanceCost` |
+| 0x0048C38C | `_ftol` | x87 truncating double→int | demand code | STRONG | `static_cast<int>` |
