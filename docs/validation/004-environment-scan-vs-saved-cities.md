@@ -8,7 +8,7 @@
 
 **Results.**
 - **City centre** (MISC 1030/1031): ours == saved in 54/61 files (the rest were saved at phases where buildings changed after the scan).
-- **Developed marks**: 4096/4096 cells equal in all 41 files saved at phases 2–19 whose building layout is unchanged; files saved at phase ≥ 20 have all marks cleared (expected).
+- **Developed marks**: all 4096 cells equal in **39 of the 43 files saved at phases 2–19**; the four exceptions are TOMG-C1 (zero marks saved), CERES (phase 3), RETREAT (phase 10) and HERMAN (phase 15). Files saved at phase 0–1 or ≥ 20 have all marks cleared (expected: power scan at phase 1 and water scan at phase 20 clear them).
 - **Phase-2 files (10 compared in the regression test): `XPOP` (density), `XPLC` (police), `XFIR` (fire) are 100.0% exact** in all of NYC, ATLANTA, BARCELON, CHARLEST, CHICAGO, DAVENPOR, HOLLYWOO, HOMESTEA, MALIBU, MANHATTA. This verifies the tables `population`@0x4E8638, the +2/+12 constants, the coverage spreader weights, funding formulas, power-halving, origin-flag rule, interior-only loop and the ordinance bonuses.
 - Across all 61 files (any phase): `XPLC` exact in 53 files, `XFIR` in 52, `XPOP` in 19 (others differ only where buildings changed after the scan).
 - **Not exactly reproducible** (depend on previous-month state that a save doesn't contain): `XPLT` mean exact 85%, mean |d| 0.21; `XVAL` mean exact 80%, mean |d| 2.1 (0.9–3.2 on phase-2 files); `XCRM` 90%, |d| 0.30; `XROG` 92.5%, |d| 0.31 — small, unbiased-looking differences: evidence of structural correctness, not of bit-exactness. The totals agree within ~1–3% (e.g. NYC pollution 47,495 vs 47,493; crime 34,171 vs 33,778).
