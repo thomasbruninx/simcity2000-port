@@ -35,3 +35,18 @@ Ghidra 12.1.3 headless auto-analysis found **3,678 functions** (878 with non-def
 | 0x00401749 | `SimcityApp_OnQuit` | 0x00406350 |
 
 `0x405813` and `0x42E737` (sc2kfix patch sites) fall inside functions, as expected for mid-function patches. Function export: `tools/ghidra/ExportFunctions.java`.
+
+## Functions identified by our own analysis (session 2, build .022, VA)
+
+Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read directly; calling conventions/params partly guessed.
+
+| VA | Proposed name | Purpose | Evidence | Confidence | Native |
+|---|---|---|---|---|---|
+| 0x004732A0 | `InitGlobalObjects` (static init) | Constructs global CString objects incl. archive names `large.dat`/`smallmed.dat`/`special.dat` at 0x4C9178/84/90 | xrefs from the three strings | VERIFIED | – |
+| 0x00434C6F | `LoadSpriteArchive(index)` | Reads `<PATHS>\<archive>` index (BE u16 count, 10-byte entries), fills sprite table, loads raw sprite streams | decompile: reads u16, bswap, ×10-byte entries, per-id 8-byte table | STRONG INFERENCE | `sprite::load` |
+| 0x004875D0 | `SetSpriteData(id,h,w,size,src)` | Copies stream into table slot `{ptr,h,w}` | decompile | VERIFIED | – |
+| 0x00435100 | `SetSpriteForDrawing` | Computes clip rect (client ∩ rect) and stores draw state (name from sc2kfix, behaviour verified) | decompile | VERIFIED | renderer |
+| 0x00485780 | `StoreDrawState` | Stores target bits, table, pitch, x/y, clip into globals 0x4CCE48–0x4CCE64 | decompile | VERIFIED | – |
+| 0x004857F0 | `DrawSprite(id,x,y,flipFlag,mask)` | Bounds-rejects and dispatches to blit variant | decompile | VERIFIED | renderer |
+| 0x00485CA0 | `BlitSpriteUnclipped` | Executes `[arg][op]` stream (ops 0,1,3,4, other=end) | decompile + decoder validates on 1,455 sprites | VERIFIED | `sprite::decode` |
+| 0x0040BF80 | `StartSimTimer(period,resolution)` | `timeBeginPeriod`, `timeSetEvent` (periodic, callback thunk 0x402AA9); fallback `SetTimer`; else beep + message "Unable to start the timer…" | decompile; object fields +0xE4 running, +0xE8 timer id, +0xEC period, +0xF0 resolution | VERIFIED | sim clock |

@@ -17,3 +17,12 @@
 **Disproven**: initial assumption that SC2 chunks are word-padded (they are not).
 **Remaining questions**: sprite pixel format; `MISC` layout; sim timer period; RNG algorithms; exact music playlist; `SCURKUSA.DLL` timestamp anomaly; type-240 resource record layout.
 **Next**: (1) Ghidra project with sc2kfix leads applied as *labels flagged "unverified"*; (2) trace `large.dat` string xref → sprite decoder; (3) find `timeSetEvent` call → sim tick; (4) find RNG via sc2kfix names; (5) `MISC` field map from load routine.
+
+## 2026-10-12 — Session 2: sprite format, timer
+
+**Setup:** MIT LICENSE added. Persistent Ghidra project in `reverse/ghidra` (gitignored). New scripts `tools/ghidra/DecompileAt.java`, `XrefsTo.java`. Python `capstone` install failed (Python 3.14 pip cannot parse macOS 26 version string) — not needed, Ghidra disassembles/decompiles; Dear ImGui deferred to M4 (FetchContent).
+**Examined:** xrefs for `large.dat`, `\%d.MID`, `sequencer`, timer message; functions 0x4732A0, 0x434C6F, 0x4875D0, 0x435100, 0x485780, 0x4857F0, 0x485CA0, 0x40BF80.
+**Discoveries:** sprite stream = `[arg][op]` records (0 nop, 1 new row, 3 skip, 4 literal copy padded even, else end); header order is height,width. Decoder validated on all 1,455 sprites, rendered with PAL_MSTR palette — correct. Sim timer start routine located; period is a parameter (caller not yet traced).
+**Disproven:** earlier doc had width/height swapped; "pixel format unknown" resolved.
+**Remaining:** callers of 0x40BF80 (actual period / speed table); mirror and mask blit variants; tile id → sprite id mapping; RNG; MCI music player at 0x480CEB (xref to `sequencer`) and `\%d.MID` at 0x480BCE.
+**Next:** (1) trace 0x40BF80 callers → speeds; (2) decompile 0x480BCE/0x480CEB → MIDI playlist; (3) find isometric projection in the map draw code; (4) RNG.

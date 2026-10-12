@@ -16,7 +16,7 @@ Totals: **168 files, 16,044,082 bytes.** Types below come from magic-byte sniffi
 | `VERSION.INF`, `SVERSION.INF` | 2 | text | Game version string / SCURK credits | VERIFIED |
 | `DEFAULT.SC2` (45,129 B) | 1 | FORM/SCDH | Template city for *New City* | STRONG INFERENCE (name; sc2kfix) |
 | `TILES.DB` (951,400 B) | 1 | unknown binary | **Referenced only by WINSCURK.EXE** (`%s\tiles.db`), not by SIMCITY.EXE | VERIFIED reference; format UNKNOWN |
-| `DATA/LARGE.DAT` `SMALLMED.DAT` `SPECIAL.DAT` | 3 | self-indexed binary archives (see [formats/sprite-archives.md](formats/sprite-archives.md)) | Sprite/tile graphics; names are in SIMCITY.EXE strings (`large.dat`, `smallmed.dat`, `special.dat`) | VERIFIED names; index structure VERIFIED; pixel encoding UNKNOWN |
+| `DATA/LARGE.DAT` `SMALLMED.DAT` `SPECIAL.DAT` | 3 | self-indexed binary archives (see [formats/sprite-archives.md](formats/sprite-archives.md)) | Sprite/tile graphics; names are in SIMCITY.EXE strings (`large.dat`, `smallmed.dat`, `special.dat`) | VERIFIED names; index and pixel encoding VERIFIED |
 | `DATA/DATA_USA.DAT` + `.IDX` | 2 | binary + 6×(u32,u32) index | Unknown data (index ids 1000–1005) | index VERIFIED; contents UNKNOWN |
 | `DATA/TEXT_USA.DAT` + `.IDX` | 2 | text (CRLF) + index | Game text (credits readable at start) | VERIFIED text; index format partly decoded |
 | `CITIES/*.SC2` | 42 | FORM/SCDH | Sample cities | VERIFIED magic & chunk walk |
