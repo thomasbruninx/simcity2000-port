@@ -26,3 +26,10 @@
 **Disproven:** earlier doc had width/height swapped; "pixel format unknown" resolved.
 **Remaining:** callers of 0x40BF80 (actual period / speed table); mirror and mask blit variants; tile id → sprite id mapping; RNG; MCI music player at 0x480CEB (xref to `sequencer`) and `\%d.MID` at 0x480BCE.
 **Next:** (1) trace 0x40BF80 callers → speeds; (2) decompile 0x480BCE/0x480CEB → MIDI playlist; (3) find isometric projection in the map draw code; (4) RNG.
+
+### Session 2 addendum — sim clock
+- mm-timer callback (0x40CA90) only does `PostMessage(hwnd, WM_TIMER, 1, 0)`; so ticks arrive as window messages (VERIFIED). Matches sc2kfix's flag model: `SimulationTicking` is set by the timer path and cleared after each tick except at the fastest speed ("African Swallow"), speeds enum 1=paused,2=turtle,3=llama,4=cheetah,5=swallow (sc2kfix, UNVERIFIED in our build; in 1996 code).
+- Only direct `StartSimTimer` call uses 200 ms / 200 ms (VERIFIED call). The mapping speed → effective ticks/sec is therefore NOT a timer period but must be in the WM_TIMER handler (still to find). **HYPOTHESIS:** base tick 200 ms, speed gates how often the sim runs per tick.
+- App state machine 0x405A70 documents intro timing (presents 5 s, title ≈5 s).
+- Ghidra auto-analysis misses some code (e.g. 0x40CA90, 0x409DC0 not in functions; timeKillEvent xrefs empty). Use `tools/ghidra/Disasm.java` for forced disassembly, and consider a re-analysis pass with code-scan options.
+- **Next:** find WM_TIMER handler (message map entry for 0x113 in CSimcityApp/MainFrame), speed variable at app+? and its consumers; MIDI player 0x480BCE/0x480CEB; RNG.
