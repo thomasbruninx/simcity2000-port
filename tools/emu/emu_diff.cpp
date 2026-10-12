@@ -1,5 +1,5 @@
 // sc2k-emu-diff: run original routines in the emulator and compare with the C++ ports on saved cities.
-// Usage: sc2k-emu-diff power|water|env|demand|finance <SIMCITY.EXE> <city files...>
+// Usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy <SIMCITY.EXE> <city files...>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -281,10 +281,57 @@ int zoneDiff(const std::string& exe, const std::string& path, long& tiles, long&
     }
     return failures;
 }
+int destroyRun(const std::string& exe, const GameTables& t, const CityFile& c, int animate, int stride, bool perCall, std::string& report, long& calls) {
+    World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+    const uint32_t seed = 7 + animate, lfsrSeed = 0xBEEF;
+    Emu e(exe); e.installCrtRand(seed);
+    SimImage img(e);
+    img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi();
+    World pw = w; CityState ps = s;
+    CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
+    SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+    calls = 0;
+    for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) {
+        if (pw.xbld.at(a, b) < 6 || ((a * 7 + b * 13) % stride) != 0) continue;
+        if (a < 3 || b < 3 || a > 124 || b > 124) continue;   // the original's footprint probes read outside its arrays at the border (undefined behaviour)
+        const int id = pw.xbld.at(a, b);
+        e.call(0x458690, {uint32_t(a), uint32_t(b), uint32_t(animate)}, img.fakeView);
+        destroyTile(ctx, a, b, animate);
+        ++calls;
+        if (perCall) {
+            World ew = pw; CityState es = ps; img.store(ew, es);
+            std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
+            if (n || e.crtRandState() != rng.state() || img.lfsrState() != lf.state()) {
+                char buf[200]; std::snprintf(buf, sizeof buf, "first divergence after destroy(%d,%d) id %#x (call %ld):%s rand %s", a, b, id, calls, d.c_str(), e.crtRandState() == rng.state() ? "same" : "DIFF");
+                report = buf; return 1;
+            }
+        }
+    }
+    World ew = pw; CityState es = ps; img.store(ew, es);
+    std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
+    const bool ok = !n && e.crtRandState() == rng.state() && img.lfsrState() == lf.state();
+    { char hb[40]; std::snprintf(hb, sizeof hb, "ok hash %016llx", (unsigned long long)worldFingerprint(ew, es)); report = ok ? std::string(hb) : "DIVERGED:" + d + (e.crtRandState() == rng.state() ? "" : " rand"); }
+    return ok ? 0 : 1;
+}
+
+int destroyDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    for (int animate : {1, 0}) {
+        std::string report; long calls = 0;
+        int f = destroyRun(exe, t, c, animate, 5, false, report, calls);
+        if (f) { std::string r2; long c2 = 0; destroyRun(exe, t, c, animate, 5, true, r2, c2); report += " | " + r2; }
+        tiles += 1; bad += f;
+        std::printf("%-34s animate %d destroyed %ld tiles: %s\n", path.c_str(), animate, calls, report.c_str());
+        failures += f;
+    }
+    return failures;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 4) { std::fprintf(stderr, "usage: sc2k-emu-diff power|water|env|demand|finance <SIMCITY.EXE> <files...>\n"); return 2; }
+    if (argc < 4) { std::fprintf(stderr, "usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy <SIMCITY.EXE> <files...>\n"); return 2; }
     const std::string mode = argv[1], exe = argv[2];
     long tiles = 0, bad = 0; int failures = 0;
     for (int i = 3; i < argc; ++i) {
@@ -293,6 +340,7 @@ int main(int argc, char** argv) {
             else if (mode == "water") failures += waterDiff(exe, argv[i], tiles, bad);
             else if (mode == "env") failures += envDiff(exe, argv[i], tiles, bad);
             else if (mode == "zone") failures += zoneDiff(exe, argv[i], tiles, bad);
+            else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);
         } catch (const std::exception& ex) { std::fprintf(stderr, "%s: %s\n", argv[i], ex.what()); ++failures; }

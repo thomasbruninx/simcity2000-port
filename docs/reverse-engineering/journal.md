@@ -73,3 +73,7 @@
 ### Session 7 addendum — zone pass ported
 Ported `runZonePass` (zones 0–6), the traffic router and all tile primitives; **183/183 emulator runs identical** (docs/validation/006, docs/simulation/zone-growth.md). Emulator setup bugs found on the way: microsim base pointer (0x4CA404 = array base, not +0x198); `0x458690` is `thiscall` with `ret 0xC`; 0x407220 must return NULL.
 **Next:** zone 7–9 and 0x437C30 (military/airport/seaport), then 0x458690 (destroy effects), then the thing system (0x4501D0, 0x451360, spawners) and the remaining phases' hooks; finally a headless driver that runs the complete 25-phase tick and is diff-tested end to end (`SimulationTick` 0x412FE0) in the emulator.
+
+## 2026-10-12 — Session 8: destroy effects
+Ported `destroyTile` (+ footprint, bridge classifier, text-overlay release, shoreline/water-level fixer) with presentation omitted but animation `rand()` calls preserved; 122/122 emulator runs identical (≈200k demolitions). Found/fixed emulator-harness bugs: a `//` comment had swallowed the same-line pointer initialisation (things/labels/sprite table); added a zeroed sprite table (heights only feed drawing). MISC word 912 is the **sea level** (water surface altitude), not a "water factor": pump output uses it ×5. New state: `CityState.{mode, seaLevel, militaryMask, c9408, cb4f0}`; `World.{xlab, xthg}`.
+**Next:** zone types 7–9 (0x437C30 and callees), then the thing system.

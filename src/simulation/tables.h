@@ -26,6 +26,11 @@ struct GameTables {
     std::array<int16_t, 40> buildRange{};      // @0x4E6556: number of variants for (size + 4*level)
     std::array<int16_t, 4> rotationZoneMask{}; // @0x4DB328: XZON corner bit tested for the current view rotation
     std::array<uint8_t, 32> rotationCorner{};  // @0x4DB330: corner bits written by building stamps (byte at rotation*8 + {0,2,4,6})
+    // Destroy effects / shoreline
+    std::array<int16_t, 256> footprint{};      // @0x4E75C8: footprint size of building id (valid for ids >= 0x70)
+    std::array<int16_t, 8> shoreDx{}, shoreDy{};  // @0x4E6A58 / 0x4E6A70: the 8 neighbours examined by the shoreline fixer
+    std::array<uint8_t, 8> shoreBit{};         // @0x4E6AB0: mask bit contributed by each neighbour
+    std::array<uint8_t, 256> shoreType{};      // @0x4E6948: terrain tile type for a neighbour-altitude mask
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

@@ -15,6 +15,8 @@ struct World {
     Grid<uint8_t, CityFile::kMap> xbld, xzon, xbit, xund, xtxt, xter;
     Grid<uint16_t, CityFile::kMap> altm;
     std::array<uint8_t, 1200> xmic{};   // 150 microsim records x 8 bytes
+    std::array<uint8_t, 6400> xlab{};   // 256 label records x 25 bytes
+    std::array<uint8_t, 480> xthg{};    // 40 thing records x 12 bytes (record 0 unused)
     Grid<uint8_t, CityFile::kHalf> xtrf, xplt, xval, xcrm;
     Grid<uint8_t, CityFile::kQuarter> xplc, xfir, xpop, xrog;
 

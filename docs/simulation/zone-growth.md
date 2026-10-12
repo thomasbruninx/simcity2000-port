@@ -1,6 +1,6 @@
 # Zone growth pass, tile primitives and traffic router (phases 3–18)
 
-Status: **ported and bit-verified against the original machine code** (docs/validation/006) for zone types 0..6. Not ported yet: zone types 7–9 (military, airport, seaport — they call 0x437C30), the underground-decay branch (zone nibble ≥ 10), and the effect routines reached through hooks (0x458690 destroy, thing spawners 0x452xxx, UI scroll/message calls). Code: `src/simulation/{zone_pass,tile_ops,traffic}.cpp`, `sim_context.h`.
+Status: **ported and bit-verified against the original machine code** (docs/validation/006) for zone types 0..6. Not ported yet: zone types 7–9 (military, airport, seaport — they call 0x437C30), the underground-decay branch (zone nibble ≥ 10), and the hooks for thing spawners 0x452xxx and UI scroll/message calls. The destroy effects (0x458690) are ported: see destroy-effects.md. Code: `src/simulation/{zone_pass,tile_ops,traffic}.cpp`, `sim_context.h`.
 
 ## Structure of `0x435220(a0, b0)`
 `SimulationTick` calls it 16 times, phases 3..18, with `(a0, b0) = (0..3, 0..3)`; each call visits tiles `(a0 + 4i, b0 + 4j)` — every tile once per month. Per tile (zone nibble `z` of XZON, building id `id` of XBLD):

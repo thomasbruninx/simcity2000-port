@@ -19,6 +19,9 @@ CityState CityState::fromCity(const CityFile& c) {
     s.extraPop = c.miscInt(misc::kExtraPop);
     s.population10 = c.miscWord(misc::kPopulation10);
     s.c9200 = static_cast<int16_t>(c.miscWord(misc::kC9200));
+    s.mode = c.miscInt(misc::kMode);
+    s.seaLevel = static_cast<int16_t>(c.miscWord(misc::kWaterFactor));
+    s.militaryMask = static_cast<int16_t>(c.miscWord(misc::kMilitaryMask));
     s.rotation = c.miscInt(misc::kRotation);
     s.wind = static_cast<uint8_t>(c.miscWord(misc::kWind));
     s.cloudiness = static_cast<uint8_t>(c.miscWord(misc::kCloudiness));

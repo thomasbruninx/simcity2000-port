@@ -29,7 +29,8 @@ constexpr size_t kDemand = 454;          // 8 x int16 (R, C, I, ...) @0x4CB910
 constexpr size_t kBudget = 479;          // 16 x 27 words: currentCosts, fundingPercent, yearToDate, then 12 x (countMonth, fundMonth)
 constexpr size_t kBudgetRecordWords = 27;
 constexpr size_t kBudgetYearFlag = 911;  // @0x4C9D44
-constexpr size_t kWaterFactor = 912;     // @0x4C9830  (pump output = cloudiness/2 + this*5 + 10 per adjacent fresh-water tile)
+constexpr size_t kWaterFactor = 912;     // @0x4C9830  = sea level (altitude of the water surface); pump output = cloudiness/2 + this*5 + 10 per adjacent fresh-water tile
+constexpr size_t kMilitaryMask = 1034;   // @0x4CB4F8 (int16) bit mask of military base kinds present
 constexpr size_t kMilitaryType = 915;     // @0x4CB4FC (byte) military base type selector (2..5 used by the zone pass)
 constexpr size_t kMilitaryCounts = 1002;  // 16 x int16 @0x4C994C: military buildings by type
 constexpr size_t kOrdinances = 1000;     // @0x4C9A58  ordinance bitmask (20 bits)

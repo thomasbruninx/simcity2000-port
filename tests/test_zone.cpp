@@ -110,3 +110,92 @@ TEST(zone_pass_matches_fingerprints_recorded_from_the_original_code) {
         CHECK(worldFingerprint(w, s) == g.hash);
     }
 }
+
+// ---------------- destroy effects ----------------
+namespace {
+GameTables destroyTables() {
+    GameTables t = zoneTables();
+    for (size_t i = 0x70; i < 0x8C; ++i) t.footprint[i] = 1;
+    for (size_t i = 0x8C; i < 0xAE; ++i) t.footprint[i] = 2;
+    t.shoreType[0] = 0;
+    return t;
+}
+struct DFixture {
+    World w{}; CityState s{}; GameTables t = destroyTables(); CrtRand rng{1}; Lfsr lfsr{0xACE1}; ZoneHooks hooks; TrafficStats ts;
+    SimContext ctx{w, s, t, rng, lfsr, hooks, ts, {}};
+};
+}  // namespace
+
+TEST(destroy_single_building_becomes_rubble_and_updates_census) {
+    DFixture f;
+    f.w.xbld.at(30, 30) = 0x72; f.s.census[0x72] = 1;
+    f.w.xbit.at(30, 30) = 0xE0; f.w.xzon.at(30, 30) = 0xF1; f.w.xtxt.at(30, 30) = 0;
+    destroyTile(f.ctx, 30, 30, 0);
+    CHECK(f.w.xbld.at(30, 30) >= 1 && f.w.xbld.at(30, 30) <= 4);
+    CHECK(f.s.census[0x72] == 0);
+    CHECK((f.w.xzon.at(30, 30) & 0xF0) == 0 && (f.w.xzon.at(30, 30) & 0xF) == 1);   // corner flags cleared, zone kept
+    CHECK((f.w.xbit.at(30, 30) & 0xC2) == 0);                                       // 0x3D mask: powered/powerable/flipped bits cleared
+}
+TEST(destroy_ignores_rubble_and_clear_land) {
+    DFixture f;
+    f.w.xbld.at(5, 5) = 3;
+    destroyTile(f.ctx, 5, 5, 1);
+    CHECK(f.w.xbld.at(5, 5) == 3 && f.rng.state() == 1);
+}
+TEST(destroy_animation_consumes_two_rand_calls_per_sprite) {
+    DFixture f;
+    f.w.xbld.at(30, 30) = 0x72;
+    CrtRand ref(1);
+    destroyTile(f.ctx, 30, 30, 1);
+    for (int i = 0; i < 2 * 1 * 1 * 1 + 1; ++i) ref.next();   // 2 (animation, size 1) + 1 (rubble pick)
+    CHECK(f.rng.state() == ref.state());
+}
+TEST(destroy_tunnel_removes_both_mouths_and_clears_depth_bits) {
+    DFixture f;
+    f.w.xbld.at(40, 40) = 0x41; f.w.xbld.at(44, 40) = 0x3F;      // mouth with direction (+1,0) ... far mouth
+    for (int a = 41; a <= 43; ++a) f.w.altm.at(a, 40) = 0x7C00 | 5;
+    f.s.census[0x41] = 1; f.s.census[0x3F] = 1;
+    destroyTile(f.ctx, 40, 40, 0);
+    CHECK(f.w.xbld.at(40, 40) == 0 && f.w.xbld.at(44, 40) == 0);
+    for (int a = 41; a <= 43; ++a) CHECK((f.w.altm.at(a, 40) & 0xFC00) == 0);
+}
+TEST(destroy_runway_flood_removes_connected_pieces) {
+    DFixture f;
+    for (int b = 60; b < 66; ++b) { f.w.xbld.at(60, b) = 0xDF; f.s.census[0xDF] += 1; }
+    f.w.xbld.at(60, 67) = 0xDF;                                   // disconnected piece survives
+    destroyTile(f.ctx, 60, 62, 0);
+    for (int b = 60; b < 66; ++b) CHECK(f.w.xbld.at(60, b) == 0);
+    CHECK(f.w.xbld.at(60, 67) == 0xDF);
+}
+TEST(destroy_footprint_of_one_tile_building_and_highway_pairing) {
+    DFixture f;
+    int x = 10, y = 11;
+    CHECK(footprintOf(f.ctx, x, y, 0x73) == 1 && x == 10 && y == 11);
+    x = 10; y = 11;
+    CHECK(footprintOf(f.ctx, x, y, 0x62) == 2 && x == 10 && y == 11);   // highway piece: even x, odd y
+    x = 11; y = 10;
+    CHECK(footprintOf(f.ctx, x, y, 0x62) == 2 && x == 10 && y == 11);
+}
+
+// Golden fingerprints from the ORIGINAL code: destroy(…, animate=1) on every 5th non-clear tile in scan order
+// (hash of the resulting world; tiles within 3 of the border skipped), see `sc2k-emu-diff destroy`.
+TEST(destroy_matches_fingerprints_recorded_from_the_original_code) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    struct Golden { const char* file; uint64_t hash; };
+    const Golden goldens[] = {{"CITIES/NYC.SC2", 0x534711f982e2941dull}, {"CITIES/CAPE.SC2", 0xb73590fb53b8e7b4ull},
+                              {"CITIES/TOKYO.SC2", 0x757ab466d41f9193ull}, {"SCENARIO/ATLANTA.SCN", 0x99c19512e2313ffaull}};
+    const GameTables t = GameTables::fromExe(std::string(root) + "/SIMCITY.EXE");
+    for (const auto& g : goldens) {
+        CityFile c = CityFile::load(std::string(root) + "/" + g.file);
+        World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+        CrtRand rng(7 + 1); Lfsr lfsr(0xBEEF); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{w, s, t, rng, lfsr, hooks, ts, {}};
+        for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) {
+            if (w.xbld.at(a, b) < 6 || ((a * 7 + b * 13) % 5) != 0) continue;
+            if (a < 3 || b < 3 || a > 124 || b > 124) continue;
+            destroyTile(ctx, a, b, 1);
+        }
+        CHECK(worldFingerprint(w, s) == g.hash);
+    }
+}

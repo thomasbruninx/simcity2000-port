@@ -31,6 +31,10 @@ struct CityState {
     uint32_t population10 = 0;         // MISC 1035 @0x4C9A8C
     int32_t c9200 = 0;                 // MISC 1036 (int16)
     std::array<int32_t, 8> zonePop{};  // MISC 380..387 @0x4C9440
+    int32_t mode = 0;                  // MISC 1 @0x4C9444
+    int32_t seaLevel = 0;              // MISC 912 @0x4C9830 (int16): altitude of the water surface (called 'water factor' in the water-scan docs)
+    int32_t militaryMask = 0;          // MISC 1034 @0x4CB4F8 (int16)
+    uint16_t c9408 = 0, cb4f0 = 0;     // @0x4C9408 / 0x4CB4F0: counters of text-overlay objects (not stored in MISC)
     int32_t rotation = 0;              // MISC 2 @0x4C8444 view rotation 0..3
     int32_t wind = 0;                  // MISC 25 (byte)
     int32_t cloudiness = 0;            // MISC 26 (byte)

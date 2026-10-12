@@ -97,3 +97,7 @@ Names are ours (descriptive, provisional). Evidence = Ghidra decompilation read 
 | 0x00458690 | `DestroyTileEffect(this,a,b,mode)` (thiscall, `ret 0xC`) | collapse/fire/explosion effects (761 lines) | not yet read | — | hook |
 | 0x00437C30 | `PlaceMilitaryOrSpecial(a,b,id,zone)` | military base building placement (428 lines) | not yet read | — | pending |
 | 0x00452500 / 0x00452190 / 0x00452EF0 / 0x00452CE0 / 0x00452660 | thing spawners (ships, planes, trains, ...) | write 12-byte records into the things array | read | STRONG | hooks |
+| 0x00458690 | `DestroyTile(this,a,b,animate)` | demolish building/bridge/tunnel/runway; animation presentation omitted, its rand() calls kept | decompile; emulator-identical (≈200k demolitions) | VERIFIED | `destroyTile` |
+| 0x0045AB10 / 0x004635D0 / 0x0044C850 / 0x004469C0 | `FootprintOf` / `BridgeSegment` / `ReleaseTextOverlay` / `FixShore` | helpers (shoreline fixer = water-level fixer, uses sea level MISC 912) | emulator-identical | VERIFIED | `destroy.cpp` |
+| 0x00439EB0 / 0x00451360 / 0x0045AA50 / 0x00435100 / 0x004351F0 / 0x00439710 / 0x0040ED80 / 0x0045AEC0 / 0x00475D70 / 0x004857F0 / 0x00424AA0 / 0x00441800 | tile/thing redraw, dirty rects, clip setup, redraw view, InvalidateRect wrapper, delay+message pump, DC acquire, DrawSprite, sound, toolbar flags | presentation only (no simulation state) | read | VERIFIED | omitted (stubs in emulator) |
+| 0x004138F0 | `QueueSize` | `(tail-head)&0x1FF` | decompile | VERIFIED | `TileQueue::size` |

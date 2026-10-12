@@ -9,7 +9,7 @@ namespace sc2k::emu {
 struct SimImage {
     Emu& e;
     LayerRef xbld, xzon, xbit, xtxt, xund, xter, altm, xtrf, xplt, xval, xcrm, xpop, xrog, xplc, xfir, tmp;
-    uint32_t census = 0, zonePop = 0, c9948 = 0, budget = 0, milCounts = 0, micro = 0, things = 0;
+    uint32_t census = 0, zonePop = 0, c9948 = 0, budget = 0, milCounts = 0, micro = 0, things = 0, labels = 0, fakeView = 0;
 
     explicit SimImage(Emu& emu);
     void load(const World& w, const CityState& s);

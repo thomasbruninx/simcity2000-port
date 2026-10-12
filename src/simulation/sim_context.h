@@ -14,7 +14,7 @@ struct ZoneHooks {
     virtual ~ZoneHooks() = default;
     virtual void scrollTo(int /*a*/, int /*b*/) {}                       // 0x440C90 (UI)
     virtual void postMessage(int /*id*/, int /*arg*/) {}                 // 0x47BA90 (advisor/news queue)
-    virtual void destroyTile(int /*a*/, int /*b*/, int /*mode*/) {}      // 0x458690 (collapse/fire/explosion effects)
+    virtual void uiFlag(int /*which*/) {}                                // 0x441800 (toolbar 'rebuild' flags)
     virtual void spawnHelicopterOrShip(int /*a*/, int /*b*/) {}          // 0x452EF0
     virtual void spawnTrain(int /*a*/, int /*b*/) {}                     // 0x452CE0
     virtual int thingLimitA() { return 0; }                              // DAT_004E89C8 (read by the 0xED handler)
@@ -57,7 +57,14 @@ void stampBuilding(SimContext& c, int a, int b, int size, int level);    // 0x43
 void collapseBuilding(SimContext& c, int a, int b, int size, int flip);  // 0x4376C0
 void growBuilding(SimContext& c, int a, int b, int size, int zone);      // 0x436F40 (+0x437910)
 void clearLotForArcology(SimContext& c, int a, int b);                   // 0x436C90
-int routeTraffic(SimContext& c, int a, int b, int zone, int kind, int maxSteps);   // 0x456F70, returns 1 if a destination was reached
+int routeTraffic(SimContext& c, int a, int b, int zone, int kind, int maxSteps);
+
+// ---- destroy effects (docs/simulation/destroy-effects.md) ----
+int footprintOf(const SimContext& c, int& x, int& y, int id);           // 0x45AB10: footprint size, moves (x, y) to the anchor corner
+int bridgeSegment(const SimContext& c, int a, int b);                    // 0x4635D0
+void releaseTextOverlay(SimContext& c, int overlay);                     // 0x44C850
+void fixShore(SimContext& c, int a, int b);                              // 0x4469C0
+void destroyTile(SimContext& c, int a, int b, int animate);              // 0x458690 (animation drawing is a presentation hook; its rand() calls are kept)   // 0x456F70, returns 1 if a destination was reached
 
 // ---- the pass itself ----
 void runZonePass(SimContext& c, int a0, int b0);                         // 0x435220 (zones 0..6; zones >= 7 not ported yet)

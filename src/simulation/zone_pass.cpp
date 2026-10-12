@@ -74,13 +74,13 @@ void runZonePass(SimContext& c, int a0, int b0) {
                                 const int p = fund(kTunnel);
                                 if (p == 100 || randMod(c, 100) < p) continue;
                                 c.hooks.scrollTo(a, b);
-                                c.hooks.destroyTile(a, b, 1);
+                                destroyTile(c, a, b, 1);
                             }
                         } else {
                             const int p = fund(kBridge);
                             if (p == 100 || (randMod(c, 0x32) + s.wind) < p) continue;
                             c.hooks.scrollTo(a, b);
-                            c.hooks.destroyTile(a, b, 1);
+                            destroyTile(c, a, b, 1);
                             c.hooks.postMessage(0x27, 0);
                         }
                         specialSection(c, a, b, id);
