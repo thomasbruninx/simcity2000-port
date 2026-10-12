@@ -16,11 +16,15 @@ public:
     // Bytes at a virtual address (image base included). Throws if not backed by file data.
     std::span<const uint8_t> bytesAt(uint32_t va, size_t n) const;
 
+    struct Section { uint32_t va, vsize, rawPtr, rawSize; };   // va is an RVA
+    const std::vector<Section>& sections() const { return sections_; }
+    uint32_t sizeOfImage() const { return sizeOfImage_; }
+    std::span<const uint8_t> file() const { return file_; }
+
 private:
-    struct Section { uint32_t va, vsize, rawPtr, rawSize; };
     std::vector<uint8_t> file_;
     std::vector<Section> sections_;
-    uint32_t imageBase_ = 0, timestamp_ = 0;
+    uint32_t imageBase_ = 0, timestamp_ = 0, sizeOfImage_ = 0;
 };
 
 // Build .022 of the 1995 CD Collection: PE timestamp 0x302FEA8A (docs/known-versions.md).

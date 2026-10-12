@@ -25,3 +25,17 @@ add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.
 target_link_libraries(test_sim PRIVATE sc2k_sim sc2k_save)
 add_test(NAME sim COMMAND test_sim)
 set_tests_properties(sim PROPERTIES ENVIRONMENT "SC2K_DATA_PATH=$ENV{SC2K_DATA_PATH}")
+
+# Dev-only differential testing against the original binary (needs Homebrew `unicorn`, GPL-2.0; never shipped).
+option(SC2K_BUILD_EMU "Build the Unicorn-based differential-testing tools" ON)
+if(SC2K_BUILD_EMU)
+  find_library(UNICORN_LIB unicorn HINTS /opt/homebrew/lib /usr/local/lib)
+  find_path(UNICORN_INC unicorn/unicorn.h HINTS /opt/homebrew/include /usr/local/include)
+  if(UNICORN_LIB AND UNICORN_INC)
+    add_executable(sc2k-emu-diff tools/emu/emu.cpp tools/emu/emu_diff.cpp)
+    target_include_directories(sc2k-emu-diff PRIVATE tools ${UNICORN_INC})
+    target_link_libraries(sc2k-emu-diff PRIVATE sc2k_sim ${UNICORN_LIB})
+  else()
+    message(STATUS "unicorn not found: sc2k-emu-diff not built")
+  endif()
+endif()

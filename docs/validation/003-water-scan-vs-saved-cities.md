@@ -17,6 +17,6 @@
 **Interpretation.**
 - Exact agreement in 41 files, across all rotations, is strong evidence that the flood algorithm, FIFO order, pump/tower/desalination formulas, `MISC` words 2/26/912 and the XBIT bit meanings are right (VERIFIED statistically).
 - In all mismatching files the differing tiles are **piped** tiles, scattered across the map rather than clustered in one network. The most plausible cause (HYPOTHESIS, not tested) is that those saves contain infrastructure edited after the last monthly scan, so the stored flags are stale (the scan only runs at phase 20 of each month, so a save made the same month as a pipe edit is legitimately out of date). The scenario files and hand-built test cities (TOMG-*) are the likeliest to be saved mid-edit. Positive diffs (ours has more) = pipes laid after the scan; negative diffs = pipes/consumers removed.
-- Not yet excluded: a rare formula difference (e.g. dropped queue entries on 512-slot overflow in very large networks — our queue reproduces that, but the overflow path itself is untested against the game).
+- Update: the emulator differential test (validation 006) shows the water port is bit-identical to the original on these same inputs, so the saved-flag differences above are properties of the saved states.
 
 **Next test to settle it.** Reproduce one mismatching city in the Windows version: load TOMG-C4 and let one month pass (or save/reload) and compare the watered-tile count with our scan (2,560 saved vs 4,580 ours predicted after a rescan).
