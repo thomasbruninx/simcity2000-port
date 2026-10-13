@@ -121,3 +121,11 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 * **Microsim dialog**: the string codes `#0..#3 #G #S #T #W` and the per-class line table @0x4E6D90 found in the block 0x44CCE0 that Ghidra left unanalysed (ndisasm + the jump table at 0x44D00C); building names come from strings 831+.
 * **Audio**: effects (500..530.WAV) and MIDI (10000..10018) with a small built-in synth; music selection read from 0x424B60 / 0x406720 / 0x4736C0 (docs/audio.md).
 * Found while reading: an earlier mistake in the level-tool port (XTXT cursor marker 0xC9) was fixed in session 15; the tick routine's disaster call (DisasterTick after SimulationTick) is now part of `Simulation::tick`.
+
+## 2026-10-13 — Session 17: advisors, newspaper, poll, age charts, terrain generator, title screens
+* **Advisors**: the advice selection FUN_00419E10 (found through the dword table of strings 294..326 @0x4E5B88 and its only reader 0x41A620) is ported and emulator-identical on 3200 random states per city; the opinion poll 0x4729F0 too (300 polls/city). The approval rating is DAT_004E88F4. The "advisor" messages of my earlier port were really the *news queue* (message id = story rule group).
+* **Newspaper**: DATA_USA.IDX/.DAT hold six sections (rule table of 250 groups, 2500 compressed rules, priorities, decays); the text compression is the digraph table @0x4E9218; the token grammar of 0x47A700 is ported. Index little-endian, data big-endian. The page layout shuffle 0x479C00 and the queue (0x47BA90 insert, 0x479F4B ageing) are ported; the painter's six layouts are not.
+* **Population age model**: the 20 job-market classes of the economy model *are* the original's resident-age arrays (FUN_0046D4E2 charts them); nothing new to simulate.
+* **Terrain generator** 0x410430 + helpers: emulator-identical on 7 parameter sets x 4 files; steps and strings in docs/simulation/terrain-generation.md.
+* **Title screen**: TITLESCR.BMP, dialog 103 labels, scenario pictures (PICT: 8-byte header, 65 rows of 66 bytes, PAL_MAC palette) and the two TEXT chunks.
+* Tools added: `tools/ghidra/CallArgs.java` (calls to a function with their pushed immediates), `ScanScalars.java` (instructions with an immediate in a range), `ListCallees.java`.

@@ -55,6 +55,7 @@ TitleScreen::TitleScreen(const std::string& gameDir, const PeResources& res, con
         const int ids[5] = {112, 113, 114, 111, 115};
         for (int i = 0; i < 5; ++i) if (!text(ids[i]).empty()) menuLabels_[static_cast<size_t>(i)] = text(ids[i]);
     }
+    try { palette_ = Bmp8::load(gameDir + "/BITMAPS/PAL_MAC.BMP").palette; } catch (const std::exception&) {}   // the scenario pictures use the Macintosh palette
     scan();
 }
 
