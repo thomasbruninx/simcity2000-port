@@ -29,6 +29,7 @@ GameTables GameTables::fromExe(const std::string& path) {
     sh(0x4E75C8, t.footprint); sh(0x4E6A58, t.shoreDx); sh(0x4E6A70, t.shoreDy); sh(0x4E6AB0, t.shoreBit); sh(0x4E6948, t.shoreType);
     sh(0x4DB328, t.rotationZoneMask); sh(0x4DB330, t.rotationCorner);
     std::memcpy(&t.milestoneCycle, pe.bytesAt(0x4E88F4, 2).data(), 2);
+    sh(0x4E6608, t.terrainSprite);
     sh(0x4E6E14, t.plantCostIndex); sh(0x4DB030, t.plantCost);
     sh(0x4DAD18, t.weatherNext); sh(0x4DAE98, t.weatherHaze); sh(0x4DAEA8, t.weatherWind); sh(0x4DAEB8, t.weatherCloud); sh(0x4E5954, t.milestonePop); sh(0x4E88F8, t.disasterGrace);
     sh(0x4D9D10, t.econK); sh(0x4E8548, t.econEra); sh(0x4E8448, t.econYearTab); sh(0x4E84F8, t.econFinal);

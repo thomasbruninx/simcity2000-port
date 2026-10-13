@@ -68,6 +68,7 @@ struct GameTables {
     std::array<int16_t, 256> plantCostIndex{};           // @0x4E6E14: index into plantCost by building id
     int16_t milestoneCycle = 0;                          // @0x4E88F4
     std::array<int32_t, 16> plantCost{};                 // @0x4DB030: replacement cost of a power plant that reached the end of its life
+    std::array<int16_t, 256> terrainSprite{};            // @0x4E6608: sprite (zoom-0 numbering) for each XTER value; +500 per zoom level
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

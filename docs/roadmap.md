@@ -55,3 +55,5 @@ Done and verified bit-exactly against the original code on 61 cities: M3 (libsc2
 **Update (session 10):** destroy effects, zone types 7–9, the thing system and microsim allocation are ported and emulator-verified. Remaining before the headless tick driver: economy model 0x4686C0, event half of 0x467AE0, disasters (0x45C870 handlers incl. 0x45F0D0), phase 22 goals, advisor logic 0x4720A0.
 
 **Update (session 11):** the complete 25-phase tick, economy, events, history, yearly microsim update and the headless driver (`Simulation`, `sc2k-sim`) are done and diff-verified end to end. Remaining simulation work: disaster handlers (0x45C870 …), scenario goals / game over, message queue as saved state. Next major milestones: SDL3 skeleton (M4), renderer from the sprite archives (M5), audio, first playable (M7).
+
+**Update (session 12):** M4/M5 first cut: SDL3 application (`sc2k-app`), software map renderer for zoom 0–2 with rotation, sprite archive and palette loaders. Next for rendering: things, traffic cars, water animation, overlays; then UI (toolbar, dialogs), tools (build/bulldoze), audio.
