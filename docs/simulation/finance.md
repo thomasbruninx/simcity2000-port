@@ -17,3 +17,6 @@ Status: **ported** (`src/simulation/finance.cpp`), from decompilation, with exac
 
 ## Open
 Which function consumes `budget.currentCosts·funding` outside January (e.g. UI projections); the unexplained unknown call `0x44DD10` at settlement; whether `treasury` also changes elsewhere monthly (bond interest?).
+
+## Bonds (session 14)
+`src/simulation/bonds.*`: each bond is $10,000, at most 50 (`MISC 6` = number of bonds, `MISC 388..437` = interest rate of each, oldest first). A new bond gets rate = federal rate level + 1 and is only offered while `(bonds * 2500) / (cityValue + 1) < 6`, where `cityValue` (0x469BF0, **verified identical** to the original on 12 runs via `sc2k-emu-diff value`) is the sum over the tile census of building / road / plant values read from the exe's cost tables. Issuing adds $10,000 and a rate; repaying always takes the oldest bond (needs $10,000). `budget[Bond]` holds `currentCosts = bonds` and `fundingPercent = sum(rates) * 10000 / bonds`, so the yearly interest is `bonds * fp / 100` (divisor -100) = 1 % of $10,000 per rate point. The new-city setup 0x42DDE0 (start funds 20000/10000/10000 by difficulty, hardest gets one bond at rate 3, event years = table + rand%20) is documented in the journal but not ported.

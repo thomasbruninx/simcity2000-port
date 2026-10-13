@@ -95,10 +95,10 @@ void BudgetWindow::draw(SDL_Renderer* r, int sw, int sh) const {
             text(r, ox + 190, y + 4, "[-]");
             text(r, ox + 222, y + 4, std::to_string(rate(static_cast<int>(i))) + "%");
             text(r, ox + 262, y + 4, "[+]");
-        } else if (i == 2) text(r, ox + 190, y + 4, std::to_string(s_.budget[kBond].fundingPercent) + "% interest", 170, 180, 200);
+        } else if (i == 2) text(r, ox + 190, y + 4, s_.debt == 0 ? std::string("no bonds") : std::to_string(s_.budget[kBond].fundingPercent / 10000) + "% avg, " + std::to_string(s_.debt) + " bonds", 170, 180, 200);
         text(r, ox + 330, y + 4, money(td), td < 0 ? 255 : 200, td < 0 ? 170 : 255, td < 0 ? 170 : 200);
         text(r, ox + 440, y + 4, money(ye), ye < 0 ? 255 : 200, ye < 0 ? 170 : 255, ye < 0 ? 170 : 200);
-        if (i != 2) { if (bookIcon) bookIcon->drawSized(r, 0, ox + 298, y - 1, 24, 19); else text(r, ox + 300, y + 4, "[i]", 200, 220, 255); }
+        { if (bookIcon) bookIcon->drawSized(r, 0, ox + 298, y - 1, 24, 19); else text(r, ox + 300, y + 4, "[i]", 200, 220, 255); }
     }
     const int ys = oy + 34 + static_cast<int>(rows_.size()) * 24 + 10;
     text(r, ox + 14, ys, "Year to date cashflow  " + money(todayTotal));
@@ -110,7 +110,15 @@ void BudgetWindow::draw(SDL_Renderer* r, int sw, int sh) const {
     if (detail_ >= 0) {
         const int dy = ys + 66;
         fill(r, ox + 8, dy - 4, kW - 16, kH - (dy - oy) - 8, 22, 26, 36);
-        if (detail_ == 1) {
+        if (detail_ == 2) {
+            text(r, ox + 14, dy + 2, "Bonds: $10,000 each, up to 50", 255, 255, 190);
+            text(r, ox + 14, dy + 18, "[Issue a bond]", 190, 255, 190);
+            text(r, ox + 160, dy + 18, "[Repay the oldest]", 255, 190, 190);
+            for (int k = 0; k < s_.debt && k < 20; ++k) {
+                const int col = k / 10, row = k % 10;
+                text(r, ox + 14 + col * 200, dy + 36 + row * 14, "Bond " + std::to_string(k + 1) + ": " + std::to_string(s_.bondRates[static_cast<size_t>(k)]) + "%  " + money(100LL * s_.bondRates[static_cast<size_t>(k)]) + "/yr", 200, 210, 230);
+            }
+        } else if (detail_ == 1) {
             text(r, ox + 14, dy + 2, "Ordinances (click to enact / repeal)", 255, 255, 190);
             for (size_t k = 0; k < ordinances_.size(); ++k) {
                 const int col = static_cast<int>(k) / 10, row = static_cast<int>(k) % 10;
@@ -143,11 +151,16 @@ bool BudgetWindow::mouseDown(int x, int y, int button, int sw, int sh) {
         if (y < ry - 3 || y >= ry + 19) continue;
         if (x >= ox + 186 && x < ox + 218) adjust(static_cast<int>(i), -1);
         else if (x >= ox + 258 && x < ox + 290) adjust(static_cast<int>(i), +1);
-        else if (x >= ox + 296 && x < ox + 326 && i != 2) detail_ = detail_ == static_cast<int>(i) ? -1 : static_cast<int>(i);
+        else if (x >= ox + 296 && x < ox + 326) detail_ = detail_ == static_cast<int>(i) ? -1 : static_cast<int>(i);
         return true;
     }
     const int ys = oy + 34 + static_cast<int>(rows_.size()) * 24 + 10, dy = ys + 66;
-    if (detail_ == 1) {
+    if (detail_ == 2) {
+        if (y >= dy + 16 && y < dy + 30 && onBond) {
+            if (x >= ox + 14 && x < ox + 140) onBond(0);
+            else if (x >= ox + 160 && x < ox + 300) onBond(1);
+        }
+    } else if (detail_ == 1) {
         for (size_t k = 0; k < ordinances_.size(); ++k) {
             const int col = static_cast<int>(k) / 10, row = static_cast<int>(k) % 10;
             const int bx = ox + 14 + col * 305, by = dy + 18 + row * 14;

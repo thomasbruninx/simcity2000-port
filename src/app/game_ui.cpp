@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "save/error.h"
+#include "simulation/bonds.h"
 
 namespace sc2k {
 namespace {
@@ -42,7 +43,14 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, U
 }  // namespace
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
-    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {}
+    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {
+    budget_.onBond = [this](int what) {
+        message_.clear();
+        const bool ok = what == 0 ? issueBond(sim_.context()) : repayOldestBond(sim_.context());
+        if (ok) say(what == 0 ? "Bond issued" : "Bond repaid");
+        else if (message_.empty()) say("No bond was issued or repaid");
+    };
+}
 
 std::string GameUi::moneyText(int v) const {
     char buf[32];
@@ -408,6 +416,13 @@ bool GameUi::confirm(int id, int amount) {
     if (id == 0x6D || id == 0x6E) {
         const int fee = id == 0x6D ? 1000 : 1500;
         m.title = res_.string(id) + " to the neighbouring city for " + moneyText(fee) + "?";
+    } else if (id == 0x121 || id == 0x123) {
+        std::string t = res_.string(id);
+        const size_t p = t.find("%d");
+        if (p != std::string::npos) t.replace(p, 2, std::to_string(amount));
+        for (size_t q; (q = t.find('\n')) != std::string::npos;) t.replace(q, 1, " - ");
+        for (size_t q; (q = t.find('\r')) != std::string::npos;) t.erase(q, 1);
+        m.title = t;
     } else if (id == 0x15A) m.title = "Build the tunnel for " + moneyText(amount) + "?";
     else m.title = "Are you sure?";
     m.options = {"Yes", "No"};

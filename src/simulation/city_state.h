@@ -52,6 +52,8 @@ struct CityState {
     std::array<int32_t, 16> graphMax{};
     int32_t milestone = 0;                               // MISC 8 @0x4CA028 city-class milestone index
     int32_t weather = 0, c9df8 = 0;                      // MISC 27 @0x4CA424 / MISC 24 @0x4C9DF8 (bytes)
+    std::array<int16_t, 50> bondRates{};                 // MISC 388..437 @0x4C8F08: interest rate of each outstanding bond (oldest first); `debt` is their number
+    int32_t cityValue = 0;                               // @0x4C94E8 (runtime): asset value of the city (0x469BF0), limits how many bonds may be issued
     std::array<int16_t, 17> eventYears{};                // MISC 462..478 @0x4CA448 scheduled events (0 = none)
     int32_t c84d8 = 0, ca410 = 0;                        // MISC 913 / 914 flags
     int32_t landValueTotal = 0, crimeTotal = 0, trafficTotal = 0;   // MISC 10 / 11 / 12

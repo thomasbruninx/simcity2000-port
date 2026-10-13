@@ -21,6 +21,7 @@
 #include "simulation/water.h"
 #include "simulation/tool_script.h"
 #include "simulation/availability.h"
+#include "simulation/bonds.h"
 
 using namespace sc2k;
 using namespace sc2k::emu;
@@ -806,6 +807,26 @@ int availDiff(const std::string& exe, const std::string& path, long& tiles, long
     return failures;
 }
 
+
+int valueDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    for (int variant = 0; variant < 3; ++variant) {
+        World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+        if (variant) for (size_t i = 0; i < 256; ++i) s.census[i] = int16_t((s.census[i] * (variant + 2) + int(i) * 3) & 0x3FFF);   // large / odd counts exercise the truncating divides
+        Emu e(exe);
+        SimImage img(e);
+        img.load(w, s);
+        e.call(0x469BF0);
+        const int32_t orig = e.get<int32_t>(0x4C94E8), port = computeCityValue(s, t);
+        const bool ok = orig == port;
+        tiles += 1; bad += !ok; failures += !ok;
+        std::printf("%-34s variant %d city value %d/%d %s\n", path.c_str(), variant, orig, port, ok ? "identical" : "DIVERGED");
+    }
+    return failures;
+}
+
 int toolsDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
     CityFile c = CityFile::load(path);
     GameTables t = GameTables::fromExe(exe);
@@ -837,6 +858,7 @@ int main(int argc, char** argv) {
             else if (mode == "tick") failures += tickDiff(exe, argv[i], tiles, bad);
             else if (mode == "economy") failures += economyDiff(exe, argv[i], tiles, bad);
             else if (mode == "things") failures += thingsDiff(exe, argv[i], tiles, bad);
+            else if (mode == "value") failures += valueDiff(exe, argv[i], tiles, bad);
             else if (mode == "avail") failures += availDiff(exe, argv[i], tiles, bad);
             else if (mode == "tools") failures += toolsDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);

@@ -3,6 +3,7 @@
 #pragma once
 #include <SDL3/SDL.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ class BudgetWindow {
 public:
     BudgetWindow(CityState& state, const GameTables& tables, const PeResources& res);
     bool open = false;
+    std::function<void(int)> onBond;       // 0 = issue a bond, 1 = repay the oldest (the owner runs the simulation-side routine)
     const IconStrip* bookIcon = nullptr;   // the original's "book" button bitmap (details of a row)
 
     void draw(SDL_Renderer* r, int screenW, int screenH) const;

@@ -29,6 +29,7 @@ CityState CityState::fromCity(const CityFile& c) {
     s.milestone = static_cast<int16_t>(c.miscWord(8));
     s.weather = static_cast<uint8_t>(c.miscWord(misc::kWeather)); s.c9df8 = static_cast<uint8_t>(c.miscWord(24));
     for (size_t i = 0; i < 17; ++i) s.eventYears[i] = static_cast<int16_t>(c.miscWord(462 + i));
+    for (size_t i = 0; i < 50; ++i) s.bondRates[i] = static_cast<int16_t>(c.miscWord(388 + i));
     s.c84d8 = c.miscInt(913); s.ca410 = c.miscInt(914);
     s.landValueTotal = c.miscInt(misc::kLandValueTotal); s.crimeTotal = c.miscInt(misc::kCrimeTotal); s.trafficTotal = c.miscInt(misc::kTrafficTotal);
     s.waterFlag = static_cast<int16_t>(c.miscWord(misc::kWaterFlag)); s.policeBase = static_cast<int16_t>(c.miscWord(misc::kPoliceBase));
@@ -76,6 +77,7 @@ void CityState::writeBack(CityFile& c) const {
     put16(1038, static_cast<int16_t>(c9448));
     put16(8, static_cast<int16_t>(milestone));
     for (size_t i = 0; i < 17; ++i) put16(462 + i, eventYears[i]);
+    for (size_t i = 0; i < 50; ++i) put16(388 + i, bondRates[i]);
     put(913, c84d8); put(914, ca410);
     put(misc::kLandValueTotal, landValueTotal); put(misc::kCrimeTotal, crimeTotal); put(misc::kTrafficTotal, trafficTotal);
     put16(misc::kWaterFlag, static_cast<int16_t>(waterFlag));

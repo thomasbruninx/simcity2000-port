@@ -2,10 +2,12 @@
 #include "save/city.h"
 #include "simulation/tool_script.h"
 #include "simulation/availability.h"
+#include "simulation/bonds.h"
 #include "simulation/finance.h"
 #include "world/world_hash.h"
 
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 using namespace sc2k;
@@ -90,4 +92,22 @@ TEST(tool_availability_follows_the_dated_events) {
     CHECK(!ToolAvailability::fromState(s, t).allows(3, 6));
     a.applyEvent(12, s); a.applyEvent(13, s);
     CHECK(a.allows(5, 5) && a.allows(5, 6) && !a.allows(5, 7));
+}
+
+TEST(bonds_issue_and_repay_keep_budget_and_rates_consistent) {
+    GameTables t;
+    CityState s; s.rateLevel = 3; s.treasury = 25000;
+    { const int32_t perSubwayTile = 1000000; std::memcpy(&t.valueData[0x4DB118 - 0x4DACB8], &perSubwayTile, 4); s.c9434 = 1000; }   // a rich city: bonds are available
+    CrtRand rng(1); Lfsr lf(1); World w; YesHooks hooks; TrafficStats ts;
+    SimContext c{w, s, t, rng, lf, hooks, ts, {}};
+    s.census[0xD2] = 0;
+    CHECK(issueBond(c) && s.debt == 1 && s.treasury == 35000 && s.bondRates[0] == 4);
+    CHECK(s.budget[kBond].currentCosts == 1 && s.budget[kBond].fundingPercent == 40000);   // 4 % per year of $10,000 = 400 = 1 * 40000 / 100
+    s.rateLevel = 6;
+    CHECK(issueBond(c) && s.debt == 2 && s.bondRates[1] == 7 && s.budget[kBond].fundingPercent == 55000);
+    CHECK(repayOldestBond(c) && s.debt == 1 && s.bondRates[0] == 7 && s.treasury == 35000 && s.budget[kBond].fundingPercent == 70000);
+    s.treasury = 9999;
+    CHECK(!repayOldestBond(c) && s.debt == 1);
+    s.debt = 50; s.treasury = 0;
+    CHECK(!issueBond(c) && s.treasury == 0);
 }

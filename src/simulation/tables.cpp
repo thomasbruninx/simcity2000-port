@@ -29,7 +29,7 @@ GameTables GameTables::fromExe(const std::string& path) {
     sh(0x4E75C8, t.footprint); sh(0x4E6A58, t.shoreDx); sh(0x4E6A70, t.shoreDy); sh(0x4E6AB0, t.shoreBit); sh(0x4E6948, t.shoreType);
     sh(0x4DB328, t.rotationZoneMask); sh(0x4DB330, t.rotationCorner);
     std::memcpy(&t.milestoneCycle, pe.bytesAt(0x4E88F4, 2).data(), 2);
-    sh(0x4E6B08, t.connectData); sh(0x4E75A8, t.bridgeData); sh(0x4E6848, t.terrainData); sh(0x4E75E8, t.highwayData); sh(0x4E8550, t.toolAvailBase); sh(0x4DAEC8, t.toolBuildingSize); sh(0x4DAFA0, t.toolCost);
+    sh(0x4E6B08, t.connectData); sh(0x4E75A8, t.bridgeData); sh(0x4E6848, t.terrainData); sh(0x4E75E8, t.highwayData); sh(0x4DACB8, t.valueData); sh(0x4E8550, t.toolAvailBase); sh(0x4DAEC8, t.toolBuildingSize); sh(0x4DAFA0, t.toolCost);
     sh(0x4E6608, t.terrainSprite); sh(0x4E6698, t.undergroundSprite); sh(0x4E6798, t.zoneFootprint);
     sh(0x4E74A8, t.waterCycle); sh(0x4E7510, t.blinkCycle); sh(0x4E670B, t.carVariant); sh(0x4E6778, t.heavyCar);
     sh(0x4E7070, t.thingSprite); sh(0x4E7098, t.thingMinZoom); sh(0x4E7108, t.aircraftFrame); sh(0x4E7110, t.aircraftFlip);
