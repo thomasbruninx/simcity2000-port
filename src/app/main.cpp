@@ -140,6 +140,8 @@ int main(int argc, char** argv) {
         float scaleX = 1.f, scaleY = 1.f;   // window points -> logical UI pixels
         float uiScale = 1.f;
         bool sized = false;
+        float wheelAcc = 0.f;
+        Uint64 lastWheel = 0;
         Uint64 last = SDL_GetTicks(), thingAcc = 0;
         int shots = 0;
         bool running = true;
@@ -237,7 +239,15 @@ int main(int argc, char** argv) {
                     case SDL_EVENT_MOUSE_BUTTON_DOWN: ui.mouseDown(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), e.button.button); break;
                     case SDL_EVENT_MOUSE_BUTTON_UP: ui.mouseUp(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), e.button.button); break;
                     case SDL_EVENT_MOUSE_MOTION: ui.mouseMove(static_cast<int>(e.motion.x * scaleX), static_cast<int>(e.motion.y * scaleY)); break;
-                    case SDL_EVENT_MOUSE_WHEEL: ui.wheel(0, 0, e.wheel.y > 0 ? 1 : (e.wheel.y < 0 ? -1 : 0)); break;
+                    case SDL_EVENT_MOUSE_WHEEL: {   // less sensitive: two wheel notches (or the equivalent trackpad movement) per zoom level; the sum resets after a pause
+                        const Uint64 t = SDL_GetTicks();
+                        if (t - lastWheel > 300) wheelAcc = 0;
+                        lastWheel = t;
+                        wheelAcc += e.wheel.y * (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.f : 1.f);
+                        if (wheelAcc >= 2.f) { ui.wheel(0, 0, 1); wheelAcc = 0; }
+                        else if (wheelAcc <= -2.f) { ui.wheel(0, 0, -1); wheelAcc = 0; }
+                        break;
+                    }
                     default: break;
                 }
             }
