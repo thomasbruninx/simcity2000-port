@@ -35,7 +35,7 @@ public:
     std::function<bool()> pump;
     std::function<void()> onTitle;     // Ctrl+O: back to the title screen
     std::function<void(int)> onPauseAction;   // pause menu: 1 load game, 2 settings, 3 exit
-    bool paused() const { return pauseOpen_; }
+    bool paused() const { return pauseOpen_ || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
     static std::string savesDir();     // where saved games go (next to the settings file)
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;
