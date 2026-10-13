@@ -142,6 +142,7 @@ int main(int argc, char** argv) {
         float scaleX = 1.f, scaleY = 1.f;   // window points -> logical UI pixels
         float uiScale = 1.f;
         bool sized = false;
+        int presentedW = 0, presentedH = 0;
         float wheelAcc = 0.f;
         Uint64 lastWheel = 0;
         Uint64 last = SDL_GetTicks(), thingAcc = 0;
@@ -157,7 +158,8 @@ int main(int argc, char** argv) {
             const float S = static_cast<float>(args.uiScale > 0 ? args.uiScale : titleScreen.settings.uiScale) / 100.f;
             const int lw = std::max(320, static_cast<int>(pw / S)), lh = std::max(200, static_cast<int>(ph / S));
             uiScale = S;
-            if (lw != width || lh != height) {
+            if (lw != presentedW || lh != presentedH) {   // (the first frame always sets it: the window's point size can equal the logical size by chance, e.g. 2560 px at x2)
+                presentedW = lw; presentedH = lh;
                 width = lw; height = lh;
                 ui.resize(lw, lh);
                 if (!sized) { sized = true; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
