@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "app/icons.h"
 #include "resources/pe_resources.h"
 #include "simulation/city_state.h"
 #include "simulation/tables.h"
@@ -16,6 +17,7 @@ class BudgetWindow {
 public:
     BudgetWindow(CityState& state, const GameTables& tables, const PeResources& res);
     bool open = false;
+    const IconStrip* bookIcon = nullptr;   // the original's "book" button bitmap (details of a row)
 
     void draw(SDL_Renderer* r, int screenW, int screenH) const;
     bool mouseDown(int x, int y, int button, int screenW, int screenH);   // true when the click was inside the window (consumed)

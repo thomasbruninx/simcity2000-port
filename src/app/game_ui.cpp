@@ -9,7 +9,19 @@
 
 namespace sc2k {
 namespace {
-constexpr int kTopBar = 20, kGroupW = 132, kGroupH = 18, kItemW = 290, kItemH = 17, kBottomBar = 22;
+constexpr int kTopBar = 28, kGroupW = 150, kGroupH = 26, kItemW = 290, kItemH = 17, kBottomBar = 22;
+// icon of a toolbar group / top-bar button: strip 1 = main toolbar (resource 2, 23 px cells), strip 2 = terrain strip (resource 207, 19 px cells)
+struct IconRef { int strip, cell; };
+IconRef groupIcon(const std::string& name) {
+    static const std::pair<const char*, IconRef> table[] = {
+        {"Bulldozer", {1, 0}}, {"Terrain", {2, 0}}, {"Zones", {1, 9}}, {"Power", {1, 3}}, {"Water", {1, 4}}, {"Roads", {1, 6}}, {"Rail", {1, 7}},
+        {"Education", {1, 12}}, {"Safety", {1, 13}}, {"Recreation", {1, 14}}, {"Rewards", {1, 5}}, {"Query", {1, 16}}};
+    for (const auto& e : table) if (name == e.first) return e.second;
+    return {0, -1};
+}
+// buttons at the right end of the top bar: rotate left / right, zoom out / in, centre, budget
+constexpr int kTopButtons[6] = {17, 18, 19, 20, 21, 27};
+constexpr int kTopButtonStep = 27;
 constexpr const char* kMonths[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 constexpr const char* kSpeedNames[6] = {"", "Paused", "Turtle", "Llama", "Cheetah", "Swallow"};
 
@@ -105,7 +117,15 @@ void GameUi::mouseDown(int x, int y, int button) {
     }
     if (budget_.mouseDown(x, y, button, width_, height_)) return;
     if (button != 1) { scrolling_ = true; return; }
-    if (y < kTopBar && x >= 470 && x < 540) { budget_.open = true; return; }
+    if (y < kTopBar && x >= width_ - 6 * kTopButtonStep - 4) {
+        const int k = (x - (width_ - 6 * kTopButtonStep - 4)) / kTopButtonStep;
+        if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2); }
+        else if (k == 2) cam_.zoom = std::max(0, cam_.zoom - 1);
+        else if (k == 3) cam_.zoom = std::min(2, cam_.zoom + 1);
+        else if (k == 4) cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
+        else if (k == 5) budget_.open = true;
+        return;
+    }
     if (overUi(x, y)) {
         const auto& cat = toolCatalog();
         for (size_t g = 0; g < cat.size(); ++g)
@@ -442,11 +462,16 @@ void GameUi::draw(SDL_Renderer* r) {
     char top[200];
     std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s   R%d C%d I%d   [%s]", kMonths[s.month()], s.startYear + s.day / 300, s.population10, moneyText(s.treasury).c_str(),
                   s.demand[0], s.demand[1], s.demand[2], kSpeedNames[static_cast<int>(clock_.speed)]);
-    text(r, 6, 6, top);
+    text(r, 6, 10, top);
     std::string right = message_;
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
-    text(r, 474, 6, "[Budget]", 200, 230, 255);
-    if (!right.empty()) text(r, std::max(550, width_ - static_cast<int>(right.size()) * 8 - 8), 6, right, 255, 220, 120);
+    const int buttonsX = width_ - 6 * kTopButtonStep - 4;
+    for (int k = 0; k < 6; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2);
+    if (!right.empty()) {
+        const size_t room = static_cast<size_t>(std::max(0, (buttonsX - 500 - 8) / 8));
+        if (right.size() > room) right.resize(room);
+        text(r, std::max(500, buttonsX - static_cast<int>(right.size()) * 8 - 8), 10, right, 255, 220, 120);
+    }
 
     // tool groups
     const auto& cat = toolCatalog();
@@ -455,7 +480,9 @@ void GameUi::draw(SDL_Renderer* r) {
         const bool sel = static_cast<int>(g) == group_;
         fill(r, rc.x, rc.y, rc.w, rc.h, sel ? 60 : 34, sel ? 70 : 38, sel ? 100 : 48);
         frame(r, rc.x, rc.y, rc.w, rc.h, 12, 14, 20);
-        text(r, rc.x + 6, rc.y + 5, cat[g].name);
+        const IconRef ic = groupIcon(cat[g].name);
+        drawIcon(r, ic.strip, ic.cell, rc.x + 2, rc.y + 1);
+        text(r, rc.x + 32, rc.y + 9, cat[g].name);
     }
     if (const ToolItem* t = tool()) {
         const int y = kTopBar + static_cast<int>(cat.size()) * kGroupH + 6;
@@ -494,6 +521,20 @@ void GameUi::draw(SDL_Renderer* r) {
     text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  B budget  Ctrl+S save  Esc", 150, 160, 180);
     budget_.draw(r, width_, height_);
     if (modal_) drawModal(r);
+}
+
+void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
+    if (strip == 0 || cell < 0) return;
+    try {
+        if (!toolbarIcons_) {
+            toolbarIcons_ = std::make_unique<IconStrip>(r, Bmp8::fromDib(res_.bitmap(2)), 23, true);
+            terrainIcons_ = std::make_unique<IconStrip>(r, Bmp8::fromDib(res_.bitmap(207)), 19, false);
+            bookIcon_ = std::make_unique<IconStrip>(r, Bmp8::fromDib(res_.namedBitmap("BOOKU")), 30, false);
+            budget_.bookIcon = bookIcon_.get();
+        }
+    } catch (const std::exception&) { strip = 0; }
+    if (strip == 1 && toolbarIcons_) toolbarIcons_->draw(r, cell, x, y);
+    else if (strip == 2 && terrainIcons_) terrainIcons_->draw(r, cell, x + 2, y + 2);
 }
 
 void GameUi::drawModal(SDL_Renderer* r) {

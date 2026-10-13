@@ -23,22 +23,23 @@ int main(int argc, char** argv) {
                 for (const auto& c : d.controls) std::printf("  ctl %d [%s] (%d,%d %dx%d) %s\n", c.id, c.cls.c_str(), c.x, c.y, c.w, c.h, c.text.c_str());
             }
         } else if (cmd == "bitmaps" && argc > 3) {
-            for (int id : res.bitmapIds()) {
-                const auto dib = res.bitmap(id);
-                uint32_t hdr = 0, bits = 0, colors = 0;
+            auto dump = [&](const std::string& name, const std::vector<uint8_t>& dib) {
+                uint32_t hdr = 0, colors = 0;
                 std::memcpy(&hdr, dib.data(), 4);
                 uint16_t bpp = 0; std::memcpy(&bpp, dib.data() + 14, 2);
                 std::memcpy(&colors, dib.data() + 32, 4);
                 if (colors == 0 && bpp <= 8) colors = 1u << bpp;
-                bits = 14 + hdr + colors * 4;
-                const std::string path = std::string(argv[3]) + "/" + std::to_string(id) + ".bmp";
+                const uint32_t bits = 14 + hdr + colors * 4;
+                const std::string path = std::string(argv[3]) + "/" + name + ".bmp";
                 if (FILE* f = std::fopen(path.c_str(), "wb")) {
                     const uint32_t size = 14 + static_cast<uint32_t>(dib.size());
                     const uint8_t fh[14] = {'B', 'M', uint8_t(size), uint8_t(size >> 8), uint8_t(size >> 16), uint8_t(size >> 24), 0, 0, 0, 0, uint8_t(bits), uint8_t(bits >> 8), uint8_t(bits >> 16), uint8_t(bits >> 24)};
                     std::fwrite(fh, 1, 14, f); std::fwrite(dib.data(), 1, dib.size(), f); std::fclose(f);
                     std::printf("%s (%zu bytes)\n", path.c_str(), dib.size());
                 }
-            }
+            };
+            for (int id : res.bitmapIds()) dump(std::to_string(id), res.bitmap(id));
+            for (const auto& [name, dib] : res.namedBitmaps()) dump(name, dib);
         }
     } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     return 0;

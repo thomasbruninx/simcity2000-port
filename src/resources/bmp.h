@@ -12,6 +12,7 @@ struct Bmp8 {
     std::array<uint32_t, 256> palette{};   // 0xAARRGGBB, alpha 255
     std::vector<uint8_t> index;            // top-down rows, width*height
     static Bmp8 load(const std::string& path);   // throws Sc2Error
+    static Bmp8 fromDib(const std::vector<uint8_t>& dib);   // BITMAPINFOHEADER + palette + pixels (4 or 8 bit), e.g. an RT_BITMAP resource
 };
 
 }  // namespace sc2k

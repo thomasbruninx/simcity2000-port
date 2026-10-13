@@ -98,7 +98,7 @@ void BudgetWindow::draw(SDL_Renderer* r, int sw, int sh) const {
         } else if (i == 2) text(r, ox + 190, y + 4, std::to_string(s_.budget[kBond].fundingPercent) + "% interest", 170, 180, 200);
         text(r, ox + 330, y + 4, money(td), td < 0 ? 255 : 200, td < 0 ? 170 : 255, td < 0 ? 170 : 200);
         text(r, ox + 440, y + 4, money(ye), ye < 0 ? 255 : 200, ye < 0 ? 170 : 255, ye < 0 ? 170 : 200);
-        text(r, ox + 300, y + 4, i == 2 ? "" : "[i]", 200, 220, 255);
+        if (i != 2) { if (bookIcon) bookIcon->drawSized(r, 0, ox + 298, y - 1, 24, 19); else text(r, ox + 300, y + 4, "[i]", 200, 220, 255); }
     }
     const int ys = oy + 34 + static_cast<int>(rows_.size()) * 24 + 10;
     text(r, ox + 14, ys, "Year to date cashflow  " + money(todayTotal));

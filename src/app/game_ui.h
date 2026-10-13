@@ -5,11 +5,13 @@
 #include <SDL3/SDL.h>
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "app/budget_window.h"
+#include "app/icons.h"
 #include "app/tool_catalog.h"
 #include "render/map_renderer.h"
 #include "resources/pe_resources.h"
@@ -79,6 +81,8 @@ private:
     int messageMs_ = 0;
     Modal* modal_ = nullptr;
     BudgetWindow budget_;
+    std::unique_ptr<IconStrip> toolbarIcons_, terrainIcons_, bookIcon_;   // created on the first draw (need the renderer)
+    void drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y);
 
     const ToolItem* tool() const;
     int unitCost(const ToolItem& t) const;

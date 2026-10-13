@@ -27,7 +27,15 @@ PeResources::PeResources(const PeImage& pe) {
         const int typeId = static_cast<int>(type.name);
         if (typeId != 2 && typeId != 5 && typeId != 6) continue;
         for (const Entry& name : entries(r, root + (type.offset & 0x7FFFFFFFu))) {
-            if (!(name.offset & 0x80000000u) || (name.name & 0x80000000u)) continue;
+            if (!(name.offset & 0x80000000u)) continue;
+            std::string nameText;
+            const bool named = (name.name & 0x80000000u) != 0;
+            if (named) {
+                const uint32_t at = root + (name.name & 0x7FFFFFFFu);
+                const int len = r.u16(at);
+                for (int j = 0; j < len; ++j) { const uint16_t ch = r.u16(at + 2 + 2u * static_cast<uint32_t>(j)); nameText.push_back(ch < 0x80 ? static_cast<char>(ch) : '?'); }
+                if (typeId != 2) continue;
+            }
             const auto langs = entries(r, root + (name.offset & 0x7FFFFFFFu));
             if (langs.empty() || (langs[0].offset & 0x80000000u)) continue;
             const uint32_t leaf = root + langs[0].offset;
@@ -60,7 +68,7 @@ PeResources::PeResources(const PeImage& pe) {
                     dlg.controls.push_back(c);
                 }
                 dialogs_[id] = dlg;
-            } else if (typeId == 2) { const auto b = pe.bytesAtRva(dataRva, size); bitmaps_[id].assign(b.begin(), b.end()); }
+            } else if (typeId == 2) { const auto b = pe.bytesAtRva(dataRva, size); if (named) namedBitmaps_[nameText].assign(b.begin(), b.end()); else bitmaps_[id].assign(b.begin(), b.end()); }
             else {   // string table block: 16 length-prefixed UTF-16 strings; block id N holds ids (N-1)*16 .. (N-1)*16+15
                 uint32_t p = dataRva;
                 for (int k = 0; k < 16 && p < dataRva + size; ++k) {
