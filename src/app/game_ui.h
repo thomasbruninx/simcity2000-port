@@ -33,6 +33,7 @@ public:
 
     // Runs one iteration of the application's main loop while a modal question is open; returns false when the application should quit.
     std::function<bool()> pump;
+    std::function<void()> onTitle;     // Ctrl+O: back to the title screen
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;
     Mixer* audio = nullptr;            // sound effects / music (optional)
@@ -60,7 +61,8 @@ public:
     const std::string& message() const { return message_; }
     bool saveCity(const std::string& path);
     void newCity(int era, int difficulty, const TerrainParams* terrain = nullptr);             // start a new city on the default map (scripting)
-    void newCityDialog();                              // asks for the starting year and the difficulty (the original dialog 101)
+    void newCityDialog(bool randomMap = false);
+    void loadCity(const CityFile& f);                  // a city / scenario was loaded into the simulation                              // asks for the starting year and the difficulty (the original dialog 101)
     std::string defaultMapPath;
     void setCityName(const std::string& n) { info_.cityName = n; }
     void initNews(const std::string& dir) { info_.initNews(dir); }                        // DEFAULT.SC2 of the game directory

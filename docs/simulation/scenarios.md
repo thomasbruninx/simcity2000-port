@@ -10,7 +10,7 @@ The `SCEN` chunk of a .SCN file is copied to 0x4CB92C (the first 4 bytes are ski
 | +0 | u16 | disaster kind started when the scenario begins (stored in 0x4C9438), 0 = none |
 | +2 / +3 | u8 | focus tile of the disaster |
 | +4 | u16 | time limit in months (0x4CB934) |
-| +6 | u32 | population x 10 goal (MISC 1035) |
+| +6 | u32 | population goal, compared with MISC 1035 (e.g. Charleston: 45000, and its description says "city population level of 45,000") |
 | +10 / +14 / +18 | u32 | residential / commercial / industrial budget-record populations |
 | +22 | u32 | treasury minus number of bonds |
 | +26 | u32 | total land value (MISC 9) |

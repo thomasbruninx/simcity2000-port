@@ -16,7 +16,7 @@ struct ScenarioInfo {
     int disaster = 0;               // +0 u16: disaster kind (1..0x12) triggered when the scenario starts, 0 = none
     int focusA = 0, focusB = 0;     // +2 / +3: where it strikes
     int timeLimit = 0;              // +4 u16: months until the scenario is lost
-    uint32_t population10 = 0;      // +6 u32: goal compared with MISC 1035 (population x 10)
+    uint32_t population10 = 0;      // +6 u32: population goal compared with MISC 1035 (the number the scenario texts call the city population)
     int32_t residential = 0, commercial = 0, industrial = 0;   // +10 / +14 / +18: budget record 'population' goals (x 10 like the record)
     int32_t funds = 0;              // +22: treasury minus the number of bonds
     int32_t landValue = 0;          // +26: total land value (MISC 9 @0x4C9458)

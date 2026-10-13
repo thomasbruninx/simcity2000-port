@@ -250,6 +250,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (queryOpen_ && k == SDLK_ESCAPE) { queryOpen_ = false; return true; }
     if (queryOpen_ && micro_.valid && k == SDLK_N) { renameQueried(); return true; }
     if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
+    if (ctrl && k == SDLK_O && onTitle) { onTitle(); return true; }
     if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE) info_.open = InfoWindows::Which::None; return true; }
@@ -284,10 +285,18 @@ void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
     say("New city started");
 }
 
-void GameUi::newCityDialog() {
+void GameUi::loadCity(const CityFile& f) {
+    base_ = f;
+    avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
+    info_.cityName = f.name();
+    queryOpen_ = false; dragging_ = false; group_ = item_ = -1; menuOpen_ = false;
+    message_.clear();
+}
+
+void GameUi::newCityDialog(bool randomMap) {
     // the original: "Edit New Map" (terrain generation dialog 104) or the flat default map, then the start year and difficulty (dialog 101)
     Modal mapChoice; mapChoice.title = "New city: map"; mapChoice.options = {"Flat default map", "Random terrain (hills, water, trees)"};
-    const int m = runModal(mapChoice);
+    const int m = randomMap ? 1 : runModal(mapChoice);
     if (m < 0) return;
     TerrainParams tp;
     if (m == 1) {

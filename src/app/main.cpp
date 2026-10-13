@@ -13,6 +13,7 @@
 #include <string>
 
 #include "app/game_ui.h"
+#include "app/title_screen.h"
 #include "audio/audio.h"
 #include "render/map_renderer.h"
 #include "resources/bmp.h"
@@ -28,6 +29,7 @@ namespace {
 struct Args {
     std::string dir, city, shot, view, script;
     int days = 0, width = 1280, height = 800;
+    bool title = false;
 };
 
 Args parse(int argc, char** argv) {
@@ -39,9 +41,11 @@ Args parse(int argc, char** argv) {
         else if (s == "--days" && i + 1 < argc) a.days = std::atoi(argv[++i]);
         else if (s == "--view" && i + 1 < argc) a.view = argv[++i];
         else if (s == "--do" && i + 1 < argc) a.script = argv[++i];
+        else if (s == "--title") a.title = true;
         else if (s == "--size" && i + 2 < argc) { a.width = std::atoi(argv[++i]); a.height = std::atoi(argv[++i]); }
         else a.city = s;
     }
+    if (a.city.empty() && a.shot.empty()) a.title = true;   // interactive start without a city: the title screen
     return a;
 }
 
@@ -77,6 +81,8 @@ int main(int argc, char** argv) {
         ui.defaultMapPath = args.dir + "/DEFAULT.SC2";
         ui.initNews(args.dir);
         ui.setCityName(city.name());
+        TitleScreen titleScreen(args.dir, resources, pal.palette);
+        titleScreen.active = args.title;
         SoundBank bank(args.dir);
         Mixer mixer(&bank);
         std::unique_ptr<AudioDevice> audioDevice;
@@ -122,6 +128,13 @@ int main(int argc, char** argv) {
                 width = pw; height = ph;
                 ui.resize(pw, ph);
             }
+            if (titleScreen.active) {   // title screen and pickers replace the game view
+                SDL_SetRenderDrawColor(sdlr, 8, 12, 24, 255);
+                SDL_RenderClear(sdlr);
+                titleScreen.draw(sdlr, pw, ph);
+                SDL_RenderPresent(sdlr);
+                return;
+            }
             fb.clear(0xFF101820u);
             renderer.draw(fb, sim->world(), sim->state(), cam, ui.layers);
             ui.overlay(fb);
@@ -132,6 +145,25 @@ int main(int argc, char** argv) {
             SDL_RenderPresent(sdlr);
         };
 
+        auto loadGame = [&](const std::string& path) {
+            CityFile f = CityFile::load(path);
+            sim->replaceCity(f);
+            ui.loadCity(f);
+            cam.rotation = sim->state().rotation & 3;
+            cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2);
+            titleScreen.active = false;
+        };
+        auto handleTitle = [&] {
+            std::string path;
+            switch (titleScreen.take(&path)) {
+                case TitleScreen::Action::NewCity: titleScreen.active = false; ui.newCityDialog(false); break;
+                case TitleScreen::Action::NewMap: titleScreen.active = false; ui.newCityDialog(true); break;
+                case TitleScreen::Action::LoadScenario: case TitleScreen::Action::LoadCity: loadGame(path); break;
+                case TitleScreen::Action::Quit: running = false; break;
+                default: break;
+            }
+        };
+        ui.onTitle = [&] { titleScreen.show(); };
         auto step = [&] {
             if (window) {
                 int ww = 1, wh = 1, pw = 1, ph = 1;
@@ -142,6 +174,11 @@ int main(int argc, char** argv) {
             }
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
+                if (titleScreen.active && (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
+                    if (e.type == SDL_EVENT_KEY_DOWN) titleScreen.keyDown(e.key.key);
+                    else titleScreen.mouseDown(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), width, height);
+                    continue;
+                }
                 switch (e.type) {
                     case SDL_EVENT_QUIT: running = false; break;
                     case SDL_EVENT_KEY_DOWN:
@@ -166,6 +203,7 @@ int main(int argc, char** argv) {
             if (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) cam.scrollY += pan;
             if (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]) cam.scrollY -= pan;
 
+            handleTitle();
             const Uint64 now = SDL_GetTicks();
             const int dt = static_cast<int>(now - last);
             last = now;
@@ -174,6 +212,7 @@ int main(int argc, char** argv) {
                 mixer.playMusic(kTunes[musicIndex++ % 5]);
             }
             cycler.update(dt);
+            if (titleScreen.active) { renderFrame(); SDL_Delay(8); return; }
             ui.update(dt);
             const int steps = clock.advance(dt);
             for (int i = 0; i < steps; ++i) sim->tick();
@@ -202,6 +241,9 @@ int main(int argc, char** argv) {
                 else if (op == "days") { int d; words >> d; sim->advanceDays(d); }
                 else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2); }
                 else if (op == "find") { int id = 0; words >> id; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xbld.at(a, b) == id) { std::printf("building %d at %d %d\n", id, a, b); a = b = 128; } }
+                else if (op == "title") titleScreen.show();
+                else if (op == "scenarios") { int k = 0; words >> k; titleScreen.show(); titleScreen.openScenarioList(); titleScreen.select(k); }
+                else if (op == "loadscenario") { int k = 0; words >> k; const auto& list = titleScreen.scenarios(); if (k >= 0 && static_cast<size_t>(k) < list.size()) loadGame(list[static_cast<size_t>(k)].path); }
                 else if (op == "newcity") { int e = 0, d = 0; words >> e >> d; ui.newCity(e, d); }
                 else if (op == "newmap") { int e = 0, d = 0, coast = 0, river = 0; TerrainParams tp; words >> e >> d >> coast >> river >> tp.hills >> tp.water >> tp.trees; tp.coast = coast != 0; tp.river = river != 0; ui.newCity(e, d, &tp); }
                 else if (op == "funds") { int f; words >> f; sim->state().treasury = f; }
