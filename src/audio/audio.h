@@ -42,6 +42,9 @@ public:
     void stopMusic();
     bool musicPlaying() const;
     int lastMusicId() const { return musicId_; }
+    void setEffectsEnabled(bool on) { effectsOn_ = on; if (!on) stopEffect(-1); }   // Options > Sound Effects
+    void setMusicEnabled(bool on) { musicOn_ = on; if (!on) stopMusic(); }           // Options > Music
+    bool musicEnabled() const { return musicOn_; }
     void setMuted(bool m) { muted_ = m; }
     bool muted() const { return muted_; }
     void render(float* out, int frames);      // overwrites `out` (interleaved stereo)
@@ -54,7 +57,7 @@ private:
     std::vector<Voice> voices_;
     std::unique_ptr<MusicBackend> synth_;
     int musicId_ = 0;
-    bool muted_ = false;
+    bool muted_ = false, effectsOn_ = true, musicOn_ = true;
 };
 
 // Plays a Mixer through the default SDL playback device.

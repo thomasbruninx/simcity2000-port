@@ -1,5 +1,7 @@
 #include "resources/pe_resources.h"
 
+#include <functional>
+
 #include <cstring>
 
 namespace sc2k {
@@ -39,7 +41,7 @@ PeResources::PeResources(const PeImage& pe) {
             continue;
         }
         const int typeId = static_cast<int>(type.name);
-        if (typeId != 2 && typeId != 5 && typeId != 6) continue;
+        if (typeId != 2 && typeId != 4 && typeId != 5 && typeId != 6) continue;
         for (const Entry& name : entries(r, root + (type.offset & 0x7FFFFFFFu))) {
             if (!(name.offset & 0x80000000u)) continue;
             std::string nameText;
@@ -48,14 +50,32 @@ PeResources::PeResources(const PeImage& pe) {
                 const uint32_t at = root + (name.name & 0x7FFFFFFFu);
                 const int len = r.u16(at);
                 for (int j = 0; j < len; ++j) { const uint16_t ch = r.u16(at + 2 + 2u * static_cast<uint32_t>(j)); nameText.push_back(ch < 0x80 ? static_cast<char>(ch) : '?'); }
-                if (typeId != 2) continue;
+                if (typeId != 2 && typeId != 4) continue;
             }
             const auto langs = entries(r, root + (name.offset & 0x7FFFFFFFu));
             if (langs.empty() || (langs[0].offset & 0x80000000u)) continue;
             const uint32_t leaf = root + langs[0].offset;
             const uint32_t dataRva = r.u32(leaf), size = r.u32(leaf + 4);
             const int id = static_cast<int>(name.name);
-            if (typeId == 5) {   // DLGTEMPLATE (classic layout)
+            if (typeId == 4) {   // MENUTEMPLATE: header (4 bytes), then items: flags, [id], text; MF_POPUP 0x10 has no id and nests, MF_END 0x80 ends a level
+                const auto raw = pe.bytesAtRva(dataRva, size);
+                size_t o = 4;
+                auto rd16 = [&](size_t at) { return at + 2 <= raw.size() ? static_cast<unsigned>(raw[at] | (raw[at + 1] << 8)) : 0u; };
+                std::function<void(MenuItem&)> level = [&](MenuItem& parent) {
+                    while (o + 2 <= raw.size()) {
+                        MenuItem it;
+                        it.flags = rd16(o); o += 2;
+                        if (!(it.flags & 0x10)) { it.id = static_cast<int>(rd16(o)); o += 2; }
+                        while (o + 2 <= raw.size()) { const unsigned ch = rd16(o); o += 2; if (!ch) break; it.text.push_back(ch < 0x80 ? static_cast<char>(ch) : '?'); }
+                        if (it.flags & 0x10) level(it);
+                        parent.items.push_back(it);
+                        if (it.flags & 0x80) break;
+                    }
+                };
+                MenuItem root;
+                level(root);
+                menus_[named ? nameText : "#" + std::to_string(id)] = root;
+            } else if (typeId == 5) {   // DLGTEMPLATE (classic layout)
                 const auto raw = pe.bytesAtRva(dataRva, size);
                 const uint8_t* d = raw.data();
                 size_t o = 0;

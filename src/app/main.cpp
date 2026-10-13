@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
             if (lw != width || lh != height) {
                 width = lw; height = lh;
                 ui.resize(lw, lh);
-                if (!sized) { sized = true; ui.scrollTo(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
+                if (!sized) { sized = true; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
                 SDL_SetRenderLogicalPresentation(sdlr, lw, lh, SDL_LOGICAL_PRESENTATION_STRETCH);
             }
             if (titleScreen.active) {   // title screen and pickers replace the game view
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
             sim->replaceCity(f);
             ui.loadCity(f);
             cam.rotation = sim->state().rotation & 3;
-            ui.scrollTo(sim->state().centerA2 / 2, sim->state().centerB2 / 2);
+            ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2);
             titleScreen.active = false;
         };
         auto handleTitle = [&] {
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
             if (what == 3) { running = false; return; }
             titleScreen.fromGame = true;
             titleScreen.show();
-            if (what == 1) titleScreen.openCities(); else titleScreen.openSettings();
+            if (what == 1) titleScreen.openCities(); else if (what == 4) titleScreen.openScenarioList(); else titleScreen.openSettings();
         };
         auto step = [&] {
             if (window) {
@@ -252,7 +252,7 @@ int main(int argc, char** argv) {
             const Uint64 now = SDL_GetTicks();
             const int dt = static_cast<int>(now - last);
             last = now;
-            if (audioDevice && audioDevice->ok() && !mixer.muted() && !mixer.musicPlaying()) {   // 0x424B60: five tunes in turn
+            if (audioDevice && audioDevice->ok() && !mixer.muted() && mixer.musicEnabled() && !mixer.musicPlaying()) {   // 0x424B60: five tunes in turn
                 static const int kTunes[5] = {10001, 10004, 10008, 10012, 10018};
                 mixer.playMusic(kTunes[musicIndex++ % 5]);
             }
@@ -284,9 +284,9 @@ int main(int argc, char** argv) {
                 else if (op == "pick") { int a, b, x, y; words >> x >> y; if (ui.pickScreen(x, y, a, b)) std::printf("pick %d %d -> tile %d %d\n", x, y, a, b); else std::printf("pick %d %d -> none\n", x, y); }
                 else if (op == "press") { int a, b; words >> a >> b; ui.mouseDown(a, b, 1); }
                 else if (op == "zoom") { int z; words >> z; ui.setZoomLevel(z); }
-                else if (op == "center") { int a, b; words >> a >> b; ui.scrollTo(a, b); }
+                else if (op == "center") { int a, b; words >> a >> b; ui.centerView(a, b); }
                 else if (op == "days") { int d; words >> d; sim->advanceDays(d); }
-                else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; ui.scrollTo(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }
+                else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }
                 else if (op == "find") { int id = 0; words >> id; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xbld.at(a, b) == id) { std::printf("building %d at %d %d\n", id, a, b); a = b = 128; } }
                 else if (op == "title") titleScreen.show();
                 else if (op == "settings") { titleScreen.show(); titleScreen.openSettings(); }

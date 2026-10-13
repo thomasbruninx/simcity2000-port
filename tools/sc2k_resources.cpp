@@ -2,6 +2,7 @@
 // Usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | bitmaps <outdir>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <string>
 
 #include "resources/pe_resources.h"
@@ -17,6 +18,14 @@ int main(int argc, char** argv) {
         const std::string cmd = argv[2];
         if (cmd == "strings") {
             for (const auto& [id, s] : res.strings()) std::printf("%d\t%s\n", id, s.c_str());
+        } else if (cmd == "menus") {
+            std::function<void(const PeResources::MenuItem&, int)> dump = [&](const PeResources::MenuItem& m, int d) {
+                for (const auto& it : m.items) {
+                    std::printf("%*s%s%s  [id %d flags %02x]\n", d * 2, "", it.text.empty() ? "-------" : it.text.c_str(), "", it.id, it.flags);
+                    if (!it.items.empty()) dump(it, d + 1);
+                }
+            };
+            for (const auto& [name, m] : res.menus()) { std::printf("MENU %s\n", name.c_str()); dump(m, 1); }
         } else if (cmd == "dialogs") {
             for (const auto& [id, d] : res.dialogs()) {
                 std::printf("DIALOG %d \"%s\"\n", id, d.title.c_str());

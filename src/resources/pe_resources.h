@@ -27,6 +27,10 @@ public:
     struct Dialog { std::string title; std::vector<DialogControl> controls; };
     const Dialog* dialog(int id) const { const auto it = dialogs_.find(id); return it == dialogs_.end() ? nullptr : &it->second; }
     const std::map<int, Dialog>& dialogs() const { return dialogs_; }
+    // Menu templates (RT_MENU): items with command id (0 for separators / popups), text with '&' accelerators, flags (MF_*) and sub-items.
+    struct MenuItem { int id = 0; unsigned flags = 0; std::string text; std::vector<MenuItem> items; };
+    const std::map<std::string, MenuItem>& menus() const { return menus_; }   // key: resource name, or "#id"
+
 
 private:
     std::map<int, std::vector<uint8_t>> bitmaps_;
@@ -34,6 +38,7 @@ private:
     std::map<int, std::string> strings_;
     std::map<std::string, std::map<int, std::vector<uint8_t>>> custom_;
     std::map<int, Dialog> dialogs_;
+    std::map<std::string, MenuItem> menus_;
 };
 
 }  // namespace sc2k

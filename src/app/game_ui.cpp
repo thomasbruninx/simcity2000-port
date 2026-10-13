@@ -11,7 +11,7 @@
 
 namespace sc2k {
 namespace {
-constexpr int kTopBar = 28, kGroupW = 150, kGroupH = 26, kItemW = 290, kItemH = 17, kBottomBar = 22;
+constexpr int kMenuBar = MenuBar::kHeight, kTopBar = 28 + MenuBar::kHeight, kGroupW = 150, kGroupH = 26, kItemW = 290, kItemH = 17, kBottomBar = 22;
 // icon of a toolbar group / top-bar button: strip 1 = main toolbar (resource 2, 23 px cells), strip 2 = terrain strip (resource 207, 19 px cells)
 struct IconRef { int strip, cell; };
 IconRef groupIcon(const std::string& name) {
@@ -46,6 +46,11 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, U
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
     : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), info_(sim, resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {
+    if (const auto it = res_.menus().find("#3"); it != res_.menus().end()) {
+        menu_.load(it->second);
+        menu_.checked = [this](int id) { return menuChecked(id); };
+        menu_.enabled = [this](int id) { return menuEnabled(id); };
+    }
     budget_.onBond = [this](int what) {
         message_.clear();
         const bool ok = what == 0 ? issueBond(sim_.context()) : repayOldestBond(sim_.context());
@@ -113,6 +118,11 @@ bool GameUi::overUi(int x, int y) const {
 void GameUi::update(int dtMs) {
     if (pauseOpen_) return;
     if (info_.popupDue() && !headless && info_.open == InfoWindows::Which::None && !modal_) info_.open = InfoWindows::Which::Newspaper;   // milestone / new tool stories pop the paper up
+    const int month = sim_.state().month();
+    if (month != lastMonth_) {   // Newspaper > Subscription: the paper arrives in April and August (0x412FE0)
+        if (lastMonth_ >= 0 && info_.subscription && (month == 3 || month == 7) && !headless && info_.open == InfoWindows::Which::None && !modal_) info_.open = InfoWindows::Which::Newspaper;
+        lastMonth_ = month;
+    }
     const ThingState& th = sim_.context().things;
     const bool emergency = th.monsters > 0 || th.tornados > 0 || th.fireMessageKind >= 0;
     if (emergency && !emergency_) { startDispatch(sim_.context(), ts_); say("Emergency! The dispatch tool is available."); }
@@ -139,11 +149,15 @@ void GameUi::mouseDown(int x, int y, int button) {
             if (Rect{bx + 20, by + 50 + 22 * i, 480, 20}.contains(x, y)) modal_->result = i;
         return;
     }
+    if (button == 1) {   // the menu bar of the original
+        int cmd = 0;
+        if (menu_.mouseDown(x, y, cmd)) { if (cmd) menuCommand(cmd); return; }
+    }
     if (budget_.mouseDown(x, y, button, width_, height_)) return;
     if (queryOpen_ && button == 1) queryOpen_ = false;
     if (button != 1) { scrolling_ = true; return; }
     if (info_.mouseDown(x, y, width_, height_)) return;
-    if (y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
+    if (y >= kMenuBar && y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
         const int k = (x - (width_ - kTopButtonCount * kTopButtonStep - 4)) / kTopButtonStep;
         if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2); }
         else if (k == 2) setZoomLevel(zoomLevel_ - 1);
@@ -219,6 +233,7 @@ void GameUi::mouseUp(int x, int y, int button) {
 }
 
 void GameUi::mouseMove(int x, int y) {
+    menu_.mouseMove(x, y);
     const int dx = x - mouseX_, dy = y - mouseY_;
     mouseX_ = x; mouseY_ = y;
     if (scrolling_) {   // the map moves in its own (magnified) pixels
@@ -723,7 +738,7 @@ void GameUi::setZoomLevel(int level) {
     if (have) cam_.centerOn(a, b, mapW() / 2, mapH() / 2);
 }
 
-void GameUi::scrollTo(int a, int b) { cam_.centerOn(a, b, mapW() / 2, mapH() / 2); }
+void GameUi::scrollTo(int a, int b) { if (autoGoto_) centerView(a, b); }
 void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ran out), 287 (bankrupt)
     static const int kString[3] = {286, 285, 287};
     const std::string text = res_.string(kString[kind < 0 || kind > 2 ? 2 : kind]);
@@ -736,6 +751,7 @@ void GameUi::stopSound(int id) { if (audio) audio->stopEffect(id); }
 void GameUi::yearlyBudget() {   // 0x4736C0: one of four tunes while the annual budget is on the desk (the original picks with the LFSR; the port must not disturb the simulation's sequence)
     static const int kTunes[4] = {10016, 10005, 10002, 10010};
     static unsigned pick = 0;
+    if (autoBudget_) return;   // 0x4736C0: with Auto-Budget the dialog and its tune are skipped
     stopSound(-1);
     playMusic(kTunes[(sim_.state().day / 300 + pick++) % 4]);
     if (!headless) budget_.open = true;
@@ -783,19 +799,19 @@ void GameUi::draw(SDL_Renderer* r) {
                   s.demand[0], s.demand[1], s.demand[2], kSpeedNames[static_cast<int>(clock_.speed)]);
     const int buttonsClip = width_ - kTopButtonCount * kTopButtonStep - 4;
     {   // narrow windows (large UI scales): the status line stops where the buttons start
-        const SDL_Rect clip{0, 0, std::max(0, buttonsClip - 4), kTopBar};
+        const SDL_Rect clip{0, kMenuBar, std::max(0, buttonsClip - 4), kTopBar - kMenuBar};
         SDL_SetRenderClipRect(r, &clip);
-        text(r, 6, 10, top);
+        text(r, 6, 10 + kMenuBar, top);
         SDL_SetRenderClipRect(r, nullptr);
     }
     std::string right = message_;
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
     const int buttonsX = width_ - kTopButtonCount * kTopButtonStep - 4;
-    for (int k = 0; k < kTopButtonCount; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2);
+    for (int k = 0; k < kTopButtonCount; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2 + kMenuBar);
     if (!right.empty()) {
         const size_t room = static_cast<size_t>(std::max(0, (buttonsX - 500 - 8) / 8));
         if (right.size() > room) right.resize(room);
-        text(r, std::max(500, buttonsX - static_cast<int>(right.size()) * 8 - 8), 10, right, 255, 220, 120);
+        text(r, std::max(500, buttonsX - static_cast<int>(right.size()) * 8 - 8), 10 + kMenuBar, right, 255, 220, 120);
     }
 
     // tool groups
@@ -849,6 +865,7 @@ void GameUi::draw(SDL_Renderer* r) {
     SDL_SetRenderClipRect(r, nullptr);
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);
+    menu_.draw(r, width_);
     if (queryOpen_) drawQuery(r);
     if (modal_) drawModal(r);
 }
@@ -940,6 +957,80 @@ void GameUi::drawModal(SDL_Renderer* r) {
     for (int i = 0; i < n; ++i) {
         fill(r, bx + 20, by + 50 + 22 * i, 480, 20, 60, 70, 100);
         text(r, bx + 28, by + 56 + 22 * i, modal_->options[static_cast<size_t>(i)]);
+    }
+}
+
+
+// ---- menu bar -----------------------------------------------------------------------------------------------------------
+
+bool GameUi::menuChecked(int id) const {
+    switch (id) {
+        case 32768: return clock_.speed == GameSpeed::Paused;
+        case 32769: return clock_.speed == GameSpeed::Turtle;
+        case 32770: return clock_.speed == GameSpeed::Llama;
+        case 32771: return clock_.speed == GameSpeed::Cheetah;
+        case 32934: return clock_.speed == GameSpeed::AfricanSwallow;
+        case 32772: return autoBudget_;
+        case 32773: return autoGoto_;
+        case 32774: return soundOn_;
+        case 32775: return musicOn_;
+        case 32782: return sim_.state().cb4ec != 0;
+        case 32791: return info_.subscription;
+        case 32792: return info_.extraEditions;
+        default: return false;
+    }
+}
+
+bool GameUi::menuEnabled(int id) const {
+    return id != 32917;   // Load Tile Set: the port has no alternative tile sets
+}
+
+void GameUi::requestDisaster(int kind, int a, int b) {
+    ThingState& th = sim_.context().things;
+    th.disasterRequest = kind;
+    th.focusA = a; th.focusB = b;
+}
+
+void GameUi::menuCommand(int id) {   // the original's WM_COMMAND handlers (message map at 0x4D2C48)
+    SimContext& c = sim_.context();
+    const int ca = sim_.state().centerA2 / 2, cb = sim_.state().centerB2 / 2;
+    auto rnd = [&](int m) { return static_cast<int>(static_cast<unsigned>(c.rng.next() & 0x7FFF) % static_cast<unsigned>(m)); };
+    switch (id) {
+        case 32801: if (onPauseAction) onPauseAction(1); break;                  // Load City
+        case 32802: newCityDialog(false); break;                                  // New City
+        case 32803: newCityDialog(true); break;                                   // Edit New Map
+        case 32804: if (onPauseAction) onPauseAction(4); break;                  // Load Scenario
+        case 32917: say("Tile sets are not supported by this port"); break;
+        case 32805: case 32806: saveDialog(); break;                              // Save City / As
+        case 57665: if (onPauseAction) onPauseAction(3); break;                  // Exit
+        case 32768: clock_.speed = clock_.speed == GameSpeed::Paused ? GameSpeed::Llama : GameSpeed::Paused; break;
+        case 32769: clock_.speed = GameSpeed::Turtle; break;
+        case 32770: clock_.speed = GameSpeed::Llama; break;
+        case 32771: clock_.speed = GameSpeed::Cheetah; break;
+        case 32934: clock_.speed = GameSpeed::AfricanSwallow; break;
+        case 32772: autoBudget_ = !autoBudget_; break;
+        case 32773: autoGoto_ = !autoGoto_; break;
+        case 32774: soundOn_ = !soundOn_; if (audio) audio->setEffectsEnabled(soundOn_); break;
+        case 32775: musicOn_ = !musicOn_; if (audio) audio->setMusicEnabled(musicOn_); break;
+        case 32776: { const int y = rnd(0x28) + cb - 0x14; const int x = rnd(0x28) + ca - 0x14; requestDisaster(1, x, y); break; }   // Fire
+        case 32777: requestDisaster(2, ca, cb); break;                            // Flood
+        case 32778: requestDisaster(0x12, sim_.context().things.focusA, sim_.context().things.focusB); break;   // Air Crash
+        case 32779: { const int y = rnd(0x7E) + 1; const int x = rnd(0x7E) + 1; requestDisaster(7, x, y); break; }   // Tornado
+        case 32780: { const int y = rnd(0x7E) + 1; const int x = rnd(0x7E) + 1; requestDisaster(6, x, y); break; }   // Earthquake
+        case 32781: { const int y = rnd(0x20) + cb - 0xF; const int x = rnd(0x20) + ca - 0xF; requestDisaster(8, x, y); break; }   // Monster
+        case 32919: requestDisaster(0x10, sim_.context().things.focusA, sim_.context().things.focusB); break;   // Hurricane
+        case 32920: { const int y = rnd(0x20) + cb - 0xF; const int x = rnd(0x20) + ca - 0xF; requestDisaster(3, x, y); break; }   // Rioters
+        case 32782: sim_.state().cb4ec = sim_.state().cb4ec == 0 ? 1 : 0; break;  // No Disasters
+        case 32784: budget_.open = true; break;
+        case 32785: budget_.open = true; budget_.openDetail(1); break;           // Ordinances
+        case 32786: info_.open = InfoWindows::Which::City; break;                // Population
+        case 32788: info_.open = InfoWindows::Which::Graphs; break;
+        case 32787: case 32789: case 32783: say("That window is not available yet"); break;   // Industry, Neighbors, Map
+        case 32791: info_.subscription = !info_.subscription; break;
+        case 32792: info_.extraEditions = !info_.extraEditions; break;
+        case 57666: case 32893: case 57667: say("The help file is not available in this port"); break;
+        case 57664: { Modal m; m.title = "SimCity 2000 (port) - an independent re-implementation; it needs your own copy of the game."; m.options = {"OK"}; runModal(m); break; }
+        default: break;
     }
 }
 

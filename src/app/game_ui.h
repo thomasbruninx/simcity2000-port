@@ -15,6 +15,7 @@
 #include "app/budget_window.h"
 #include "app/icons.h"
 #include "app/info_windows.h"
+#include "app/menu_bar.h"
 #include "app/tool_catalog.h"
 #include "audio/audio.h"
 #include "render/map_renderer.h"
@@ -35,7 +36,7 @@ public:
     // Runs one iteration of the application's main loop while a modal question is open; returns false when the application should quit.
     std::function<bool()> pump;
     std::function<void()> onTitle;     // Ctrl+O: back to the title screen
-    std::function<void(int)> onPauseAction;   // pause menu: 1 load game, 2 settings, 3 exit
+    std::function<void(int)> onPauseAction;   // pause menu / menu bar: 1 load game, 2 settings, 3 exit, 4 load scenario
     static constexpr int kZoomLevelCount = 7;
     void setZoomLevel(int level);                       // 0..6, see game_ui.cpp
     bool pickScreen(int x, int y, int& a, int& b) { return renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b); }   // screen position -> file tile
@@ -87,7 +88,8 @@ public:
     void showDialog(int stringId) override;
     const uint8_t* labelTemplate(int id, bool custom) override;   // default building names (strings 831..888) for new microsim buildings
     StadiumChoice chooseStadiumTeam(int takenMask) override;
-    void scrollTo(int a, int b) override;                    // centre the view on a disaster
+    void scrollTo(int a, int b) override;                    // 0x440C90: centre the view on a disaster (only with Options > Auto-Goto)
+    void centerView(int a, int b) { cam_.centerOn(a, b, mapW() / 2, mapH() / 2); }
     void gameOver(int kind) override;                        // scenario won / lost, bankruptcy
     void playSound(int id, int repeat = 0) override;
     void stopSound(int id) override;
@@ -122,6 +124,13 @@ private:
     Modal* modal_ = nullptr;
     BudgetWindow budget_;
     InfoWindows info_;
+    MenuBar menu_;
+    bool autoBudget_ = false, autoGoto_ = true, soundOn_ = true, musicOn_ = true;   // Options menu (the original keeps them in the profile; defaults = the menu's check marks)
+    int lastMonth_ = -1;
+    void menuCommand(int id);
+    bool menuChecked(int id) const;
+    bool menuEnabled(int id) const;
+    void requestDisaster(int kind, int a, int b);
     int zoomLevel_ = 2;
     float mag_ = 1.f, scrollRemX_ = 0, scrollRemY_ = 0;
     int mapPx(int v) const { return static_cast<int>(std::floor(v / mag_)); }

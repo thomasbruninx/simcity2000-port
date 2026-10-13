@@ -25,6 +25,7 @@ public:
 
     Which open = Which::None;
     std::string cityName;             // shown by the newspaper stories ('=' token)
+    bool subscription = false, extraEditions = true;   // Newspaper menu: monthly paper in April / August; extra editions pop up             // shown by the newspaper stories ('=' token)
     void draw(SDL_Renderer* r, int screenW, int screenH);
     bool mouseDown(int x, int y, int screenW, int screenH);   // true when consumed (a window is open: clicks outside close nothing but are swallowed)
     void postMessage(int id, int arg);                        // from ZoneHooks::postMessage: the news queue (0x47BA90)

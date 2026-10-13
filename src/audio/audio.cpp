@@ -65,6 +65,7 @@ const MidiFile* SoundBank::music(int id) {
 }
 
 void Mixer::playEffect(int id, int repeat) {
+    if (!effectsOn_) return;
     const Wave* w = bank_ ? bank_->effect(id) : nullptr;
     if (!w) return;
     std::lock_guard<std::mutex> lock(mutex_);
@@ -81,6 +82,7 @@ void Mixer::stopEffect(int id) {
 }
 
 void Mixer::playMusic(int id) {
+    if (!musicOn_) return;
     const MidiFile* m = bank_ ? bank_->music(id) : nullptr;
     std::lock_guard<std::mutex> lock(mutex_);
     musicId_ = id;

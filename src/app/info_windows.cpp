@@ -38,7 +38,7 @@ void InfoWindows::initNews(const std::string& gameDir) {
 
 void InfoWindows::postMessage(int id, int arg) {
     news_.post(id, arg);
-    if (id == 3 || id == 4 || id == 5 || id == 0x24) popup_ = true;   // 0x47BA90 opens the news dialog for these
+    if ((extraEditions && (id == 3 || id == 4 || id == 5 || id == 0x24)) || id == 2) popup_ = true;   // 0x47BA90 opens the news dialog for these
 }
 
 // ---- drawing ----
