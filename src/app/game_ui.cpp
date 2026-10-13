@@ -271,26 +271,46 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     return true;
 }
 
-void GameUi::newCity(int era, int difficulty) {
+void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
     if (defaultMapPath.empty()) { say("No default map available"); return; }
     CityFile map = CityFile::load(defaultMapPath);
-    sim_.startNewCity(map, era, difficulty);
+    sim_.startNewCity(map, era, difficulty, terrain);
     base_ = map;
     avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
     cam_.rotation = 0;
-    cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
+    if (terrain) cam_.centerOn(0x40, 0x40, width_ / 2, height_ / 2);   // 0x412050(view, 0x40, 0x40) at the end of the generator
+    else cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
     group_ = item_ = -1; dragging_ = false; queryOpen_ = false;
     say("New city started");
 }
 
 void GameUi::newCityDialog() {
+    // the original: "Edit New Map" (terrain generation dialog 104) or the flat default map, then the start year and difficulty (dialog 101)
+    Modal mapChoice; mapChoice.title = "New city: map"; mapChoice.options = {"Flat default map", "Random terrain (hills, water, trees)"};
+    const int m = runModal(mapChoice);
+    if (m < 0) return;
+    TerrainParams tp;
+    if (m == 1) {
+        Modal shore; shore.title = "Landform"; shore.options = {"Inland", "Coast", "River", "Coast and river"};
+        const int l = runModal(shore);
+        if (l < 0) return;
+        tp.coast = (l & 1) != 0; tp.river = (l & 2) != 0;
+        auto level = [&](const char* title, int& out) {
+            Modal q; q.title = title; q.options = {"0 %", "25 %", "50 %", "75 %", "100 %"};
+            const int v = runModal(q);
+            if (v < 0) return false;
+            out = v * 47 / 4;
+            return true;
+        };
+        if (!level("Hills", tp.hills) || !level("Water", tp.water) || !level("Trees", tp.trees)) return;
+    }
     Modal year; year.title = "Starting year"; year.options = {"1900", "1950", "2000", "2050"};
     const int era = runModal(year);
     if (era < 0) return;
     Modal diff; diff.title = "Difficulty"; diff.options = {"Easy ($20,000)", "Medium ($10,000)", "Hard ($10K bond)"};
     const int d = runModal(diff);
     if (d < 0) return;
-    newCity(era, d);
+    newCity(era, d, m == 1 ? &tp : nullptr);
 }
 
 // ---- tools -------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 #include "simulation/simulation.h"
 #include "simulation/new_city.h"
+#include "simulation/terrain_gen.h"
 
 #include "world/world_hash.h"
 
@@ -61,8 +62,9 @@ void Simulation::replaceCity(const CityFile& c) {
     impl_->ctx->things = ThingState{};
     startScenario(*impl_->ctx);
 }
-void Simulation::startNewCity(const CityFile& map, int era, int difficulty) {
+void Simulation::startNewCity(const CityFile& map, int era, int difficulty, const TerrainParams* terrain) {
     replaceCity(map);
+    if (terrain) generateTerrain(*impl_->ctx, *terrain);
     NewCityOptions o; o.era = era; o.difficulty = difficulty;
     setupNewCity(impl_->world, impl_->state, impl_->tables, impl_->rng, o);
 }

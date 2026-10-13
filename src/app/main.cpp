@@ -203,6 +203,7 @@ int main(int argc, char** argv) {
                 else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2); }
                 else if (op == "find") { int id = 0; words >> id; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xbld.at(a, b) == id) { std::printf("building %d at %d %d\n", id, a, b); a = b = 128; } }
                 else if (op == "newcity") { int e = 0, d = 0; words >> e >> d; ui.newCity(e, d); }
+                else if (op == "newmap") { int e = 0, d = 0, coast = 0, river = 0; TerrainParams tp; words >> e >> d >> coast >> river >> tp.hills >> tp.water >> tp.trees; tp.coast = coast != 0; tp.river = river != 0; ui.newCity(e, d, &tp); }
                 else if (op == "funds") { int f; words >> f; sim->state().treasury = f; }
                 else if (op == "key") { std::string k; words >> k; ui.keyDown(keyByName(k), false); }
                 else if (op == "budget") { std::string d; words >> d; ui.keyDown(SDLK_B, false); if (!d.empty()) ui.openBudgetDetail(std::atoi(d.c_str())); }

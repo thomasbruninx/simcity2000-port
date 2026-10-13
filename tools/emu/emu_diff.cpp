@@ -23,6 +23,7 @@
 #include "simulation/tool_script.h"
 #include "simulation/availability.h"
 #include "simulation/advisors.h"
+#include "simulation/terrain_gen.h"
 #include "simulation/bonds.h"
 
 using namespace sc2k;
@@ -1022,6 +1023,56 @@ int advisorDiff(const std::string& exe, const std::string& path, long& tiles, lo
     std::printf("%-34s %ld advice choices and 300 opinion polls identical (%zu distinct advisor/advice pairs)\n", path.c_str(), checked, seen.size());
     return failures;
 }
+
+// ---- random terrain: the whole generator 0x410430 on several parameter sets ----
+int terrainGenDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    struct P { bool coast, river; int hills, water, trees; };
+    static const P sets[] = {{false, false, 20, 20, 20}, {true, false, 30, 24, 10}, {false, true, 10, 30, 30}, {true, true, 40, 12, 25}, {false, false, 0, 0, 0}, {true, true, 47, 47, 47}, {true, false, 5, 3, 47}};
+    int variant = 0;
+    for (const P& p : sets) {
+        World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+        const uint32_t seed = 31 + uint32_t(variant), lcgSeed = 0x4321u + uint32_t(variant);
+        Emu e(exe); e.installCrtRand(seed);
+        SimImage img(e);
+        img.load(w, s); img.setLfsr(0x1234); img.stubUi();
+        e.put<uint32_t>(0x4CCB98, lcgSeed);
+        { auto zero = [](Emu&, uint32_t) { return 0u; }; e.nativeImport(0x4EEE10, 4, zero); e.nativeImport(0x4EEDD4, 4, zero); }
+        e.nativeImport(0x4EED44, 0, [](Emu&, uint32_t) { return 0u; });   // wsprintfA (cdecl, varargs): the progress text is not needed
+        // MFC / dialog helpers of the progress window: no-ops with the right stack cleanup
+        for (uint32_t f : {0x4A1B1Cu, 0x4A347Fu, 0x438E00u, 0x40ED80u, 0x41085Du, 0x410872u}) e.patchRet(f);
+        e.patchRetN(0x4A2347, 4); e.patchRetN(0x47FDE0, 8); e.patchRetN(0x414B70, 4); e.patchRetN(0x414DF0, 4); e.patchRetN(0x414F00, 4); e.patchRetN(0x414E50, 4); e.patchRetN(0x424AA0, 4);
+        // SEH frame set-up through FS:[0]
+        {
+            std::vector<uint8_t> code(0x500); e.read(0x410430, code.data(), code.size());
+            for (size_t i = 0; i + 7 <= code.size(); ++i) {
+                const uint32_t va = 0x410430 + uint32_t(i);
+                if (code[i] == 0x64 && code[i + 1] == 0xA1 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t q[6] = {0x31, 0xC0, 0x90, 0x90, 0x90, 0x90}; e.write(va, q, 6); }
+                else if (code[i] == 0x64 && code[i + 1] == 0xA3 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t q[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, q, 6); }
+                else if (code[i] == 0x64 && code[i + 1] == 0x89 && !code[i + 3] && !code[i + 4] && !code[i + 5] && !code[i + 6]) { const uint8_t q[7] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, q, 7); }
+            }
+        }
+        World pw = w; CityState ps = s;
+        CrtRand rng(seed); Lfsr lf(0x1234); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+        ctx.lcg.seed(lcgSeed);
+        std::string report;
+        try { e.call(0x410430, {uint32_t(p.coast), uint32_t(p.river), uint32_t(p.hills), uint32_t(p.water), uint32_t(p.trees)}, img.fakeView); }
+        catch (const std::exception& ex) { std::printf("%-34s set %d: original faulted: %s\n", path.c_str(), variant, ex.what()); ++failures; ++bad; ++tiles; ++variant; continue; }
+        generateTerrain(ctx, TerrainParams{p.coast, p.river, p.hills, p.water, p.trees});
+        World ew = pw; CityState es = ps; img.store(ew, es);
+        std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
+        if (e.crtRandState() != rng.state()) { ++n; d += " rand"; }
+        if (e.get<uint32_t>(0x4CCB98) != ctx.lcg.state()) { ++n; d += " lcg"; }
+        if (e.get<int16_t>(0x4C9830) != int16_t(ps.seaLevel)) { ++n; d += " seaLevel"; }
+        ++tiles; bad += n ? 1 : 0; failures += n ? 1 : 0;
+        std::printf("%-34s coast %d river %d hills %d water %d trees %d: %s%s hash %016llx\n", path.c_str(), p.coast, p.river, p.hills, p.water, p.trees, n ? "DIFF" : "identical", d.c_str(), (unsigned long long)worldFingerprint(pw, ps));
+        ++variant;
+    }
+    return failures;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1043,6 +1094,7 @@ int main(int argc, char** argv) {
             else if (mode == "tools") failures += toolsDiff(exe, argv[i], tiles, bad);
             else if (mode == "disaster") failures += disasterDiff(exe, argv[i], tiles, bad);
             else if (mode == "advisor") failures += advisorDiff(exe, argv[i], tiles, bad);
+            else if (mode == "terrain") failures += terrainGenDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);

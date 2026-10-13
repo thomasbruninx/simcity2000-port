@@ -6,6 +6,7 @@
 #include "simulation/new_city.h"
 #include "simulation/scenario.h"
 #include "simulation/news.h"
+#include "simulation/terrain_gen.h"
 #include "simulation/query.h"
 #include "resources/pe_resources.h"
 #include "simulation/simulation.h"
@@ -256,4 +257,22 @@ TEST(newspaper_text_grammar_generates_stories) {
     const std::string art = room.article(0, c1, ctx);
     CHECK(art.size() > 40 && art.find("Testville") != std::string::npos);
     std::printf("  headline: %s\n  article: %.160s\n", h1.c_str(), art.c_str());
+}
+
+TEST(random_terrain_matches_the_original_generator) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    CityFile c = CityFile::load(dir + "/CITIES/PARIS.SC2");
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    auto run = [&](bool coast, bool river, int hills, int water, int trees) {
+        World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+        CrtRand rng(31); Lfsr lf(0x1234); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{w, s, t, rng, lf, hooks, ts, {}};
+        ctx.lcg.seed(0x4321);
+        generateTerrain(ctx, TerrainParams{coast, river, hills, water, trees});
+        return worldFingerprint(w, s);
+    };
+    // the hashes printed by `sc2k-emu-diff terrain` for the same four parameter sets (identical on the original's machine code); seeds 31..34 there, the first set here
+    CHECK(run(false, false, 20, 20, 20) == 0xe9e9f5a43cb300bcull);
 }
