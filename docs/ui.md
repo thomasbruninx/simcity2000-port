@@ -22,3 +22,12 @@ headlessly (`sc2k-app <dir> city.sc2 --screenshot out.png --do "..."`).
 ## High DPI mode and zoom levels
 * **High DPI mode** (title screen > Settings, top right; saved as `uiscale=` in settings.ini): x1, x1.5, x2, x4. The whole game (map and interface) is laid out in window pixels / scale and stretched to the window with nearest-neighbour scaling through SDL's logical presentation; mouse coordinates are divided by the scale. `--uiscale PCT` overrides it (screenshots).
 * **Map zoom levels**: seven steps (`+`/`-`, wheel, top-bar buttons): the original's three sprite sets (8/16/32-pixel tiles), then the large set magnified 1.5x, 2x, 3x and 4x. The map is drawn into a framebuffer of window size / magnification and stretched, so picking, scrolling and the tile highlights work in that smaller space (`GameUi::mapPx`). Zooming keeps the tile in the middle of the view.
+
+## Menu bar (RT_MENU 3 of SIMCITY.EXE)
+`sc2k-resources SIMCITY.EXE menus` dumps the original's menu templates. The port draws menu 3 (File, Speed, Options, Disasters, Windows, Newspaper, Help; `src/app/menu_bar.*`) above its top bar and runs the original's WM_COMMAND handlers (message map at 0x4D2C48):
+* File: Load City / Load Scenario open the title screen's pickers, New City, Edit New Map, Save (As), Exit; **Load Tile Set** is shown disabled (no alternative tile sets). Speed: the five speeds with the current one checked.
+* Options: Auto-Budget (skips the yearly budget dialog and tune, 0x4736C0), Auto-Goto (the view follows disasters, read by the disaster handlers), Sound Effects, Music (separate switches in the mixer; the original keeps them in the profile).
+* Disasters: Fire (kind 1, random focus within 20 tiles of the view), Flood 2, Air Crash 0x12, Tornado 7, Earthquake 6, Monster 8, Hurricane 0x10, Rioters 3; **No Disasters** toggles `cb4ec` (the flag the random disaster chooser checks; saved in the city file).
+* Windows: Budget, Ordinances, Population (the city window), Graphs; Industry, Neighbors and Map are not ported yet and say so.
+* Newspaper: Subscription (the paper opens itself in April and August, 0x412FE0) and Extra!!! (stories 3, 4, 5 and 0x24 pop the paper up; story 2 always does, 0x47BA90).
+* Not shown: the hidden debug menu (resource 223: More Money, Add All Gifts, Melt Down, Volcano ...) and the help commands (no help file).

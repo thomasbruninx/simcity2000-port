@@ -136,3 +136,10 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 * **Yearly budget**: tune picked from {10016,10005,10002,10010} and the budget window opened before the monthly finance run.
 * **Stadium**: team-name dialog (sport list + name) applied in the tool placement (label 0xFB+sport, militaryMask bit).
 * **Newspaper (second pass)**: decompilation of 0x4780E2 / 0x47B370 / 0x47B460 / 0x47B160 / 0x47B8B0 showed that pages have no article body: headlines plus greeked text bars; the photographs are BITMAPS/400..411.BMP (table 0x4E9418). Font/alignment tables fully decoded. FreeType added (approved) for Times New Roman; `libfreetype` found with pkg-config.
+
+## 2026-10-14 — Session 19: newspaper pictures/fonts/articles, bug fixes, sound mapping, menu bar
+* Newspaper: greeked columns (0x47B160), photographs 400..411.BMP, per-rect fonts; clicking a story opens its article (0x477FF0 -> 0x47A050); GDI default pen/brush (black outline, white page) assumed for the grey bars.
+* XLAB labels are Pascal strings in files but C strings in memory (fixed team names / sign text).
+* Tool sounds from the dispatcher 0x43EBC0: **500 is "built", 0x1F5 "refused"** (the port had them swapped); per-category success sounds; the 0x1FC loop while dragging bulldozer / roads / rails / lines / pipes; 0x453FB0 = Query tool poking a helicopter marker.
+* Menu bar: RT_MENU 3 parsed and its command handlers ported (Options, Disasters, Speed, Newspaper flags).
+* High DPI mode (logical presentation, x1.5/x2/x4) and seven map zoom levels.
