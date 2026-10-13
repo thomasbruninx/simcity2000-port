@@ -64,6 +64,18 @@ int main(int argc, char** argv) {
         const std::string cityPath = args.city.empty() ? args.dir + "/CITIES/NYC.SC2" : args.city;
         CityFile city = CityFile::load(cityPath);
         auto sim = std::make_unique<Simulation>(city, GameTables::fromExe(args.dir + "/SIMCITY.EXE"), 1);
+        // Declared first so it is destroyed last: everything below owns SDL textures / audio streams that must be released before SDL shuts down.
+        struct SdlShutdown {
+            SDL_Window* window = nullptr;
+            SDL_Renderer* renderer = nullptr;
+            SDL_Texture* texture = nullptr;
+            ~SdlShutdown() {
+                if (texture) SDL_DestroyTexture(texture);
+                if (renderer) SDL_DestroyRenderer(renderer);
+                if (window) SDL_DestroyWindow(window);
+                SDL_Quit();
+            }
+        } sdl;
         const PeImage exe = PeImage::load(args.dir + "/SIMCITY.EXE");
         const PeResources resources(exe);
         SpriteSet sprites = SpriteSet::load(args.dir);
@@ -109,8 +121,8 @@ int main(int argc, char** argv) {
         if (!SDL_Init(SDL_INIT_VIDEO)) { std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
         if (!headless) { audioDevice = std::make_unique<AudioDevice>(mixer); if (!audioDevice->ok()) std::fprintf(stderr, "audio: %s (continuing without sound)\n", SDL_GetError()); }
 
-        SDL_Window* window = nullptr;
-        SDL_Renderer* sdlr = nullptr;
+        SDL_Window*& window = sdl.window;
+        SDL_Renderer*& sdlr = sdl.renderer;
         SDL_Surface* target = nullptr;
         if (headless) {
             target = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_ARGB8888);
@@ -121,7 +133,7 @@ int main(int argc, char** argv) {
         }
         if (!sdlr) { std::fprintf(stderr, "SDL window/renderer: %s\n", SDL_GetError()); return 1; }
 
-        SDL_Texture* tex = nullptr;
+        SDL_Texture*& tex = sdl.texture;
         Framebuffer fb;
         float scaleX = 1.f, scaleY = 1.f;   // window points -> framebuffer pixels
         Uint64 last = SDL_GetTicks(), thingAcc = 0;
@@ -286,10 +298,6 @@ int main(int argc, char** argv) {
         }
 
         while (running) step();
-        if (tex) SDL_DestroyTexture(tex);
-        SDL_DestroyRenderer(sdlr);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "error: %s\n", ex.what());
         return 1;
