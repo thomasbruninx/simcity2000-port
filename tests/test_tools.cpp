@@ -1,6 +1,7 @@
 #include "test.h"
 #include "save/city.h"
 #include "simulation/tool_script.h"
+#include "simulation/availability.h"
 #include "simulation/finance.h"
 #include "world/world_hash.h"
 
@@ -69,4 +70,21 @@ TEST(budget_amounts_match_the_january_settlement) {
     runMonthlyFinance(s, t, rng);
     CHECK(s.treasury - before == expected);
     CHECK(budgetAnnual(s, t, kPolice) == static_cast<long long>(s.budget[kPolice].currentCosts) * s.budget[kPolice].fundingPercent / t.budgetDivisor[kPolice]);
+}
+
+TEST(tool_availability_follows_the_dated_events) {
+    GameTables t;
+    t.toolAvailBase = {31, 3, 3, 3, 7, 0, 5, 5, 1, 3, 3, 3, 15, 15, 31, 0, 0, 0};
+    CityState s;
+    s.eventYears.fill(1950);
+    ToolAvailability a = ToolAvailability::fromState(s, t);
+    CHECK(a.allows(3, 2) && a.allows(3, 3) && a.allows(3, 4) && !a.allows(3, 5) && !a.allows(3, 6));   // coal, hydro, oil only
+    CHECK(!a.allows(6, 1) && a.allows(6, 0) && a.allows(6, 2));
+    s.eventYears[0] = 0; s.eventYears[1] = 0; s.eventYears[7] = 0;
+    a = ToolAvailability::fromState(s, t);
+    CHECK(a.allows(3, 5) && a.allows(3, 6) && a.allows(6, 1) && a.allows(6, 3));
+    s.ordinances = 0x20000;
+    CHECK(!ToolAvailability::fromState(s, t).allows(3, 6));
+    a.applyEvent(12, s); a.applyEvent(13, s);
+    CHECK(a.allows(5, 5) && a.allows(5, 6) && !a.allows(5, 7));
 }

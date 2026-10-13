@@ -42,7 +42,7 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, U
 }  // namespace
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
-    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources) {}
+    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {}
 
 std::string GameUi::moneyText(int v) const {
     char buf[32];
@@ -139,7 +139,7 @@ void GameUi::mouseDown(int x, int y, int button) {
             const int n = static_cast<int>(cat[static_cast<size_t>(group_)].items.size());
             for (int i = 0; i < n; ++i)
                 if (itemRect(i).contains(x, y)) {
-                    if (cat[static_cast<size_t>(group_)].items[static_cast<size_t>(i)].kind == ToolKind::Unavailable) say("Not ported yet");
+                    if (!available(cat[static_cast<size_t>(group_)].items[static_cast<size_t>(i)])) say(cat[static_cast<size_t>(group_)].items[static_cast<size_t>(i)].kind == ToolKind::Unavailable ? "Not ported yet" : "Not invented yet");
                     else { item_ = i; menuOpen_ = false; }
                     return;
                 }
@@ -422,6 +422,18 @@ void GameUi::toolMessage(int id) {
     say(s.empty() ? "(message " + std::to_string(id) + ")" : s);
 }
 
+bool GameUi::available(const ToolItem& t) const {
+    if (t.kind == ToolKind::Unavailable) return false;
+    if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain) return true;
+    if (t.kind == ToolKind::Zone && t.cat == 0) return true;   // de-zone
+    return avail_.allows(t.cat, t.sub);
+}
+
+void GameUi::scheduledEvent(int index) {
+    avail_.applyEvent(index, sim_.state());
+    say(index <= 11 ? "A new tool has been invented!" : "A new arcology design is available!");
+}
+
 void GameUi::postMessage(int, int) {}
 void GameUi::showDialog(int id) { toolMessage(id); }
 
@@ -498,7 +510,7 @@ void GameUi::draw(SDL_Renderer* r) {
         for (size_t i = 0; i < g.items.size(); ++i) {
             const Rect rc = itemRect(static_cast<int>(i));
             const bool sel = static_cast<int>(i) == item_;
-            const bool dead = g.items[i].kind == ToolKind::Unavailable;
+            const bool dead = !available(g.items[i]);
             fill(r, rc.x, rc.y, rc.w, rc.h, sel ? 64 : 38, sel ? 76 : 42, sel ? 110 : 54);
             const Uint8 shade = dead ? 120 : 235;
             text(r, rc.x + 6, rc.y + 5, g.items[i].name, shade, shade, shade);

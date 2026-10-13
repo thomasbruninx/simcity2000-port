@@ -20,6 +20,7 @@
 #include "simulation/power.h"
 #include "simulation/water.h"
 #include "simulation/tool_script.h"
+#include "simulation/availability.h"
 
 using namespace sc2k;
 using namespace sc2k::emu;
@@ -764,6 +765,31 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
     return 0;
 }
 
+
+int availDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    for (int variant = 0; variant < 3; ++variant) {
+        CityState s = CityState::fromCity(c);
+        if (variant == 1) s.ordinances |= 0x20000;                      // nuclear free zone: no nuclear plant
+        if (variant == 2) for (int i = 0; i < 17; ++i) s.eventYears[size_t(i)] = i % 2 ? 0 : int16_t(1900 + i);
+        Emu e(exe);
+        e.patchRet(0x441800); e.patchRet(0x40AD30); e.patchRet(0x40AD00); e.patchRet(0x40ACC0);
+        for (int i = 0; i < 17; ++i) e.put<int16_t>(0x4CA448 + 2u * uint32_t(i), s.eventYears[size_t(i)]);
+        e.put<uint32_t>(0x4C9A58, s.ordinances);
+        e.call(0x469A10);
+        const ToolAvailability a = ToolAvailability::fromState(s, t);
+        std::string detail; int d = 0;
+        for (int k = 0; k < 18; ++k) if (k != 5 && e.get<int32_t>(0x4E8A00 + 4u * uint32_t(k)) != int32_t(a.mask[size_t(k)])) { ++d; detail += " mask" + std::to_string(k); }
+        if (e.get<int32_t>(0x4E8E78) != int32_t(a.plantMask)) { ++d; detail += " plants"; }
+        if (e.get<int32_t>(0x4CCB44) != a.arcologies) { ++d; detail += " arco"; }
+        tiles += 1; bad += d != 0; failures += d != 0;
+        std::printf("%-34s variant %d %s%s\n", path.c_str(), variant, d ? "DIVERGED" : "identical", detail.c_str());
+    }
+    return failures;
+}
+
 int toolsDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
     CityFile c = CityFile::load(path);
     GameTables t = GameTables::fromExe(exe);
@@ -795,6 +821,7 @@ int main(int argc, char** argv) {
             else if (mode == "tick") failures += tickDiff(exe, argv[i], tiles, bad);
             else if (mode == "economy") failures += economyDiff(exe, argv[i], tiles, bad);
             else if (mode == "things") failures += thingsDiff(exe, argv[i], tiles, bad);
+            else if (mode == "avail") failures += availDiff(exe, argv[i], tiles, bad);
             else if (mode == "tools") failures += toolsDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);

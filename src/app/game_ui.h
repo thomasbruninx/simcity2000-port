@@ -16,6 +16,7 @@
 #include "render/map_renderer.h"
 #include "resources/pe_resources.h"
 #include "save/city.h"
+#include "simulation/availability.h"
 #include "simulation/clock.h"
 #include "simulation/simulation.h"
 
@@ -55,6 +56,7 @@ public:
     void toolMessage(int id) override;
     void postMessage(int id, int arg) override;
     void showDialog(int stringId) override;
+    void scheduledEvent(int index) override;                 // a dated event fired: unlock tools
 
 private:
     struct Rect { int x, y, w, h; bool contains(int px, int py) const { return px >= x && py >= y && px < x + w && py < y + h; } };
@@ -81,6 +83,8 @@ private:
     int messageMs_ = 0;
     Modal* modal_ = nullptr;
     BudgetWindow budget_;
+    ToolAvailability avail_;
+    bool available(const ToolItem& t) const;
     std::unique_ptr<IconStrip> toolbarIcons_, terrainIcons_, bookIcon_;   // created on the first draw (need the renderer)
     void drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y);
 
