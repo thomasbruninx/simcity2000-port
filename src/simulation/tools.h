@@ -44,6 +44,9 @@ bool bulldozeTile(SimContext& c, ToolState& ts, int a, int b);
 // Zone painting over the rectangle spanned by (a0,b0)-(a1,b1) (0x448F70). `zoneType` 0 = de-zone, 1..6 R/C/I, 8 airport, 9 seaport.
 bool paintZone(SimContext& c, ToolState& ts, int a0, int b0, int a1, int b1, int zoneType, int unitCost);
 
+// Cost of painting the rectangle (tiles that would change zone x unit cost, 0x447D00).
+int zoneRectCost(SimContext& c, int a0, int b0, int a1, int b1, int zoneType, int unitCost);
+
 // Cost / route of dragging a network from (a0,b0) to (a1,b1) without changing anything (0x448410).
 PathPreview previewNetwork(SimContext& c, ToolState& ts, NetworkKind kind, int a0, int b0, int a1, int b1, int unitCost);
 

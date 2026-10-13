@@ -20,11 +20,14 @@ public:
     const std::vector<Section>& sections() const { return sections_; }
     uint32_t sizeOfImage() const { return sizeOfImage_; }
     std::span<const uint8_t> file() const { return file_; }
+    uint32_t resourceRva() const { return resourceRva_; }   // data directory 2 (0 = none)
+    // File bytes at an RVA (n bytes); throws if not backed by file data.
+    std::span<const uint8_t> bytesAtRva(uint32_t rva, size_t n) const { return bytesAt(rva + imageBase_, n); }
 
 private:
     std::vector<uint8_t> file_;
     std::vector<Section> sections_;
-    uint32_t imageBase_ = 0, timestamp_ = 0, sizeOfImage_ = 0;
+    uint32_t imageBase_ = 0, timestamp_ = 0, sizeOfImage_ = 0, resourceRva_ = 0;
 };
 
 // Build .022 of the 1995 CD Collection: PE timestamp 0x302FEA8A (docs/known-versions.md).

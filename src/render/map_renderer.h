@@ -47,6 +47,10 @@ public:
     // `palette` is read on every draw: pass PaletteCycler::palette() to animate the water.
     MapRenderer(const GameTables& tables, const SpriteSet& sprites, const std::array<uint32_t, 256>& palette) : t_(tables), sprites_(sprites), pal_(palette) {}
     void draw(Framebuffer& fb, const World& w, const CityState& s, const Camera& cam, const RenderLayers& layers = {}) const;
+    // Screen position -> file tile (the front-most tile whose top diamond contains the point); false outside the map.
+    bool pickTile(const World& w, const Camera& cam, int px, int py, int& a, int& b) const;
+    // Blends `color` over the top diamond of file tile (a, b); outline draws only its border.
+    void highlightTile(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, uint32_t color, int alpha, bool outline = false) const;
 
 private:
     void blit(Framebuffer& fb, int spriteId, int x, int yTop, bool flip, bool shadow = false) const;

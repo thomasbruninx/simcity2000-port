@@ -303,6 +303,7 @@ bool bulldozeTile(SimContext& c, ToolState& ts, int a, int b) {   // 0x442C20
         if (id < 0xD) {
             if (id > 5 && (static_cast<unsigned>(c.rng.next()) & 0xFFFF) % 0x14 == 0) {   // 1 in 20 trees: the environmentalists object
                 c.hooks.postMessage(0x28, 0);
+                c.hooks.toolMessage(0xEC);   // "Citizens are protesting your ..."
                 return false;
             }
             setTile(c, a, b, 0);
@@ -327,20 +328,25 @@ bool bulldozeTile(SimContext& c, ToolState& ts, int a, int b) {   // 0x442C20
 }
 
 // ---- zoning ----
+int zoneRectCost(SimContext& c, int a0, int b0, int a1, int b1, int zoneType, int unitCost) {   // 0x447D00
+    World& w = c.w;
+    int count = 0;
+    for (int a = std::max(0, std::min(a0, a1)); a <= std::min(0x7F, std::max(a0, a1)); ++a)
+        for (int b = std::max(0, std::min(b0, b1)); b <= std::min(0x7F, std::max(b0, b1)); ++b) {
+            if (w.xter.at(a, b) != 0) continue;
+            const int id = w.xbld.at(a, b), z = w.xzon.at(a, b) & 0xF;
+            if (id < 0x1D && id != 5 && id != 0xD && z != 7 && z != zoneType) ++count;
+        }
+    return unitCost * count;
+}
+
 bool paintZone(SimContext& c, ToolState& ts, int a0, int b0, int a1, int b1, int zoneType, int unitCost) {   // 0x448F70
     World& w = c.w;
     ts.kind = 5;
     const int lo_a = std::max(0, std::min(a0, a1)), hi_a = std::min(0x7F, std::max(a0, a1));
     const int lo_b = std::max(0, std::min(b0, b1)), hi_b = std::min(0x7F, std::max(b0, b1));
     if (inMap(a0, b0) && (w.xbit.at(a0, b0) & kWater)) return false;
-    int count = 0;   // 0x447D00: tiles of the rectangle that would change zone
-    for (int a = lo_a; a <= hi_a; ++a)
-        for (int b = lo_b; b <= hi_b; ++b) {
-            if (w.xter.at(a, b) != 0) continue;
-            const int id = w.xbld.at(a, b), z = w.xzon.at(a, b) & 0xF;
-            if (id < 0x1D && id != 5 && id != 0xD && z != 7 && z != zoneType) ++count;
-        }
-    const int cost = unitCost * count;
+    const int cost = zoneRectCost(c, a0, b0, a1, b1, zoneType, unitCost);
     ts.cost = cost;
     if (cost == 0 || cost > c.s.treasury) return false;
     c.s.treasury -= cost;
@@ -708,7 +714,7 @@ bool placeBuilding(SimContext& c, ToolState&, int category, int sub, int a, int 
                 if (z == 1 || z == 2) ++zoned;
             }
         if (static_cast<int16_t>(c.lfsr.mod(200)) < zoned) {
-            c.hooks.postMessage(0x200, 0);
+            c.hooks.toolMessage(0x6A);   // "Your citizens urge you to ..."
             return false;
         }
     }

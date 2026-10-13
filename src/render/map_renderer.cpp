@@ -265,6 +265,53 @@ void MapRenderer::drawThing(Framebuffer& fb, const World& w, const Camera& cam, 
     blit(fb, sprite, x, y, flip);
 }
 
+namespace {
+// centre of the top diamond of file tile (a, b) on screen
+void tileCentre(const World& w, const Camera& cam, int a, int b, int& cx, int& cy) {
+    int da, db;
+    toDisplay(cam.rotation, a, b, da, db);
+    const int z = cam.zoom, tw = 4 << z, th = 2 << z, step = 3 << z;
+    const int xter = w.xter.at(a, b);
+    const uint16_t aw = w.altm.at(a, b);
+    const int alt = xter < 0x10 ? (aw & 0x1F) : (aw & 0x3E0) >> 5;
+    cx = (da - db) * tw + cam.scrollX + tw;
+    cy = (da + db) * th + cam.scrollY - alt * step - th;
+}
+}  // namespace
+
+bool MapRenderer::pickTile(const World& w, const Camera& cam, int px, int py, int& oa, int& ob) const {
+    const int z = cam.zoom, tw = 4 << z, th = 2 << z;
+    int bestSum = -1;
+    for (int a = 0; a < 128; ++a)
+        for (int b = 0; b < 128; ++b) {
+            int cx, cy;
+            tileCentre(w, cam, a, b, cx, cy);
+            if (std::abs(px - cx) * th + std::abs(py - cy) * tw > tw * th) continue;
+            int da, db;
+            toDisplay(cam.rotation, a, b, da, db);
+            if (da + db >= bestSum) { bestSum = da + db; oa = a; ob = b; }
+        }
+    return bestSum >= 0;
+}
+
+void MapRenderer::highlightTile(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, uint32_t color, int alpha, bool outline) const {
+    if (!inMapAB(a, b)) return;
+    int cx, cy;
+    tileCentre(w, cam, a, b, cx, cy);
+    const int z = cam.zoom, tw = 4 << z, th = 2 << z;
+    auto put = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= fb.width || y >= fb.height) return;
+        uint32_t& d = fb.pixels[static_cast<size_t>(y) * static_cast<size_t>(fb.width) + static_cast<size_t>(x)];
+        auto mix = [&](int shift) { const int dv = (d >> shift) & 0xFF, cv = (color >> shift) & 0xFF; return static_cast<uint32_t>((dv * (255 - alpha) + cv * alpha) / 255) << shift; };
+        d = 0xFF000000u | mix(16) | mix(8) | mix(0);
+    };
+    for (int y = -th; y <= th; ++y) {
+        const int half = (th - std::abs(y)) * tw / th;
+        if (outline) { put(cx - half, cy + y); put(cx + half, cy + y); put(cx - half + 1, cy + y); put(cx + half - 1, cy + y); }
+        else for (int x = -half; x <= half; ++x) put(cx + x, cy + y);
+    }
+}
+
 void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, const Camera& cam, const RenderLayers& layers) const {
     const int z = cam.zoom;
     const int zoomBase = 500 * z;

@@ -22,7 +22,8 @@ Confidence labels used everywhere: **VERIFIED**, **STRONG INFERENCE**, **HYPOTHE
 | `ghidra/*.java` | Headless Ghidra helpers: export functions, decompile, disassemble, xrefs |
 | `demand_model.py`, `rng_model.py` | Independent Python models used to cross-check ports |
 | `sc2k-save-info`, `sc2k-verify` (C++, built by CMake) | Save summary; compare scans with saved cities |
-| `sc2k-app` (C++, SDL3) | Interactive viewer + live simulation of a saved city: `sc2k-app <SC2K dir> [city.sc2]` (scroll, zoom, rotate, speed); `--screenshot out.png --days N` for a headless frame |
+| `sc2k-app` (C++, SDL3) | The game so far: live simulation of a saved city with toolbar (bulldozer, zoning, roads, rail, subway, power, pipes, buildings), bridges, surface / underground view, power and water overlays: `sc2k-app <SC2K dir> [city.sc2]`. Headless: `--screenshot out.png --days N --view underground|power|water --do "tool Road (bridge; drag 56 56 56 74; ..."` renders the real UI to a PNG |
+| `sc2k-resources` (C++) | Lists the string table / extracts the bitmap resources of your SIMCITY.EXE (the app reads its menu texts from there; nothing is stored in the repo) |
 | `sc2k-render` (C++) | Draw a city to a PNG: `sc2k-render <SC2K dir> city.sc2 out.png [zoom] [w] [h] [a b] [rotation]` |
 | `sc2k-sim` (C++) | Headless simulation of a saved city: `sc2k-sim SIMCITY.EXE city.sc2 <days> [thing-frames-per-day] [out.sc2]` |
 | `sc2k-emu-diff` (C++, optional, needs Unicorn) | Differential tests against the original machine code: `power water env demand finance zone destroy things economy tick` (`tools/run_emu_diffs.sh`) |

@@ -34,6 +34,7 @@ PeImage PeImage::load(const std::string& path) {
     if (rd16(d, opt) != 0x10B) throw Sc2Error("only PE32 is supported");
     p.imageBase_ = rd32(d, opt + 28);
     p.sizeOfImage_ = rd32(d, opt + 56);
+    if (rd32(d, opt + 92) > 2) p.resourceRva_ = rd32(d, opt + 96 + 2 * 8);   // NumberOfRvaAndSizes, data directory[2] = resources
     size_t so = opt + optSize;
     for (uint16_t i = 0; i < nsec; ++i, so += 40) {
         Section s{rd32(d, so + 12), rd32(d, so + 8), rd32(d, so + 20), rd32(d, so + 16)};

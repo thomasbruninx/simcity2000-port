@@ -1,0 +1,455 @@
+#include "app/game_ui.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include "save/error.h"
+
+namespace sc2k {
+namespace {
+constexpr int kTopBar = 20, kGroupW = 132, kGroupH = 18, kItemW = 290, kItemH = 17, kBottomBar = 22;
+constexpr const char* kMonths[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+constexpr const char* kSpeedNames[6] = {"", "Paused", "Turtle", "Llama", "Cheetah", "Swallow"};
+
+void fill(SDL_Renderer* r, int x, int y, int w, int h, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca = 255) {
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    const SDL_FRect f{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
+    SDL_RenderFillRect(r, &f);
+}
+void frame(SDL_Renderer* r, int x, int y, int w, int h, Uint8 cr, Uint8 cg, Uint8 cb) {
+    SDL_SetRenderDrawColor(r, cr, cg, cb, 255);
+    const SDL_FRect f{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
+    SDL_RenderRect(r, &f);
+}
+void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, Uint8 cg = 235, Uint8 cb = 235) {
+    SDL_SetRenderDrawColor(r, cr, cg, cb, 255);
+    SDL_RenderDebugText(r, static_cast<float>(x), static_cast<float>(y), s.c_str());
+}
+}  // namespace
+
+GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
+    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)) {}
+
+std::string GameUi::moneyText(int v) const {
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "$%d", std::abs(v));
+    std::string digits = buf + 1, out;
+    for (size_t i = 0; i < digits.size(); ++i) {
+        if (i && (digits.size() - i) % 3 == 0) out.push_back(',');
+        out.push_back(digits[i]);
+    }
+    return (v < 0 ? "-$" : "$") + out;
+}
+
+const ToolItem* GameUi::tool() const {
+    const auto& cat = toolCatalog();
+    if (group_ < 0 || group_ >= static_cast<int>(cat.size())) return nullptr;
+    const auto& g = cat[static_cast<size_t>(group_)];
+    if (item_ < 0 || item_ >= static_cast<int>(g.items.size())) return nullptr;
+    return &g.items[static_cast<size_t>(item_)];
+}
+
+int GameUi::unitCost(const ToolItem& t) const { return toolCost(sim_.context(), t.cat, t.sub); }
+
+void GameUi::say(const std::string& s) { message_ = s; messageMs_ = 6000; }
+
+bool GameUi::selectTool(const std::string& name) {
+    const auto& cat = toolCatalog();
+    for (size_t g = 0; g < cat.size(); ++g)
+        for (size_t i = 0; i < cat[g].items.size(); ++i)
+            if (name == cat[g].items[i].name || (std::strstr(cat[g].items[i].name, name.c_str()) == cat[g].items[i].name)) {
+                group_ = static_cast<int>(g); item_ = static_cast<int>(i); menuOpen_ = false;
+                return cat[g].items[i].kind != ToolKind::Unavailable;
+            }
+    return false;
+}
+
+bool GameUi::openMenu(const std::string& groupName) {
+    const auto& cat = toolCatalog();
+    for (size_t g = 0; g < cat.size(); ++g)
+        if (groupName == cat[g].name) { group_ = static_cast<int>(g); item_ = std::max(item_, 0); menuOpen_ = true; return true; }
+    return false;
+}
+
+GameUi::Rect GameUi::groupRect(int i) const { return {0, kTopBar + i * kGroupH, kGroupW, kGroupH}; }
+GameUi::Rect GameUi::itemRect(int i) const { return {kGroupW + 2, kTopBar + std::max(0, group_) * kGroupH + i * kItemH, kItemW, kItemH}; }
+
+bool GameUi::overUi(int x, int y) const {
+    if (modal_) return true;
+    if (y < kTopBar || y >= height_ - kBottomBar) return true;
+    const int groups = static_cast<int>(toolCatalog().size());
+    if (x < kGroupW && y < kTopBar + groups * kGroupH) return true;
+    if (menuOpen_ && group_ >= 0) {
+        const int n = static_cast<int>(toolCatalog()[static_cast<size_t>(group_)].items.size());
+        if (itemRect(0).x <= x && x < itemRect(0).x + kItemW && y >= itemRect(0).y && y < itemRect(0).y + n * kItemH) return true;
+    }
+    return false;
+}
+
+void GameUi::update(int dtMs) {
+    if (messageMs_ > 0) { messageMs_ -= dtMs; if (messageMs_ <= 0) message_.clear(); }
+}
+
+// ---- input -------------------------------------------------------------------------------------------------------------
+
+void GameUi::mouseDown(int x, int y, int button) {
+    mouseX_ = x; mouseY_ = y;
+    if (modal_) {
+        const int n = static_cast<int>(modal_->options.size());
+        const int bx = (width_ - 520) / 2, by = (height_ - (70 + 22 * n)) / 2;
+        for (int i = 0; i < n; ++i)
+            if (Rect{bx + 20, by + 50 + 22 * i, 480, 20}.contains(x, y)) modal_->result = i;
+        return;
+    }
+    if (button != 1) { scrolling_ = true; return; }
+    if (overUi(x, y)) {
+        const auto& cat = toolCatalog();
+        for (size_t g = 0; g < cat.size(); ++g)
+            if (groupRect(static_cast<int>(g)).contains(x, y)) {
+                group_ = static_cast<int>(g);
+                item_ = std::max(0, item_ < static_cast<int>(cat[g].items.size()) ? item_ : 0);
+                if (cat[g].items.size() == 1) { item_ = 0; menuOpen_ = false; } else menuOpen_ = true;
+                return;
+            }
+        if (menuOpen_ && group_ >= 0) {
+            const int n = static_cast<int>(cat[static_cast<size_t>(group_)].items.size());
+            for (int i = 0; i < n; ++i)
+                if (itemRect(i).contains(x, y)) {
+                    if (cat[static_cast<size_t>(group_)].items[static_cast<size_t>(i)].kind == ToolKind::Unavailable) say("Not ported yet");
+                    else { item_ = i; menuOpen_ = false; }
+                    return;
+                }
+        }
+        if (y >= height_ - kBottomBar) {   // view buttons
+            if (x < 100) layers.underground = !layers.underground;
+            else if (x < 180) { layers.powerOverlay = !layers.powerOverlay; }
+            else if (x < 260) { layers.waterOverlay = !layers.waterOverlay; }
+        }
+        return;
+    }
+    menuOpen_ = false;
+    const ToolItem* t = tool();
+    int a, b;
+    if (!renderer_.pickTile(sim_.world(), cam_, x, y, a, b)) return;
+    if (!t) { queryTile(a, b); return; }
+    switch (t->kind) {
+        case ToolKind::Bulldoze: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
+        case ToolKind::Zone:
+        case ToolKind::Network: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
+        case ToolKind::Building:
+        case ToolKind::Query: applyClick(a, b); break;
+        case ToolKind::Unavailable: break;
+    }
+}
+
+void GameUi::mouseUp(int x, int y, int button) {
+    mouseX_ = x; mouseY_ = y;
+    if (button != 1) { scrolling_ = false; return; }
+    if (dragging_) { mouseMove(x, y); finishDrag(); }
+    dragging_ = false;
+}
+
+void GameUi::mouseMove(int x, int y) {
+    const int dx = x - mouseX_, dy = y - mouseY_;
+    mouseX_ = x; mouseY_ = y;
+    if (scrolling_) { cam_.scrollX += dx; cam_.scrollY += dy; return; }
+    int a, b;
+    if (overUi(x, y) || !renderer_.pickTile(sim_.world(), cam_, x, y, a, b)) { hoverA_ = hoverB_ = -1; return; }
+    hoverA_ = a; hoverB_ = b;
+    if (!dragging_ || (a == lastA_ && b == lastB_)) return;
+    const ToolItem* t = tool();
+    if (!t) return;
+    if (t->kind == ToolKind::Bulldoze) {   // every tile the cursor crosses
+        int ca = lastA_, cb = lastB_;
+        while (ca != a || cb != b) {
+            if (std::abs(a - ca) >= std::abs(b - cb)) ca += a > ca ? 1 : -1; else cb += b > cb ? 1 : -1;
+            bulldozeAt(ca, cb);
+        }
+    }
+    lastA_ = a; lastB_ = b;
+    if (t->kind != ToolKind::Bulldoze) updatePreview();
+}
+
+void GameUi::wheel(int, int, int dy) {
+    if (dy > 0) cam_.zoom = std::min(2, cam_.zoom + 1);
+    else if (dy < 0) cam_.zoom = std::max(0, cam_.zoom - 1);
+}
+
+bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
+    if (modal_) {
+        if (k == SDLK_ESCAPE) modal_->result = -1;
+        else if (k == SDLK_RETURN) modal_->result = 0;
+        return true;
+    }
+    if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
+    if (k == SDLK_ESCAPE) {
+        if (menuOpen_) menuOpen_ = false;
+        else if (group_ >= 0) { group_ = item_ = -1; dragging_ = false; }
+        else return false;
+    } else if (k == SDLK_SPACE) clock_.speed = clock_.speed == GameSpeed::Paused ? GameSpeed::Llama : GameSpeed::Paused;
+    else if (k >= SDLK_1 && k <= SDLK_5) clock_.speed = static_cast<GameSpeed>(k - SDLK_1 + 1);
+    else if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) cam_.zoom = std::min(2, cam_.zoom + 1);
+    else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) cam_.zoom = std::max(0, cam_.zoom - 1);
+    else if (k == SDLK_R) { cam_.rotation = (cam_.rotation + 1) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2); }
+    else if (k == SDLK_U) layers.underground = !layers.underground;
+    else if (k == SDLK_P) layers.powerOverlay = !layers.powerOverlay;
+    else if (k == SDLK_O) layers.waterOverlay = !layers.waterOverlay;
+    return true;
+}
+
+// ---- tools -------------------------------------------------------------------------------------------------------------
+
+void GameUi::bulldozeAt(int a, int b) {
+    ts_.underground = layers.underground;
+    const int before = sim_.state().treasury;
+    if (!bulldozeTile(sim_.context(), ts_, a, b) && message_.empty()) say(sim_.state().treasury < toolCost(sim_.context(), 0, 0) ? "Not enough funds" : "Nothing to bulldoze here");
+    (void)before;
+}
+
+std::pair<int, int> GameUi::footprint(const ToolItem& t, int a, int b, int& size) const {
+    size = sim_.tables().toolBuildingSize[static_cast<size_t>(t.cat * 12 + t.sub)];
+    if (size == 255 || size < 1) size = 1;
+    const int sz = size - 1;
+    if (sz > 1) return {a - 1, b - 1};
+    return {a, b};
+}
+
+void GameUi::updatePreview() {
+    const ToolItem* t = tool();
+    preview_ = PathPreview{};
+    previewCost_ = 0;
+    if (!t || !dragging_) return;
+    SimContext& c = sim_.context();
+    if (t->kind == ToolKind::Network) {
+        World& w = sim_.world();
+        const bool surface = t->net != NetworkKind::Subway && t->net != NetworkKind::Pipe;
+        if (surface && (w.xbit.at(startA_, startB_) & xbit::kWater) && w.xter.at(startA_, startB_) < 0x40) return;   // a click on the shore starts a bridge, no path
+        ToolState scratch = ts_;
+        preview_ = previewNetwork(c, scratch, t->net, startA_, startB_, lastA_, lastB_, unitCost(*t));
+        previewCost_ = preview_.cost;
+    } else if (t->kind == ToolKind::Zone) {
+        previewCost_ = zoneRectCost(c, startA_, startB_, lastA_, lastB_, t->zone, unitCost(*t));
+    }
+}
+
+void GameUi::finishDrag() {
+    const ToolItem* t = tool();
+    if (!t) return;
+    SimContext& c = sim_.context();
+    const int funds = sim_.state().treasury;
+    bool ok = false;
+    if (t->kind == ToolKind::Network) {
+        ok = buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, lastA_, lastB_);
+        if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
+        else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build that here");
+    } else if (t->kind == ToolKind::Zone) {
+        const int cost = zoneRectCost(c, startA_, startB_, lastA_, lastB_, t->zone, unitCost(*t));
+        ok = paintZone(c, ts_, startA_, startB_, lastA_, lastB_, t->zone, unitCost(*t));
+        if (ok) say("Zoned for " + moneyText(cost));
+        else say(cost > funds ? "Not enough funds (" + moneyText(cost) + ")" : "Nothing to zone there");
+    }
+    preview_ = PathPreview{};
+    previewCost_ = 0;
+}
+
+void GameUi::applyClick(int a, int b) {
+    const ToolItem* t = tool();
+    if (!t) return;
+    if (t->kind == ToolKind::Query) { queryTile(a, b); return; }
+    if (t->kind != ToolKind::Building) return;
+    const int cost = unitCost(*t);
+    if (sim_.state().treasury < cost) { say("Not enough funds (" + moneyText(cost) + ")"); return; }
+    message_.clear();
+    if (placeBuilding(sim_.context(), ts_, t->cat, t->sub, a, b)) say(std::string(t->name) + " built for " + moneyText(cost));
+    else if (message_.empty()) say(std::string("Can't build the ") + t->name + " here");
+}
+
+void GameUi::queryTile(int a, int b) {
+    const World& w = sim_.world();
+    char buf[200];
+    std::snprintf(buf, sizeof buf, "(%d,%d) tile %02X  zone %d  terrain %02X  alt %d  power %s  water %s  traffic %d", a, b, w.xbld.at(a, b), w.xzon.at(a, b) & 0xF, w.xter.at(a, b),
+                  w.altm.at(a, b) & 0x1F, (w.xbit.at(a, b) & xbit::kPowered) ? "on" : "off", (w.xbit.at(a, b) & xbit::kWatered) ? "on" : "off", w.xtrf.at(a >> 1, b >> 1));
+    say(buf);
+}
+
+void GameUi::dragTool(int a0, int b0, int a1, int b1) {
+    const ToolItem* t = tool();
+    if (!t) return;
+    startA_ = lastA_ = a0; startB_ = lastB_ = b0;
+    if (t->kind == ToolKind::Building || t->kind == ToolKind::Query) { applyClick(a0, b0); return; }
+    dragging_ = true;
+    if (t->kind == ToolKind::Bulldoze) {
+        int ca = a0, cb = b0;
+        bulldozeAt(ca, cb);
+        while (ca != a1 || cb != b1) {
+            if (std::abs(a1 - ca) >= std::abs(b1 - cb)) ca += a1 > ca ? 1 : -1; else cb += b1 > cb ? 1 : -1;
+            bulldozeAt(ca, cb);
+        }
+    } else {
+        lastA_ = a1; lastB_ = b1;
+        updatePreview();
+        finishDrag();
+    }
+    dragging_ = false;
+}
+
+bool GameUi::saveCity(const std::string& path) {
+    try {
+        const std::vector<uint8_t> bytes = sim_.toCity(base_).serialize();
+        FILE* f = std::fopen(path.c_str(), "wb");
+        if (!f) return false;
+        const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+        std::fclose(f);
+        return ok;
+    } catch (const std::exception&) { return false; }
+}
+
+// ---- questions asked by the tool code ------------------------------------------------------------------------------------
+
+int GameUi::runModal(Modal& m) {
+    if (headless || !pump) return 0;
+    modal_ = &m;
+    while (m.result == -2) {
+        if (!pump()) { m.result = -1; break; }
+    }
+    modal_ = nullptr;
+    return m.result;
+}
+
+bool GameUi::confirm(int id) {
+    Modal m;
+    if (id == 0x6D || id == 0x6E) {
+        const int fee = id == 0x6D ? 1000 : 1500;
+        m.title = res_.string(id) + " to the neighbouring city for " + moneyText(fee) + "?";
+    } else m.title = "Are you sure?";
+    m.options = {"Yes", "No"};
+    return runModal(m) == 0;
+}
+
+int GameUi::chooseBridge(int length, int allowedMask) {
+    Modal m;
+    m.title = "Choose the crossing (" + std::to_string(length) + " tiles)";
+    std::vector<int> types;
+    for (int type = 0; type < 5; ++type) {
+        if (!(allowedMask & (1 << type))) continue;
+        int32_t perTile;
+        std::memcpy(&perTile, &sim_.tables().bridgeData[static_cast<size_t>(4 * type)], 4);
+        types.push_back(type);
+        m.options.push_back(res_.string(247 + type) + "  " + moneyText(perTile * length));
+    }
+    if (types.empty()) return -1;
+    m.options.push_back("Cancel");
+    const int r = runModal(m);
+    return r >= 0 && r < static_cast<int>(types.size()) ? types[static_cast<size_t>(r)] : -1;
+}
+
+void GameUi::toolMessage(int id) {
+    std::string s = res_.string(id);
+    say(s.empty() ? "(message " + std::to_string(id) + ")" : s);
+}
+
+void GameUi::postMessage(int, int) {}
+void GameUi::showDialog(int id) { toolMessage(id); }
+
+// ---- drawing -----------------------------------------------------------------------------------------------------------
+
+void GameUi::overlay(Framebuffer& fb) {
+    const World& w = sim_.world();
+    const ToolItem* t = tool();
+    if (preview_.valid) {
+        for (const auto& p : preview_.tiles) renderer_.highlightTile(fb, w, cam_, p.first, p.second, 0xFFFFFF60u, 110);
+    } else if (dragging_ && t && t->kind == ToolKind::Network) {
+        renderer_.highlightTile(fb, w, cam_, startA_, startB_, 0xFFFF3030u, 140);   // path not possible
+    }
+    if (dragging_ && t && t->kind == ToolKind::Zone) {
+        static const uint32_t colors[10] = {0xFF909090u, 0xFF40D040u, 0xFF40D040u, 0xFF4060FFu, 0xFF4060FFu, 0xFFE0D030u, 0xFFE0D030u, 0xFF909090u, 0xFFC040C0u, 0xFF40C0C0u};
+        for (int a = std::min(startA_, lastA_); a <= std::max(startA_, lastA_); ++a)
+            for (int b = std::min(startB_, lastB_); b <= std::max(startB_, lastB_); ++b)
+                renderer_.highlightTile(fb, w, cam_, a, b, colors[t->zone % 10], 90);
+    }
+    if (hoverA_ >= 0 && t && !dragging_) {
+        if (t->kind == ToolKind::Building) {
+            int size;
+            const auto o = footprint(*t, hoverA_, hoverB_, size);
+            for (int a = o.first; a < o.first + size; ++a)
+                for (int b = o.second; b < o.second + size; ++b)
+                    if (inMap(a, b)) renderer_.highlightTile(fb, w, cam_, a, b, 0xFFFFFFFFu, 80);
+        } else renderer_.highlightTile(fb, w, cam_, hoverA_, hoverB_, 0xFFFFFFFFu, 255, true);
+    } else if (hoverA_ >= 0 && dragging_) renderer_.highlightTile(fb, w, cam_, hoverA_, hoverB_, 0xFFFFFFFFu, 255, true);
+}
+
+void GameUi::draw(SDL_Renderer* r) {
+    const CityState& s = sim_.state();
+    // top bar
+    fill(r, 0, 0, width_, kTopBar, 20, 24, 32);
+    char top[200];
+    std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s   R%d C%d I%d   [%s]", kMonths[s.month()], s.startYear + s.day / 300, s.population10, moneyText(s.treasury).c_str(),
+                  s.demand[0], s.demand[1], s.demand[2], kSpeedNames[static_cast<int>(clock_.speed)]);
+    text(r, 6, 6, top);
+    std::string right = message_;
+    if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
+    if (!right.empty()) text(r, std::max(420, width_ - static_cast<int>(right.size()) * 8 - 8), 6, right, 255, 220, 120);
+
+    // tool groups
+    const auto& cat = toolCatalog();
+    for (size_t g = 0; g < cat.size(); ++g) {
+        const Rect rc = groupRect(static_cast<int>(g));
+        const bool sel = static_cast<int>(g) == group_;
+        fill(r, rc.x, rc.y, rc.w, rc.h, sel ? 60 : 34, sel ? 70 : 38, sel ? 100 : 48);
+        frame(r, rc.x, rc.y, rc.w, rc.h, 12, 14, 20);
+        text(r, rc.x + 6, rc.y + 5, cat[g].name);
+    }
+    if (const ToolItem* t = tool()) {
+        const int y = kTopBar + static_cast<int>(cat.size()) * kGroupH + 6;
+        fill(r, 0, y, kGroupW, 34, 30, 34, 44);
+        text(r, 4, y + 4, t->name, 255, 255, 160);
+        const int c = unitCost(*t);
+        if (c >= 0) text(r, 4, y + 18, moneyText(c) + (t->kind == ToolKind::Network || t->kind == ToolKind::Zone ? " / tile" : ""), 200, 220, 200);
+    }
+    if (menuOpen_ && group_ >= 0) {
+        const auto& g = cat[static_cast<size_t>(group_)];
+        const Rect first = itemRect(0);
+        fill(r, first.x - 1, first.y - 1, kItemW + 2, static_cast<int>(g.items.size()) * kItemH + 2, 12, 14, 20);
+        for (size_t i = 0; i < g.items.size(); ++i) {
+            const Rect rc = itemRect(static_cast<int>(i));
+            const bool sel = static_cast<int>(i) == item_;
+            const bool dead = g.items[i].kind == ToolKind::Unavailable;
+            fill(r, rc.x, rc.y, rc.w, rc.h, sel ? 64 : 38, sel ? 76 : 42, sel ? 110 : 54);
+            const Uint8 shade = dead ? 120 : 235;
+            text(r, rc.x + 6, rc.y + 5, g.items[i].name, shade, shade, shade);
+            const int c = toolCost(sim_.context(), g.items[i].cat, g.items[i].sub);
+            if (c >= 0 && g.items[i].kind != ToolKind::Query) {
+                const std::string ct = moneyText(c);
+                text(r, rc.x + rc.w - static_cast<int>(ct.size()) * 8 - 6, rc.y + 5, ct, shade, shade, dead ? 120 : 160);
+            }
+        }
+    }
+    // bottom bar: view buttons
+    fill(r, 0, height_ - kBottomBar, width_, kBottomBar, 20, 24, 32);
+    auto button = [&](int x, int w, const char* label, bool on) {
+        fill(r, x, height_ - kBottomBar + 2, w, kBottomBar - 4, on ? 70 : 40, on ? 100 : 46, on ? 70 : 56);
+        text(r, x + 6, height_ - kBottomBar + 7, label);
+    };
+    button(4, 92, layers.underground ? "Underground" : "Surface", layers.underground);
+    button(104, 72, "Power", layers.powerOverlay);
+    button(184, 72, "Water", layers.waterOverlay);
+    text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  Ctrl+S save  Esc", 150, 160, 180);
+    if (modal_) drawModal(r);
+}
+
+void GameUi::drawModal(SDL_Renderer* r) {
+    const int n = static_cast<int>(modal_->options.size());
+    const int bx = (width_ - 520) / 2, by = (height_ - (70 + 22 * n)) / 2;
+    fill(r, 0, 0, width_, height_, 0, 0, 0, 120);
+    fill(r, bx, by, 520, 70 + 22 * n, 28, 32, 44);
+    frame(r, bx, by, 520, 70 + 22 * n, 200, 200, 220);
+    text(r, bx + 20, by + 22, modal_->title, 255, 255, 190);
+    for (int i = 0; i < n; ++i) {
+        fill(r, bx + 20, by + 50 + 22 * i, 480, 20, 60, 70, 100);
+        text(r, bx + 28, by + 56 + 22 * i, modal_->options[static_cast<size_t>(i)]);
+    }
+}
+
+}  // namespace sc2k
