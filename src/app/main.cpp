@@ -174,7 +174,13 @@ int main(int argc, char** argv) {
                 default: break;
             }
         };
-        ui.onTitle = [&] { titleScreen.show(); };
+        ui.onTitle = [&] { titleScreen.fromGame = false; titleScreen.show(); };
+        ui.onPauseAction = [&](int what) {   // pause menu: load game / settings open the title screen's pickers and come back with Esc or Back
+            if (what == 3) { running = false; return; }
+            titleScreen.fromGame = true;
+            titleScreen.show();
+            if (what == 1) titleScreen.openCities(); else titleScreen.openSettings();
+        };
         auto step = [&] {
             if (window) {
                 int ww = 1, wh = 1, pw = 1, ph = 1;
@@ -225,10 +231,10 @@ int main(int argc, char** argv) {
             cycler.update(dt);
             if (titleScreen.active) { renderFrame(); SDL_Delay(8); return; }
             ui.update(dt);
-            const int steps = clock.advance(dt);
+            const int steps = ui.paused() ? 0 : clock.advance(dt);
             for (int i = 0; i < steps; ++i) sim->tick();
             thingAcc += static_cast<Uint64>(dt);
-            while (thingAcc >= 40) { thingAcc -= 40; sim->thingFrames(1); }
+            while (thingAcc >= 40) { thingAcc -= 40; if (!ui.paused()) sim->thingFrames(1); }
             renderFrame();
             SDL_Delay(8);
         };

@@ -34,6 +34,9 @@ public:
     // Runs one iteration of the application's main loop while a modal question is open; returns false when the application should quit.
     std::function<bool()> pump;
     std::function<void()> onTitle;     // Ctrl+O: back to the title screen
+    std::function<void(int)> onPauseAction;   // pause menu: 1 load game, 2 settings, 3 exit
+    bool paused() const { return pauseOpen_; }
+    static std::string savesDir();     // where saved games go (next to the settings file)
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;
     Mixer* audio = nullptr;            // sound effects / music (optional)
@@ -130,6 +133,10 @@ private:
     void applyClick(int a, int b);
     void queryTile(int a, int b);
     void signAt(int a, int b);
+    bool pauseOpen_ = false;
+    void pauseClick(int i);
+    void drawPause(SDL_Renderer* r);
+    void saveDialog();
     bool askText(const std::string& title, std::string& text);   // modal single-line text entry; false = cancelled
     bool queryOpen_ = false;
     QueryInfo query_;

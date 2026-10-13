@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <sys/stat.h>
 
 #include "save/error.h"
 #include "simulation/bonds.h"
@@ -110,6 +111,7 @@ bool GameUi::overUi(int x, int y) const {
 }
 
 void GameUi::update(int dtMs) {
+    if (pauseOpen_) return;
     if (info_.popupDue() && !headless && info_.open == InfoWindows::Which::None && !modal_) info_.open = InfoWindows::Which::Newspaper;   // milestone / new tool stories pop the paper up
     const ThingState& th = sim_.context().things;
     const bool emergency = th.monsters > 0 || th.tornados > 0 || th.fireMessageKind >= 0;
@@ -126,6 +128,10 @@ void GameUi::update(int dtMs) {
 
 void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
+    if (pauseOpen_ && !modal_) {
+        for (int i = 0; i < 5; ++i) if (Rect{width_ / 2 - 130, height_ / 2 - 130 + i * 48, 260, 38}.contains(x, y)) { pauseClick(i); return; }
+        return;
+    }
     if (modal_) {
         const int n = static_cast<int>(modal_->options.size());
         const int bx = (width_ - 520) / 2, by = (height_ - (70 + 22 * n)) / 2;
@@ -241,6 +247,15 @@ void GameUi::wheel(int, int, int dy) {
 }
 
 bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
+    if (pauseOpen_ && !modal_) {
+        if (k == SDLK_ESCAPE) pauseOpen_ = false;
+        else if (k == SDLK_S) pauseClick(1);
+        else if (k == SDLK_L) pauseClick(2);
+        else if (k == SDLK_C) pauseClick(3);
+        else if (k == SDLK_Q) pauseClick(4);
+        else if (k == SDLK_R || k == SDLK_RETURN) pauseOpen_ = false;
+        return true;
+    }
     if (modal_) {
         if (k == SDLK_ESCAPE) modal_->result = -1;
         else if (k == SDLK_RETURN) modal_->result = 0;
@@ -251,7 +266,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (queryOpen_ && micro_.valid && k == SDLK_N) { renameQueried(); return true; }
     if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
     if (ctrl && k == SDLK_O && onTitle) { onTitle(); return true; }
-    if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
+    if (ctrl && k == SDLK_S) { saveDialog(); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE) info_.open = InfoWindows::Which::None; return true; }
     if (k == SDLK_M && audio) { audio->setMuted(!audio->muted()); say(audio->muted() ? "Sound off" : "Sound on"); return true; }
@@ -260,7 +275,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (k == SDLK_ESCAPE) {
         if (menuOpen_) menuOpen_ = false;
         else if (group_ >= 0) { group_ = item_ = -1; dragging_ = false; }
-        else return false;
+        else pauseOpen_ = true;   // Escape with nothing to cancel opens the pause menu
     } else if (k == SDLK_SPACE) clock_.speed = clock_.speed == GameSpeed::Paused ? GameSpeed::Llama : GameSpeed::Paused;
     else if (k >= SDLK_1 && k <= SDLK_5) clock_.speed = static_cast<GameSpeed>(k - SDLK_1 + 1);
     else if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) cam_.zoom = std::min(2, cam_.zoom + 1);
@@ -534,6 +549,44 @@ void GameUi::dragTool(int a0, int b0, int a1, int b1) {
     dragging_ = false;
 }
 
+std::string GameUi::savesDir() {
+    const std::string p = AudioSettings::settingsPath();
+    const std::string dir = p.substr(0, p.rfind('/')) + "/saves";
+    for (size_t i = 1; i <= dir.size(); ++i) if (i == dir.size() || dir[i] == '/') mkdir(dir.substr(0, i).c_str(), 0755);
+    return dir;
+}
+
+void GameUi::saveDialog() {
+    std::string name = info_.cityName.empty() ? "city" : info_.cityName;
+    for (char& c : name) if (c == ' ' || c == '/' || c == '\\') c = '_';
+    if (!askText("Save game as (file name)", name)) return;
+    if (name.empty()) return;
+    const std::string path = savesDir() + "/" + name + ".sc2";
+    say(saveCity(path) ? "Saved " + path : "Could not save " + path);
+}
+
+void GameUi::pauseClick(int i) {
+    switch (i) {
+        case 0: pauseOpen_ = false; break;
+        case 1: pauseOpen_ = false; saveDialog(); break;
+        case 2: pauseOpen_ = false; if (onPauseAction) onPauseAction(1); break;
+        case 3: pauseOpen_ = false; if (onPauseAction) onPauseAction(2); break;
+        default: pauseOpen_ = false; if (onPauseAction) onPauseAction(3); break;
+    }
+}
+
+void GameUi::drawPause(SDL_Renderer* r) {
+    fill(r, 0, 0, width_, height_, 0, 0, 0, 140);
+    text(r, width_ / 2 - 40, height_ / 2 - 160, "Game paused", 255, 255, 190);
+    static const char* labels[5] = {"Resume", "Save game", "Load game", "Settings", "Exit"};
+    for (int i = 0; i < 5; ++i) {
+        const Rect b{width_ / 2 - 130, height_ / 2 - 130 + i * 48, 260, 38};
+        fill(r, b.x, b.y, b.w, b.h, 40, 56, 96);
+        frame(r, b.x, b.y, b.w, b.h, 190, 200, 230);
+        text(r, b.x + 16, b.y + 15, labels[i], 255, 255, 220);
+    }
+}
+
 bool GameUi::saveCity(const std::string& path) {
     try {
         const std::vector<uint8_t> bytes = sim_.toCity(base_).serialize();
@@ -661,6 +714,7 @@ void GameUi::overlay(Framebuffer& fb) {
 }
 
 void GameUi::draw(SDL_Renderer* r) {
+    if (pauseOpen_ && !modal_) { drawSigns(r); drawPause(r); return; }
     drawSigns(r);
     const CityState& s = sim_.state();
     // top bar

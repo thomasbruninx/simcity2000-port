@@ -80,7 +80,13 @@ void TitleScreen::scan() {
             scenarios_.push_back(std::move(e));
         } catch (const std::exception&) {}
     }
-    cities_ = listFiles(dir_ + "/CITIES", ".SC2");
+    cities_.clear();
+    {   // games saved from the pause menu come first
+        const std::string p = AudioSettings::settingsPath();
+        const std::string saves = p.substr(0, p.rfind('/')) + "/saves";
+        for (const std::string& n : listFiles(saves, ".sc2")) cities_.push_back("saves/" + n);
+    }
+    for (const std::string& n : listFiles(dir_ + "/CITIES", ".SC2")) cities_.push_back(n);
     for (const std::string& n : listFiles(dir_, ".SC2")) cities_.push_back("../" + n);
 }
 
@@ -207,7 +213,7 @@ void TitleScreen::settingsClick(int x, int y, int w, int h) {
     if (Rect{60, 420, 40, 26}.in(x, y)) { settings.volume = std::max(0, settings.volume - 10); apply(); return; }
     if (Rect{236, 420, 40, 26}.in(x, y)) { settings.volume = std::min(100, settings.volume + 10); apply(); return; }
     if (Rect{60, 470, 160, 34}.in(x, y)) { if (testMusic) testMusic(); return; }
-    if (Rect{240, 470, 160, 34}.in(x, y)) { settings.save(); mode_ = Mode::Menu; return; }
+    if (Rect{240, 470, 160, 34}.in(x, y)) { settings.save(); leave(); return; }
 }
 
 void TitleScreen::activateMenu(int i) {
@@ -225,7 +231,8 @@ void TitleScreen::choose() {
     if (mode_ == Mode::Scenarios && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) { chosenPath = scenarios_[static_cast<size_t>(selected_)].path; action = Action::LoadScenario; }
     else if (mode_ == Mode::Cities && selected_ >= 0 && static_cast<size_t>(selected_) < cities_.size()) {
         const std::string& n = cities_[static_cast<size_t>(selected_)];
-        chosenPath = n.rfind("../", 0) == 0 ? dir_ + "/" + n.substr(3) : dir_ + "/CITIES/" + n;
+        if (n.rfind("saves/", 0) == 0) { const std::string p = AudioSettings::settingsPath(); chosenPath = p.substr(0, p.rfind('/')) + "/" + n; }
+        else chosenPath = n.rfind("../", 0) == 0 ? dir_ + "/" + n.substr(3) : dir_ + "/CITIES/" + n;
         action = Action::LoadCity;
     }
 }
@@ -239,7 +246,7 @@ void TitleScreen::mouseDown(int x, int y, int w, int h) {
     const size_t n = mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size();
     for (size_t i = 0; i < n; ++i) if (Rect{60, 110 + static_cast<int>(i) * 20, 300, 18}.in(x, y)) { selected_ = static_cast<int>(i); return; }
     if (button(0, w, h).in(x, y)) choose();
-    if (button(1, w, h).in(x, y)) mode_ = Mode::Menu;
+    if (button(1, w, h).in(x, y)) leave();
 }
 
 void TitleScreen::keyDown(SDL_Keycode k) {
@@ -252,9 +259,9 @@ void TitleScreen::keyDown(SDL_Keycode k) {
         else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(5);
         return;
     }
-    if (mode_ == Mode::Settings) { if (k == SDLK_ESCAPE) { settings.save(); mode_ = Mode::Menu; } return; }
+    if (mode_ == Mode::Settings) { if (k == SDLK_ESCAPE) { settings.save(); leave(); } return; }
     const int n = static_cast<int>(mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size());
-    if (k == SDLK_ESCAPE) mode_ = Mode::Menu;
+    if (k == SDLK_ESCAPE) leave();
     else if (k == SDLK_DOWN && selected_ + 1 < n) ++selected_;
     else if (k == SDLK_UP && selected_ > 0) --selected_;
     else if (k == SDLK_RETURN) choose();

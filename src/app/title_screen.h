@@ -39,7 +39,9 @@ public:
     const std::vector<ScenarioEntry>& scenarios() const { return scenarios_; }
     // scripting
     void openScenarioList() { mode_ = Mode::Scenarios; }
-    void openSettings() { mode_ = Mode::Settings; }
+    void openSettings() { mode_ = Mode::Settings; status_.clear(); }
+    void openCities() { mode_ = Mode::Cities; selected_ = 0; cities_.clear(); scan(); }
+    bool fromGame = false;           // opened from the pause menu: Esc / Cancel / Back return to the game
     // Settings screen: `apply` activates the chosen synthesizer and returns a status text; `test` starts a tune with it
     std::function<std::string(const AudioSettings&)> applySettings;
     std::function<void()> testMusic;
@@ -65,6 +67,7 @@ private:
     std::vector<SDL_Texture*> pictures_;
     std::vector<std::string> menuLabels_;
     void scan();
+    void leave() { if (fromGame) active = false; else mode_ = Mode::Menu; }
     void ensureTextures(SDL_Renderer* r);
     struct Rect { int x, y, w, h; bool in(int px, int py) const { return px >= x && py >= y && px < x + w && py < y + h; } };
     Rect menuButton(int i, int w, int h) const;
