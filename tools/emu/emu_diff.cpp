@@ -590,6 +590,7 @@ struct ToolHooks : ZoneHooks {
 
 void stubTools(Emu& e) {
     e.patchRet(0x40CED0); e.patchRet(0x438E00); e.patchRet(0x43A660); e.patchRetN(0x4B1223, 12); { const uint8_t yes12[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x4B1243, yes12, 8); } e.patchRet(0x45AFD0);
+    { const uint8_t shiftKey[8] = {0x0F, 0xB6, 0x05, 0x40, 0x28, 0x00, 0x7E, 0xC3}; e.write(0x42AD10, shiftKey, 8); }   // keyboard query -> test cell
     e.patchRetN(0x424AF0, 4); e.patchRet(0x42B0C0); e.patchRetN(0x406CA0, 4); e.patchRetN(0x4A2347, 4);
     const uint8_t yes1[3] = {0xB0, 0x01, 0xC3}; e.write(0x42AD70, yes1, 3);                                  // confirm -> true
     const uint8_t idyes[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x408600, idyes, 8);           // message box -> IDYES
@@ -641,7 +642,7 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
     CrtRand rng(seed); Lfsr lf(lfsrSeed); ToolHooks hooks; TrafficStats ts;
     SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
     ToolState tst;
-    ToolScript script(0x1234u + 77u * uint32_t(variant), std::getenv("EXTENDED") != nullptr);
+    ToolScript script(0x1234u + 77u * uint32_t(variant), std::getenv("LEVEL") ? std::atoi(std::getenv("LEVEL")) : (std::getenv("EXTENDED") ? 1 : 0));
     static const struct { uint32_t entry, subGlobal; } netEntry[5] = {{0x449530, 0x4CB974}, {0x4498D0, 0x4CB976}, {0x449C90, 0x4CB96E}, {0x44A0A0, 0x4CB976}, {0x449F20, 0x4CB970}};
     done = 0;
     std::map<std::string, std::pair<int, int>> stat;   // op kind -> (succeeded, attempted)
@@ -718,6 +719,21 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
                 origRet = int(e.call(0x461B80, {uint32_t(op.a), uint32_t(op.b)}, img.fakeView) & 0xFF);
                 break;
             }
+            case ToolOp::Landscape: case ToolOp::Forest: case ToolOp::Stream: case ToolOp::DispatchStart: case ToolOp::Dispatch: {
+                e.put<uint8_t>(Emu::kRandState + 0x2840, uint8_t(op.ta));   // the stubbed keyboard query returns this
+                if (op.kind == ToolOp::Landscape) {
+                    const int cost = e.get<int32_t>(0x4DAFA0 + 4 * (12 + op.sub));
+                    if (e.get<int32_t>(0x4C945C) < cost) origRet = 0;
+                    else {
+                        origRet = int(e.call(op.sub == 0 ? 0x43F4E0 : 0x43F7E0, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF);
+                        if (origRet) e.put<int32_t>(0x4C945C, e.get<int32_t>(0x4C945C) - cost);
+                    }
+                } else if (op.kind == ToolOp::Forest) { e.call(0x43F620, {uint32_t(op.a), uint32_t(op.b)}); origRet = 1; }
+                else if (op.kind == ToolOp::Stream) { e.call(0x445DF0, {uint32_t(op.a), uint32_t(op.b), 100}); origRet = 1; }
+                else if (op.kind == ToolOp::DispatchStart) { e.call(0x44F290); origRet = 1; }
+                else { static const uint32_t fn[3] = {0x44F4D0, 0x44F6E0, 0x44F8F0}; e.call(fn[op.sub], {uint32_t(op.a), uint32_t(op.b)}); origRet = -1; }   // void in the original: only the state is compared
+                break;
+            }
             case ToolOp::Link: origRet = int(e.call(0x441530, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF); break;
             case ToolOp::Zone: {
                 int count = 0;   // 0x447D00: tiles that would change zone
@@ -741,7 +757,7 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
         { auto& st = stat[op.name]; st.first += origRet != 0; ++st.second; }
         World ew = pw; CityState es = ps; img.store(ew, es);
         std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
-        const bool retSame = (origRet != 0) == (portRet != 0);
+        const bool retSame = origRet < 0 || (origRet != 0) == (portRet != 0);
         if (std::getenv("OPDBG")) std::printf("  op %d %s -> %d/%d\n", opIndex, desc.c_str(), origRet, portRet);
         if (n || !retSame || e.crtRandState() != rng.state() || img.lfsrState() != lf.state()) {
             char buf[400]; std::snprintf(buf, sizeof buf, "op %d %s: return %d/%d%s rand %s lfsr %s", opIndex, desc.c_str(), origRet, portRet, d.c_str(),

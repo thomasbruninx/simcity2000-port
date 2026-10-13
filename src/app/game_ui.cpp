@@ -14,7 +14,7 @@ constexpr int kTopBar = 28, kGroupW = 150, kGroupH = 26, kItemW = 290, kItemH = 
 struct IconRef { int strip, cell; };
 IconRef groupIcon(const std::string& name) {
     static const std::pair<const char*, IconRef> table[] = {
-        {"Bulldozer", {1, 0}}, {"Terrain", {2, 0}}, {"Zones", {1, 9}}, {"Power", {1, 3}}, {"Water", {1, 4}}, {"Roads", {1, 6}}, {"Rail", {1, 7}},
+        {"Bulldozer", {1, 0}}, {"Landscape", {1, 1}}, {"Dispatch", {1, 2}}, {"Terrain", {2, 0}}, {"Zones", {1, 9}}, {"Power", {1, 3}}, {"Water", {1, 4}}, {"Roads", {1, 6}}, {"Rail", {1, 7}},
         {"Education", {1, 12}}, {"Safety", {1, 13}}, {"Recreation", {1, 14}}, {"Rewards", {1, 5}}, {"Query", {1, 16}}};
     for (const auto& e : table) if (name == e.first) return e.second;
     return {0, -1};
@@ -101,6 +101,10 @@ bool GameUi::overUi(int x, int y) const {
 }
 
 void GameUi::update(int dtMs) {
+    const ThingState& th = sim_.context().things;
+    const bool emergency = th.monsters > 0 || th.tornados > 0 || th.fireMessageKind >= 0;
+    if (emergency && !emergency_) { startDispatch(sim_.context(), ts_); say("Emergency! The dispatch tool is available."); }
+    emergency_ = emergency;
     if (messageMs_ > 0) { messageMs_ -= dtMs; if (messageMs_ <= 0) message_.clear(); }
 }
 
@@ -158,6 +162,8 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (!t) { queryTile(a, b); return; }
     switch (t->kind) {
         case ToolKind::Bulldoze: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
+        case ToolKind::Landscape: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; landscapeAt(a, b); break;
+        case ToolKind::Dispatch: placeDispatch(sim_.context(), ts_, t->sub, a, b) ? say("Dispatched") : say("Can't dispatch there"); break;
         case ToolKind::Terrain: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; levelTarget_ = sim_.world().altm.at(a, b) & 0x1F; terrainAt(a, b); break;
         case ToolKind::Zone:
         case ToolKind::Highway:
@@ -186,15 +192,15 @@ void GameUi::mouseMove(int x, int y) {
     if (!dragging_ || (a == lastA_ && b == lastB_)) return;
     const ToolItem* t = tool();
     if (!t) return;
-    if (t->kind == ToolKind::Bulldoze || t->kind == ToolKind::Terrain) {   // every tile the cursor crosses
+    if (t->kind == ToolKind::Bulldoze || t->kind == ToolKind::Terrain || t->kind == ToolKind::Landscape) {   // every tile the cursor crosses
         int ca = lastA_, cb = lastB_;
         while (ca != a || cb != b) {
             if (std::abs(a - ca) >= std::abs(b - cb)) ca += a > ca ? 1 : -1; else cb += b > cb ? 1 : -1;
-            if (t->kind == ToolKind::Bulldoze) bulldozeAt(ca, cb); else terrainAt(ca, cb);
+            if (t->kind == ToolKind::Bulldoze) bulldozeAt(ca, cb); else if (t->kind == ToolKind::Terrain) terrainAt(ca, cb); else landscapeAt(ca, cb);
         }
     }
     lastA_ = a; lastB_ = b;
-    if (t->kind != ToolKind::Bulldoze && t->kind != ToolKind::Terrain) updatePreview();
+    if (t->kind != ToolKind::Bulldoze && t->kind != ToolKind::Terrain && t->kind != ToolKind::Landscape) updatePreview();
 }
 
 void GameUi::wheel(int, int, int dy) {
@@ -227,6 +233,14 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
 }
 
 // ---- tools -------------------------------------------------------------------------------------------------------------
+
+void GameUi::landscapeAt(int a, int b) {
+    const ToolItem* t = tool();
+    SimContext& c = sim_.context();
+    if (t->sub == 2) plantForest(c, ts_, a, b);
+    else if (t->sub == 3) placeStream(c, ts_, a, b);
+    else if (!landscapeTool(c, ts_, t->sub, a, b) && message_.empty()) say(sim_.state().treasury < unitCost(*t) ? "Not enough funds" : "Can't do that here");
+}
 
 void GameUi::terrainAt(int a, int b) {
     const ToolItem* t = tool();
@@ -424,7 +438,8 @@ void GameUi::toolMessage(int id) {
 
 bool GameUi::available(const ToolItem& t) const {
     if (t.kind == ToolKind::Unavailable) return false;
-    if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain) return true;
+    if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain || t.kind == ToolKind::Landscape) return true;
+    if (t.kind == ToolKind::Dispatch) return emergency_;
     if (t.kind == ToolKind::Zone && t.cat == 0) return true;   // de-zone
     return avail_.allows(t.cat, t.sub);
 }

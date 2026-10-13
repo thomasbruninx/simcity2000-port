@@ -13,7 +13,7 @@
 namespace sc2k {
 
 struct ToolOp {
-    enum Kind { Bulldoze, Network, Build, Zone, Terrain, Hydro, Tunnel, Onramp, Link, Highway } kind = Bulldoze;
+    enum Kind { Bulldoze, Network, Build, Zone, Terrain, Hydro, Tunnel, Onramp, Link, Highway, Landscape, Forest, Stream, DispatchStart, Dispatch } kind = Bulldoze;
     int a = 0, b = 0, ta = 0, tb = 0;          // tile / drag end
     int cat = 0, sub = 0;                      // tool category + subtype (cost / id table row)
     int zone = 0, unit = 0;                    // zone type painted, cost per tile
@@ -26,10 +26,12 @@ struct ToolOp {
 class ToolScript {
 public:
     // extended = also generate terrain, hydro dam, tunnel, onramp and rail-link operations (the basic sequence is unchanged when false)
-    explicit ToolScript(uint32_t seed, bool extended = false) : s_(seed), extended_(extended) {}
+    // level 0: basic; 1: + terrain, hydro, tunnel, onramp, link, highway; 2: + landscape, forest, stream and emergency dispatch
+    explicit ToolScript(uint32_t seed, int level = 0) : s_(seed), extended_(level >= 1), landscape_(level >= 2) {}
 
     ToolOp next(const World& pw, const GameTables& t) {
         ToolOp op;
+        if (landscape_ && range(100) < 25) return nextLandscape(pw);
         if (extended_ && range(100) < 40) return nextExtended(pw, t);
         const int kind = range(100);
         if (kind < 25) {
@@ -75,6 +77,20 @@ public:
             op.unit = t.toolCost[static_cast<size_t>(op.cat * 12 + op.sub)];
             op.name = "zone";
         }
+        return op;
+    }
+
+    ToolOp nextLandscape(const World& pw) {
+        ToolOp op;
+        const int k = range(10);
+        std::tie(op.a, op.b) = pick(pw, k >= 8);
+        op.ta = range(2);               // shift key held
+        if (k < 3) { op.kind = ToolOp::Landscape; op.sub = 0; op.name = "tree"; }
+        else if (k < 5) { op.kind = ToolOp::Landscape; op.sub = 1; op.name = "water"; }
+        else if (k == 5) { op.kind = ToolOp::Forest; op.name = "forest"; }
+        else if (k == 6) { op.kind = ToolOp::Stream; op.name = "stream"; }
+        else if (k == 7) { op.kind = ToolOp::DispatchStart; op.name = "dispatch-start"; }
+        else { op.kind = ToolOp::Dispatch; op.sub = range(3); op.name = "dispatch"; }
         return op;
     }
 
@@ -132,6 +148,8 @@ public:
         switch (op.kind) {
             case ToolOp::Terrain: case ToolOp::Hydro: case ToolOp::Tunnel: case ToolOp::Onramp: case ToolOp::Link:
                 std::snprintf(buf, sizeof buf, "%s(%d,%d) target %d", op.name.c_str(), op.a, op.b, op.ta); break;
+            case ToolOp::Landscape: case ToolOp::Forest: case ToolOp::Stream: case ToolOp::DispatchStart: case ToolOp::Dispatch:
+                std::snprintf(buf, sizeof buf, "%s(%d,%d) sub %d shift %d", op.name.c_str(), op.a, op.b, op.sub, op.ta); break;
             case ToolOp::Highway: std::snprintf(buf, sizeof buf, "highway(%d,%d)->(%d,%d)", op.a, op.b, op.ta, op.tb); break;
             case ToolOp::Bulldoze: std::snprintf(buf, sizeof buf, "bulldoze(%d,%d) under=%d", op.a, op.b, op.underground); break;
             case ToolOp::Network: std::snprintf(buf, sizeof buf, "%s(%d,%d)->(%d,%d)", op.name.c_str(), op.a, op.b, op.ta, op.tb); break;
@@ -143,7 +161,7 @@ public:
 
 private:
     uint32_t s_;
-    bool extended_;
+    bool extended_, landscape_;
     template <class P>
     std::pair<int, int> pickWhere(const World&, P pred) {   // scans the interior from a random start for a tile matching `pred`
         const int start = range(120 * 120);
@@ -200,6 +218,11 @@ inline bool runToolOp(SimContext& c, ToolState& ts, const ToolOp& op) {
         case ToolOp::Onramp: return placeOnramp(c, ts, op.a, op.b, op.sub);
         case ToolOp::Link: return placeRailLink(c, ts, op.a, op.b);
         case ToolOp::Highway: return buildHighway(c, ts, op.a, op.b, op.ta, op.tb);
+        case ToolOp::Landscape: ts.shift = op.ta != 0; return landscapeTool(c, ts, op.sub, op.a, op.b);
+        case ToolOp::Forest: ts.shift = op.ta != 0; plantForest(c, ts, op.a, op.b); return true;
+        case ToolOp::Stream: placeStream(c, ts, op.a, op.b); return true;
+        case ToolOp::DispatchStart: startDispatch(c, ts); return true;
+        case ToolOp::Dispatch: return placeDispatch(c, ts, op.sub, op.a, op.b);
     }
     return false;
 }

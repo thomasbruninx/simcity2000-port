@@ -136,9 +136,11 @@ int main(int argc, char** argv) {
                     case SDL_EVENT_QUIT: running = false; break;
                     case SDL_EVENT_KEY_DOWN:
                         ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0 || (e.key.mod & SDL_KMOD_GUI) != 0;
+                        ui.setShift((e.key.mod & SDL_KMOD_SHIFT) != 0);
                         if (e.key.key == SDLK_F12) { char name[64]; std::snprintf(name, sizeof name, "sc2k-%03d.png", shots++); writePng(name, fb); }
                         else if (!ui.keyDown(e.key.key, ctrl)) running = false;
                         break;
+                    case SDL_EVENT_KEY_UP: ui.setShift((e.key.mod & SDL_KMOD_SHIFT) != 0); break;
                     case SDL_EVENT_MOUSE_BUTTON_DOWN: ui.mouseDown(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), e.button.button); break;
                     case SDL_EVENT_MOUSE_BUTTON_UP: ui.mouseUp(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), e.button.button); break;
                     case SDL_EVENT_MOUSE_MOTION: ui.mouseMove(static_cast<int>(e.motion.x * scaleX), static_cast<int>(e.motion.y * scaleY)); break;

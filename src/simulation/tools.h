@@ -30,6 +30,12 @@ struct ToolState {
     int length = 0;              // 0x4C6D9C tiles on the path
     int cost = 0;                // 0x4C6D90
     int dozerSub = 0;            // 0x4CB968 bulldozer subtype (0 bulldoze, 1 level, 2 raise, 3 lower, 4 de-zone): selects the cost row
+    bool shift = false;          // the original reads the keyboard (0x42AD10): shift held while using the tree tools removes trees
+    // emergency dispatch markers (0x44F290 / 0x44F4D0 ...): per kind 0 police, 1 fire, 2 military
+    int dispatchLimit[3] = {0, 0, 0};
+    int dispatchRing[3] = {0, 0, 0};
+    uint8_t dispatchX[3][64] = {}, dispatchY[3][64] = {};
+    bool dispatchWarned[3] = {false, false, false};
     bool underground = false;    // 0x4E8E38: the underground view is active (bulldozer works on pipes/subway)
 };
 
@@ -80,6 +86,18 @@ bool placeHydroDam(SimContext& c, ToolState& ts, int a, int b);
 bool buildTunnel(SimContext& c, ToolState& ts, int a, int b, int roadSub);
 bool placeOnramp(SimContext& c, ToolState& ts, int a, int b, int roadSub);
 bool placeRailLink(SimContext& c, ToolState& ts, int a, int b);
+
+// Landscape tools: tree (0x43F4E0, subtype 0 of category 1, $3), water (0x43F7E0, subtype 1, $100); forest (0x43F620) and stream (0x445DF0) exist in
+// the original terrain editor only (free). Return false when nothing was placed; money is charged by `landscapeTool`.
+bool plantTree(SimContext& c, ToolState& ts, int a, int b);
+void plantForest(SimContext& c, ToolState& ts, int a, int b);
+bool placeWater(SimContext& c, ToolState& ts, int a, int b);
+void placeStream(SimContext& c, ToolState& ts, int a, int b, int length = 100);
+bool landscapeTool(SimContext& c, ToolState& ts, int sub, int a, int b);   // 0x441DF0 body for one tile: cost check, tool, payment
+
+// Emergency dispatch markers (category 2): startDispatch = 0x44F290 (when a disaster begins), then one click per marker (0x44F4D0 police, 0x44F6E0 fire, 0x44F8F0 military).
+void startDispatch(SimContext& c, ToolState& ts);
+bool placeDispatch(SimContext& c, ToolState& ts, int kind, int a, int b);
 
 // Piece appliers and neighbour fixers, exposed for tests.
 void applyRoadPiece(SimContext& c, int a, int b);

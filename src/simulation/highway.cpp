@@ -468,7 +468,7 @@ bool buildHighway(SimContext& c, ToolState& ts, int a0, int b0, int a1, int b1) 
     const int na = a + h.dx2(ts.dir) * 2, nb = b + h.dy2(ts.dir) * 2;
     if (na + 1 >= 0 && na + 1 < 0x80 && nb + 1 >= 0 && nb + 1 < 0x80 && h.quadWater(na, nb)) return buildHighwayBridge(c, ts, na, nb, 0);
     const bool outside = na < 0 || na > 0x7F || nb < 0 || nb > 0x7F;
-    if ((outside || (ua == a && ub == b && (ua == 0 || ub == 0 || ua == 0x7E || ub == 0x7E))) && w.xtxt.at(a, b) != 0xFA && c.s.treasury > 0x5DB &&
+    if ((outside || (ua == a && ub == b && (ua == 0 || ub == 0 || ua == 0x7E || ub == 0x7E))) && w.xtxt.at(ua, ub) != 0xFA /* the original tests the START tile */ && c.s.treasury > 0x5DB &&
         c.hooks.confirm(0xF6, 1500)) {
         c.s.treasury -= 0x5DC;
         w.xtxt.at(a, b) = 0xFA;

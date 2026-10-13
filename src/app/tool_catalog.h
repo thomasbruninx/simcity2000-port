@@ -7,7 +7,7 @@
 
 namespace sc2k {
 
-enum class ToolKind { Bulldoze, Zone, Network, Highway, Terrain, Special, Building, Query, Unavailable };   // Special = single-click tools (dam, tunnel, onramp, link)
+enum class ToolKind { Bulldoze, Zone, Network, Highway, Terrain, Special, Landscape, Dispatch, Building, Query, Unavailable };   // Special = single-click tools (dam, tunnel, onramp, link)
 
 struct ToolItem {
     const char* name;

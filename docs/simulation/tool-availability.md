@@ -13,4 +13,4 @@ Base masks (one word per tool category, bit = subtype button) come from the exe 
 | 12–15 | arcology designs 1..4 (count in `@0x4CCB44`) |
 | 16 | nothing |
 
-Plant bit order matches the plant descriptions 1000–1008 of TEXT_USA.DAT (coal, hydro, oil, gas, nuclear, wind, solar, microwave, fusion) and the plant costs of the toolbar table. Category 2 (emergency dispatch) gets a third button in scenario / disaster modes (`@0x4CB4FC` = 2, 3, 4), not modelled. The reward buildings 0..4 are granted by the city council (0x441800 flags), which is not modelled: they are always enabled in the port.
+Plant bit order matches the plant descriptions 1000–1008 of TEXT_USA.DAT (coal, hydro, oil, gas, nuclear, wind, solar, microwave, fusion) and the plant costs of the toolbar table. Category 2 (emergency dispatch) is enabled by 0x44F290 when a disaster starts (police / fire / military counts; `@0x4CB4FC` is the military base type). The reward buildings 0..4 are granted by the city council (0x441800 flags), which is not modelled: they are always enabled in the port.

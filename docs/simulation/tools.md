@@ -49,8 +49,11 @@ Cost table `0x4DAFA0` (int32 per `[category*12 + subtype]`, −1 = no such butto
 * **Tunnel** 0x44B820 (starts on a hillside slope XTER 1–4, digs through a hill: length limits, no water table, no pipes/subway at depth 1, exit slope must match; the question 0x15A is `ZoneHooks::confirm(0x15A, cost)`), **onramp** 0x441160, **rail–subway link** 0x441530 (free), **hydroelectric dam** 0x440DB0 (on waterfall slopes XTER 0x2E/0x3E; plant id 0xC6 or 0xC7 by orientation; costs 400).
 * The terrain, tunnel and highway code is verified with the extended script (`EXTENDED=1`): 20 runs x 800 operations on 10 cities identical.
 
+## Landscape and emergency dispatch (session 14)
+Category 1 (0x441DF0) is the **landscape** tool: tree (0x43F4E0, $3; shift removes) and water (0x43F7E0, $100); the original terrain editor adds forest (0x43F620, 20 random trees) and stream (0x445DF0, a random walk of up to 100 tiles that floods tiles). Category 2 is **emergency dispatch** (not "landscape" as first guessed): `startDispatch` (0x44F290, when a disaster starts) sizes the markers from the police / fire station counts (census/8) and the military base type; each click places a marker thing (types 7 / 8 / 0xE, overlay value = slot + 0xC9) and removes the oldest of that kind (0x44F4D0 / 0x44F6E0 / 0x44F8F0 via 0x450010). Verified with the LEVEL=2 script (20 runs x 800 operations identical). Findings: the highway border-link test reads the **start** tile's XTXT, not the end tile's; the keyboard query 0x42AD10 returns a full `EAX` (the stub must zero-extend).
+
 ## Not ported yet
-Landscape tools (trees, water: 0x44F4D0/0x44F6E0/0x44F8F0), query / microsim editing (0x44D140, 0x44CB30, 0x471E80), the stadium sport dialog (0xD7), power-plant selection by year, and the budget-window counters stored beside the budget records for the same buildings. Bonds are not ported (strings 288–297 describe up to 50 bonds of $10,000 with rates).
+The terrain editor's drag tools 0x443400 / 0x4432B0 / 0x4442A0 / 0x4423E0 (mouse-sample loops), query / microsim editing (0x44D140, 0x44CB30, 0x471E80), the stadium sport dialog (0xD7), power-plant selection by year, and the budget-window counters stored beside the budget records for the same buildings. Bonds are not ported (strings 288–297 describe up to 50 bonds of $10,000 with rates).
 
 ## Emulator-harness notes (dev only)
 * The interactive loop 0x447F90 / 0x447910 is replaced by a 8-byte stub reading the drag target from memory (patching an immediate left stale translated blocks in Unicorn).

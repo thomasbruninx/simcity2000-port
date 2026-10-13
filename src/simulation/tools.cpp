@@ -1032,4 +1032,158 @@ bool placeRailLink(SimContext& c, ToolState&, int a, int b) {   // 0x441530
     return true;
 }
 
+// ---- landscape ----
+bool plantTree(SimContext& c, ToolState& ts, int a, int b) {   // 0x43F4E0
+    World& w = c.w;
+    if (inMap(a, b) && (w.xbit.at(a, b) & kWater)) return false;
+    if (w.xbld.at(a, b) == 5) return false;
+    if (w.xter.at(a, b) == 0x2E || w.xter.at(a, b) == 0x3E) return false;
+    int id;
+    if (!ts.shift) {
+        const int cur = w.xbld.at(a, b);
+        if (cur < 6) id = (static_cast<unsigned>(c.rng.next()) & 1) + 6;
+        else if (cur < 0xB) id = cur + 1;
+        else if (cur > 0xC) return false;
+        else id = (static_cast<unsigned>(c.rng.next()) & 1) + 0xB;
+    } else id = 0;
+    setTile(c, a, b, id);
+    return true;
+}
+
+void plantForest(SimContext& c, ToolState& ts, int a0, int b0) {   // 0x43F620: 20 random spots around the click
+    World& w = c.w;
+    for (int n = 0; n < 20; ++n) {
+        const int r1 = c.rng.next() & 7, r2 = c.rng.next() & 7, r3 = c.rng.next() & 7;
+        const int a = a0 + (r1 - r2);
+        const int r4 = c.rng.next() & 7;
+        const int b = b0 + (r3 - r4);
+        if (!inMap(a, b) || (w.xbit.at(a, b) & kWater)) continue;
+        const int ter = w.xter.at(a, b);
+        if (ter == 0x2E || ter == 0x3E) continue;
+        const int cur = w.xbld.at(a, b);
+        if (!ts.shift) {
+            if (cur < 6) setTile(c, a, b, (static_cast<unsigned>(c.rng.next()) & 1) + 6);
+            else if (cur < 0xB) setTile(c, a, b, cur + 1);
+            else if (cur < 0xD) setTile(c, a, b, (static_cast<unsigned>(c.rng.next()) & 1) + 0xB);
+        } else if (cur > 5) {
+            if (cur == 6) setTile(c, a, b, 0);
+            else if (cur <= 0xC) setTile(c, a, b, cur - 1);
+        }
+    }
+}
+
+bool placeWater(SimContext& c, ToolState&, int a, int b) {   // 0x43F7E0
+    World& w = c.w;
+    if (inMap(a, b) && (w.xbit.at(a, b) & kWater)) return false;
+    if (w.xtxt.at(a, b) > 0xF9) return false;
+    if (w.xbld.at(a, b) >= 0xE || w.xbld.at(a, b) == 5) return false;
+    floodTile(c, a, b);
+    w.xzon.at(a, b) &= 0xF0;
+    return true;
+}
+
+void placeStream(SimContext& c, ToolState&, int a, int b, int length) {   // 0x445DF0
+    Ctx x(c);
+    World& w = c.w;
+    static const int dx[4] = {-1, 0, 1, 0}, dy[4] = {0, 1, 0, -1}, turn[4] = {0, 1, 3, 2};   // 0x4E6A88 / 0x4E6A90 / 0x4E6A98
+    int heading = 1;
+    floodTile(c, a, b);
+    while (length-- > 0) {
+        int alt = x.alt(a, b);
+        if (w.xter.at(a, b) == 0x3E) ++alt;
+        int k = 0, na = 0, nb = 0;
+        for (; k < 4; ++k) {
+            const int d = (turn[k] + heading) & 3;
+            na = dx[d] + a; nb = dy[d] + b;
+            if (!inMap(na, nb)) return;
+            const int h = x.alt(na, nb);
+            if (h <= alt) {
+                const int t = w.xter.at(na, nb);
+                if (t > 0xF && t < 0x30) return;
+                if (h < alt || t == 0) break;
+            }
+        }
+        if (k == 4) return;
+        floodTile(c, na, nb);
+        heading += turn[k];
+        const unsigned r = static_cast<unsigned>(c.rng.next());
+        if ((r & 0xFFFF) % 3 != 0) {
+            const unsigned r2 = static_cast<unsigned>(c.rng.next());
+            heading = static_cast<int16_t>(heading + static_cast<int>(r2) * 2 + 1) & 3;
+        }
+        a = na; b = nb;
+    }
+}
+
+bool landscapeTool(SimContext& c, ToolState& ts, int sub, int a, int b) {   // 0x441DF0
+    const int cost = c.t.toolCost[static_cast<size_t>(12 + sub)];
+    if (c.s.treasury < cost) return false;
+    bool ok = false;
+    if (sub == 0) ok = plantTree(c, ts, a, b);
+    else if (sub == 1) ok = placeWater(c, ts, a, b);
+    if (ok) c.s.treasury -= cost;
+    return ok;
+}
+
+// ---- emergency dispatch ----
+void startDispatch(SimContext& c, ToolState& ts) {   // 0x44F290
+    World& w = c.w;
+    ts.dispatchWarned[0] = ts.dispatchWarned[1] = ts.dispatchWarned[2] = false;
+    ts.dispatchLimit[0] = static_cast<int16_t>(c.s.census[0xD2]) >> 3;
+    ts.dispatchLimit[1] = static_cast<int16_t>(c.s.census[0xD3]) >> 3;
+    static const int militaryByBase[6] = {0, 0, 5, 2, 3, 0};
+    ts.dispatchLimit[2] = militaryByBase[static_cast<size_t>(c.s.militaryType) % 6];
+    if (!ts.dispatchLimit[0] && !ts.dispatchLimit[1] && !ts.dispatchLimit[2]) {
+        ts.dispatchLimit[2] = 1;
+        c.hooks.toolMessage(0x77);
+    }
+    ts.dispatchRing[0] = ts.dispatchRing[1] = ts.dispatchRing[2] = 0;
+    for (int a = 0; a < 128; ++a)
+        for (int b = 0; b < 128; ++b) {
+            const int v = w.xtxt.at(a, b);
+            if (v > 200 && v < 0xF1) {
+                uint8_t& type = w.xthg[static_cast<size_t>(v - 0xC9) * 12];
+                if (type == 7 || type == 8 || type == 0xE) { w.xtxt.at(a, b) = 0; type = 0; }
+            }
+        }
+}
+
+bool placeDispatch(SimContext& c, ToolState& ts, int kind, int a, int b) {   // 0x44F4D0 / 0x44F6E0 / 0x44F8F0
+    World& w = c.w;
+    static const int type[3] = {7, 8, 0xE}, noneMsg[3] = {0x78, 0x7A, 0x7C}, badMsg[3] = {0x79, 0x7B, 0x7D};
+    if (ts.dispatchLimit[kind] == 0) { c.hooks.showDialog(noneMsg[kind]); return false; }
+    if ((!inMap(a, b) || !(w.xbit.at(a, b) & kWater)) && w.xtxt.at(a, b) == 0) {
+        int& ring = ts.dispatchRing[kind];
+        if (++ring > ts.dispatchLimit[kind]) ring = 1;
+        const int oa = ts.dispatchX[kind][ring], ob = ts.dispatchY[kind][ring];
+        if (oa < 0x80 && ob < 0x80) {
+            const int v = w.xtxt.at(oa, ob);
+            if (v > 200 && v < 0xF1 && w.xthg[static_cast<size_t>(v - 0xC9) * 12] == type[kind]) {
+                w.xthg[static_cast<size_t>(v - 0xC9) * 12] = 0;
+                w.xtxt.at(oa, ob) = 0;
+            }
+        }
+        // 0x450010: a free thing slot carries the marker (the overlay value is slot + 0xC9)
+        int slot = 1;
+        while (slot < 0x28 && w.xthg[static_cast<size_t>(slot) * 12] != 0) ++slot;
+        if (slot == 0x28) {
+            if (c.s.mode != 2) { ts.dispatchX[kind][ring] = static_cast<uint8_t>(a); ts.dispatchY[kind][ring] = static_cast<uint8_t>(b); return true; }
+            slot = 0x27;
+            removeThing(c, 0x27);
+        }
+        if (w.xtxt.at(a, b) == 0) {
+            uint8_t* rec = &w.xthg[static_cast<size_t>(slot) * 12];
+            rec[0] = static_cast<uint8_t>(type[kind]); rec[1] = 0; rec[3] = static_cast<uint8_t>(a); rec[4] = static_cast<uint8_t>(b);
+            rec[6] = 0; rec[7] = 0; rec[5] = 0; rec[10] = w.xtxt.at(a, b);
+            w.xtxt.at(a, b) = static_cast<uint8_t>(slot + 0xC9);
+        }
+        ts.dispatchX[kind][ring] = static_cast<uint8_t>(a);
+        ts.dispatchY[kind][ring] = static_cast<uint8_t>(b);
+        return true;
+    }
+    if (!ts.dispatchWarned[kind]) { c.hooks.showDialog(badMsg[kind]); ts.dispatchWarned[kind] = true; }
+    return false;
+}
+
+
 }  // namespace sc2k

@@ -38,6 +38,7 @@ public:
     void wheel(int x, int y, int dy);
     bool keyDown(SDL_Keycode key, bool ctrl);          // false = quit requested
     void update(int dtMs);
+    void setShift(bool held) { ts_.shift = held; }       // keyboard modifier read by the tree tools
 
     void overlay(Framebuffer& fb);                     // tile highlights / path previews on the map framebuffer
     void draw(SDL_Renderer* r);                        // panels, texts
@@ -93,6 +94,8 @@ private:
     void say(const std::string& text);
     void bulldozeAt(int a, int b);
     void terrainAt(int a, int b);
+    void landscapeAt(int a, int b);
+    bool emergency_ = false;
     int levelTarget_ = 0;           // altitude the level tool flattens to (that of the tile where the drag began)
     void updatePreview();
     void finishDrag();
