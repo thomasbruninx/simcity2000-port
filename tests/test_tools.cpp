@@ -3,6 +3,7 @@
 #include "simulation/tool_script.h"
 #include "simulation/availability.h"
 #include "simulation/bonds.h"
+#include "simulation/query.h"
 #include "simulation/finance.h"
 #include "world/world_hash.h"
 
@@ -110,4 +111,28 @@ TEST(bonds_issue_and_repay_keep_budget_and_rates_consistent) {
     CHECK(!repayOldestBond(c) && s.debt == 1);
     s.debt = 50; s.treasury = 0;
     CHECK(!issueBond(c) && s.treasury == 0);
+}
+
+TEST(query_names_follow_the_exe_string_groups_and_report_the_tile) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    CityFile c = CityFile::load(dir + "/CITIES/PARIS.SC2");
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+    CrtRand rng(1); Lfsr lf(1); YesHooks hooks; TrafficStats ts;
+    SimContext ctx{w, s, t, rng, lf, hooks, ts, {}};
+    w.xbld.at(10, 10) = 0x1D; w.xbld.at(11, 10) = 0x2C; w.xbld.at(12, 10) = 0x95; w.xbld.at(13, 10) = 0; w.xbld.at(14, 10) = 0xCF;
+    CHECK(tileNameString(ctx, 10, 10) == 599);          // Road
+    CHECK(tileNameString(ctx, 11, 10) == 600);          // Railway
+    CHECK(tileNameString(ctx, 12, 10) == 593 + (0x95 - 0x66));
+    CHECK(tileNameString(ctx, 14, 10) == 593 + (0xCF - 0x66));
+    w.xbit.at(13, 10) = 0; w.xter.at(13, 10) = 0;
+    CHECK(tileNameString(ctx, 13, 10) == 751);          // clear terrain
+    w.xzon.at(13, 10) = 2;
+    const QueryInfo q = queryTile(ctx, 13, 10);
+    CHECK(!q.lines.empty() && q.lines[0].labelString == 812 && q.lines[0].value[0].stringId == 769);   // "Zoned : Residential"
+    // signs
+    CHECK(placeSign(ctx, 20, 20, "Downtown", false) && signText(ctx, 20, 20) == "Downtown" && w.xtxt.at(20, 20) >= 1);
+    CHECK(placeSign(ctx, 20, 20, "", false) && signText(ctx, 20, 20).empty() && w.xtxt.at(20, 20) == 0);
 }

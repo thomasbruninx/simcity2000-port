@@ -12,12 +12,14 @@
 
 #include "app/budget_window.h"
 #include "app/icons.h"
+#include "app/info_windows.h"
 #include "app/tool_catalog.h"
 #include "render/map_renderer.h"
 #include "resources/pe_resources.h"
 #include "save/city.h"
 #include "simulation/availability.h"
 #include "simulation/clock.h"
+#include "simulation/query.h"
 #include "simulation/simulation.h"
 
 namespace sc2k {
@@ -37,6 +39,7 @@ public:
     void mouseMove(int x, int y);
     void wheel(int x, int y, int dy);
     bool keyDown(SDL_Keycode key, bool ctrl);          // false = quit requested
+    void textInput(const std::string& utf8);           // typed characters while a text question is open
     void update(int dtMs);
     void setShift(bool held) { ts_.shift = held; }       // keyboard modifier read by the tree tools
 
@@ -46,8 +49,10 @@ public:
     // scripting / tests
     bool selectTool(const std::string& name);
     bool openMenu(const std::string& groupName);
-    void openBudgetDetail(int row) { budget_.openDetail(row); }       // shows the item list of a group (screenshots)
-    void dragTool(int a0, int b0, int a1, int b1);     // press on (a0,b0), release on (a1,b1) with the selected tool
+    void openBudgetDetail(int row) { budget_.openDetail(row); }
+    void openInfo(int which) { info_.open = static_cast<InfoWindows::Which>(which); }       // shows the item list of a group (screenshots)
+    void dragTool(int a0, int b0, int a1, int b1);
+    void signTool(int a, int b, const std::string& text) { placeSign(sim_.context(), a, b, text, false); }   // scripting     // press on (a0,b0), release on (a1,b1) with the selected tool
     const std::string& message() const { return message_; }
     bool saveCity(const std::string& path);
 
@@ -61,7 +66,7 @@ public:
 
 private:
     struct Rect { int x, y, w, h; bool contains(int px, int py) const { return px >= x && py >= y && px < x + w && py < y + h; } };
-    struct Modal { std::string title; std::vector<std::string> options; int result = -2; };
+    struct Modal { std::string title; std::vector<std::string> options; int result = -2; bool textInput = false; std::string text; };
 
     Simulation& sim_;
     MapRenderer& renderer_;
@@ -84,6 +89,7 @@ private:
     int messageMs_ = 0;
     Modal* modal_ = nullptr;
     BudgetWindow budget_;
+    InfoWindows info_;
     ToolAvailability avail_;
     bool available(const ToolItem& t) const;
     std::unique_ptr<IconStrip> toolbarIcons_, terrainIcons_, bookIcon_;   // created on the first draw (need the renderer)
@@ -101,6 +107,12 @@ private:
     void finishDrag();
     void applyClick(int a, int b);
     void queryTile(int a, int b);
+    void signAt(int a, int b);
+    bool askText(const std::string& title, std::string& text);   // modal single-line text entry; false = cancelled
+    bool queryOpen_ = false;
+    QueryInfo query_;
+    void drawQuery(SDL_Renderer* r);
+    void drawSigns(SDL_Renderer* r);
     std::pair<int, int> footprint(const ToolItem& t, int a, int b, int& size) const;
     int runModal(Modal& m);
     void drawModal(SDL_Renderer* r);

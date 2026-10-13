@@ -48,6 +48,8 @@ public:
     MapRenderer(const GameTables& tables, const SpriteSet& sprites, const std::array<uint32_t, 256>& palette) : t_(tables), sprites_(sprites), pal_(palette) {}
     void draw(Framebuffer& fb, const World& w, const CityState& s, const Camera& cam, const RenderLayers& layers = {}) const;
     // Screen position -> file tile (the front-most tile whose top diamond contains the point); false outside the map.
+    // Screen position of the centre of the top diamond of file tile (a, b).
+    void tileScreenPos(const World& w, const Camera& cam, int a, int b, int& x, int& y) const;
     bool pickTile(const World& w, const Camera& cam, int px, int py, int& a, int& b) const;
     // Blends `color` over the top diamond of file tile (a, b); outline draws only its border.
     void highlightTile(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, uint32_t color, int alpha, bool outline = false) const;

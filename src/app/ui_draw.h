@@ -7,6 +7,7 @@
 namespace sc2k::ui {
 
 inline void fill(SDL_Renderer* r, int x, int y, int w, int h, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca = 255) {
+    SDL_SetRenderDrawBlendMode(r, ca < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
     const SDL_FRect f{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
     SDL_RenderFillRect(r, &f);

@@ -140,6 +140,7 @@ int main(int argc, char** argv) {
                         if (e.key.key == SDLK_F12) { char name[64]; std::snprintf(name, sizeof name, "sc2k-%03d.png", shots++); writePng(name, fb); }
                         else if (!ui.keyDown(e.key.key, ctrl)) running = false;
                         break;
+                    case SDL_EVENT_TEXT_INPUT: ui.textInput(e.text.text); break;
                     case SDL_EVENT_KEY_UP: ui.setShift((e.key.mod & SDL_KMOD_SHIFT) != 0); break;
                     case SDL_EVENT_MOUSE_BUTTON_DOWN: ui.mouseDown(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), e.button.button); break;
                     case SDL_EVENT_MOUSE_BUTTON_UP: ui.mouseUp(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), e.button.button); break;
@@ -180,6 +181,7 @@ int main(int argc, char** argv) {
                 words >> op;
                 if (op == "tool") { std::string name; std::getline(words >> std::ws, name); if (!ui.selectTool(name)) std::fprintf(stderr, "tool '%s' not available\n", name.c_str()); }
                 else if (op == "drag") { int a0, b0, a1, b1; words >> a0 >> b0 >> a1 >> b1; ui.dragTool(a0, b0, a1, b1); }
+                else if (op == "sign") { int a, b; words >> a >> b; std::string t; std::getline(words >> std::ws, t); ui.signTool(a, b, t); }
                 else if (op == "click") { int a, b; words >> a >> b; ui.dragTool(a, b, a, b); }
                 else if (op == "zoom") { int z; words >> z; cam.zoom = std::clamp(z, 0, 2); }
                 else if (op == "center") { int a, b; words >> a >> b; cam.centerOn(a, b, width / 2, height / 2); }
@@ -188,6 +190,7 @@ int main(int argc, char** argv) {
                 else if (op == "funds") { int f; words >> f; sim->state().treasury = f; }
                 else if (op == "key") { std::string k; words >> k; ui.keyDown(keyByName(k), false); }
                 else if (op == "budget") { std::string d; words >> d; ui.keyDown(SDLK_B, false); if (!d.empty()) ui.openBudgetDetail(std::atoi(d.c_str())); }
+                else if (op == "window") { int w; words >> w; ui.openInfo(w); }
                 else if (op == "menu") { std::string n; std::getline(words >> std::ws, n); ui.openMenu(n); }
                 else if (!op.empty()) std::fprintf(stderr, "unknown command '%s'\n", op.c_str());
             }

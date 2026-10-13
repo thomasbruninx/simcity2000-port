@@ -29,6 +29,7 @@ const std::vector<ToolGroup>& toolCatalog() {
                         {"Marina", K::Building, 14, 4}}},
         {"Rewards", {{"Mayor's house", K::Building, 5, 0}, {"City hall", K::Building, 5, 1}, {"Plymouth arcology", K::Building, 5, 5}, {"Forest arcology", K::Building, 5, 6},
                      {"Darco arcology", K::Building, 5, 7}, {"Launch arcology", K::Building, 5, 8}}},
+        {"Sign", {{"Place sign", K::Sign, 0, 0}}},
         {"Query", {{"Query", K::Query, 0, 0}}},
     };
     return groups;

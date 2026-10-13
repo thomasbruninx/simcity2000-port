@@ -16,17 +16,18 @@ struct IconRef { int strip, cell; };
 IconRef groupIcon(const std::string& name) {
     static const std::pair<const char*, IconRef> table[] = {
         {"Bulldozer", {1, 0}}, {"Landscape", {1, 1}}, {"Dispatch", {1, 2}}, {"Terrain", {2, 0}}, {"Zones", {1, 9}}, {"Power", {1, 3}}, {"Water", {1, 4}}, {"Roads", {1, 6}}, {"Rail", {1, 7}},
-        {"Education", {1, 12}}, {"Safety", {1, 13}}, {"Recreation", {1, 14}}, {"Rewards", {1, 5}}, {"Query", {1, 16}}};
+        {"Education", {1, 12}}, {"Safety", {1, 13}}, {"Recreation", {1, 14}}, {"Rewards", {1, 5}}, {"Sign", {1, 15}}, {"Query", {1, 16}}};
     for (const auto& e : table) if (name == e.first) return e.second;
     return {0, -1};
 }
 // buttons at the right end of the top bar: rotate left / right, zoom out / in, centre, budget
-constexpr int kTopButtons[6] = {17, 18, 19, 20, 21, 27};
-constexpr int kTopButtonStep = 27;
+constexpr int kTopButtons[10] = {17, 18, 19, 20, 21, 23, 25, 16, 22, 27};   // rotate x2, zoom x2, centre, city, graphs, advisors, newspaper, budget
+constexpr int kTopButtonStep = 27, kTopButtonCount = 10;
 constexpr const char* kMonths[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 constexpr const char* kSpeedNames[6] = {"", "Paused", "Turtle", "Llama", "Cheetah", "Swallow"};
 
 void fill(SDL_Renderer* r, int x, int y, int w, int h, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca = 255) {
+    SDL_SetRenderDrawBlendMode(r, ca < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
     const SDL_FRect f{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
     SDL_RenderFillRect(r, &f);
@@ -43,7 +44,7 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, U
 }  // namespace
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
-    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {
+    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), info_(sim, resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {
     budget_.onBond = [this](int what) {
         message_.clear();
         const bool ok = what == 0 ? issueBond(sim_.context()) : repayOldestBond(sim_.context());
@@ -97,7 +98,7 @@ GameUi::Rect GameUi::groupRect(int i) const { return {0, kTopBar + i * kGroupH, 
 GameUi::Rect GameUi::itemRect(int i) const { return {kGroupW + 2, kTopBar + std::max(0, group_) * kGroupH + i * kItemH, kItemW, kItemH}; }
 
 bool GameUi::overUi(int x, int y) const {
-    if (modal_ || budget_.open) return true;
+    if (modal_ || budget_.open || info_.open != InfoWindows::Which::None) return true;
     if (y < kTopBar || y >= height_ - kBottomBar) return true;
     const int groups = static_cast<int>(toolCatalog().size());
     if (x < kGroupW && y < kTopBar + groups * kGroupH) return true;
@@ -128,14 +129,20 @@ void GameUi::mouseDown(int x, int y, int button) {
         return;
     }
     if (budget_.mouseDown(x, y, button, width_, height_)) return;
+    if (queryOpen_ && button == 1) queryOpen_ = false;
     if (button != 1) { scrolling_ = true; return; }
-    if (y < kTopBar && x >= width_ - 6 * kTopButtonStep - 4) {
-        const int k = (x - (width_ - 6 * kTopButtonStep - 4)) / kTopButtonStep;
+    if (info_.mouseDown(x, y, width_, height_)) return;
+    if (y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
+        const int k = (x - (width_ - kTopButtonCount * kTopButtonStep - 4)) / kTopButtonStep;
         if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2); }
         else if (k == 2) cam_.zoom = std::max(0, cam_.zoom - 1);
         else if (k == 3) cam_.zoom = std::min(2, cam_.zoom + 1);
         else if (k == 4) cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
-        else if (k == 5) budget_.open = true;
+        else if (k == 5) info_.open = InfoWindows::Which::City;
+        else if (k == 6) info_.open = InfoWindows::Which::Graphs;
+        else if (k == 7) info_.open = InfoWindows::Which::Advisors;
+        else if (k == 8) info_.open = InfoWindows::Which::Newspaper;
+        else if (k == 9) budget_.open = true;
         return;
     }
     if (overUi(x, y)) {
@@ -176,6 +183,7 @@ void GameUi::mouseDown(int x, int y, int button) {
         case ToolKind::Zone:
         case ToolKind::Highway:
         case ToolKind::Network: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
+        case ToolKind::Sign: signAt(a, b); break;
         case ToolKind::Building:
         case ToolKind::Special:
         case ToolKind::Query: applyClick(a, b); break;
@@ -220,10 +228,14 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (modal_) {
         if (k == SDLK_ESCAPE) modal_->result = -1;
         else if (k == SDLK_RETURN) modal_->result = 0;
+        else if (k == SDLK_BACKSPACE && modal_->textInput && !modal_->text.empty()) modal_->text.pop_back();
         return true;
     }
+    if (queryOpen_ && k == SDLK_ESCAPE) { queryOpen_ = false; return true; }
     if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
+    if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE) info_.open = InfoWindows::Which::None; return true; }
+    if (k == SDLK_G) { info_.open = InfoWindows::Which::Graphs; return true; }
     if (k == SDLK_B) { budget_.open = true; return true; }
     if (k == SDLK_ESCAPE) {
         if (menuOpen_) menuOpen_ = false;
@@ -352,11 +364,38 @@ void GameUi::applyClick(int a, int b) {
 }
 
 void GameUi::queryTile(int a, int b) {
-    const World& w = sim_.world();
-    char buf[200];
-    std::snprintf(buf, sizeof buf, "(%d,%d) tile %02X  zone %d  terrain %02X  alt %d  power %s  water %s  traffic %d", a, b, w.xbld.at(a, b), w.xzon.at(a, b) & 0xF, w.xter.at(a, b),
-                  w.altm.at(a, b) & 0x1F, (w.xbit.at(a, b) & xbit::kPowered) ? "on" : "off", (w.xbit.at(a, b) & xbit::kWatered) ? "on" : "off", w.xtrf.at(a >> 1, b >> 1));
-    say(buf);
+    query_ = ::sc2k::queryTile(sim_.context(), a, b);
+    queryOpen_ = true;
+}
+
+void GameUi::signAt(int a, int b) {
+    SimContext& c = sim_.context();
+    std::string text = signText(c, a, b);
+    message_.clear();
+    const int v = sim_.world().xtxt.at(a, b);
+    if (v >= 0x33) { say(res_.string(0x108)); return; }
+    const bool ok = askText("Enter sign text", text);
+    if (placeSign(c, a, b, text, !ok)) say(ok && !text.empty() ? "Sign placed" : "Sign removed");
+    else if (message_.empty()) say("Can't place a sign here");
+}
+
+bool GameUi::askText(const std::string& title, std::string& text) {
+    Modal m;
+    m.title = title;
+    m.textInput = true;
+    m.text = text;
+    if (headless || !pump) return true;
+    modal_ = &m;
+    SDL_StartTextInput(SDL_GetKeyboardFocus());
+    while (m.result == -2) if (!pump()) { m.result = -1; break; }
+    SDL_StopTextInput(SDL_GetKeyboardFocus());
+    modal_ = nullptr;
+    text = m.text;
+    return m.result == 0;
+}
+
+void GameUi::textInput(const std::string& utf8) {
+    if (modal_ && modal_->textInput) for (char ch : utf8) if (ch >= 32 && ch < 127 && modal_->text.size() < 24) modal_->text.push_back(ch);
 }
 
 void GameUi::dragTool(int a0, int b0, int a1, int b1) {
@@ -464,7 +503,7 @@ void GameUi::scheduledEvent(int index) {
     say(index <= 11 ? "A new tool has been invented!" : "A new arcology design is available!");
 }
 
-void GameUi::postMessage(int, int) {}
+void GameUi::postMessage(int id, int arg) { info_.postMessage(id, arg); }
 void GameUi::showDialog(int id) { toolMessage(id); }
 
 // ---- drawing -----------------------------------------------------------------------------------------------------------
@@ -498,6 +537,7 @@ void GameUi::overlay(Framebuffer& fb) {
 }
 
 void GameUi::draw(SDL_Renderer* r) {
+    drawSigns(r);
     const CityState& s = sim_.state();
     // top bar
     fill(r, 0, 0, width_, kTopBar, 20, 24, 32);
@@ -507,8 +547,8 @@ void GameUi::draw(SDL_Renderer* r) {
     text(r, 6, 10, top);
     std::string right = message_;
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
-    const int buttonsX = width_ - 6 * kTopButtonStep - 4;
-    for (int k = 0; k < 6; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2);
+    const int buttonsX = width_ - kTopButtonCount * kTopButtonStep - 4;
+    for (int k = 0; k < kTopButtonCount; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2);
     if (!right.empty()) {
         const size_t room = static_cast<size_t>(std::max(0, (buttonsX - 500 - 8) / 8));
         if (right.size() > room) right.resize(room);
@@ -560,8 +600,10 @@ void GameUi::draw(SDL_Renderer* r) {
     button(4, 92, layers.underground ? "Underground" : "Surface", layers.underground);
     button(104, 72, "Power", layers.powerOverlay);
     button(184, 72, "Water", layers.waterOverlay);
-    text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  B budget  Ctrl+S save  Esc", 150, 160, 180);
+    text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  B budget  G graphs  Ctrl+S save  Esc", 150, 160, 180);
     budget_.draw(r, width_, height_);
+    info_.draw(r, width_, height_);
+    if (queryOpen_) drawQuery(r);
     if (modal_) drawModal(r);
 }
 
@@ -579,6 +621,51 @@ void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
     else if (strip == 2 && terrainIcons_) terrainIcons_->draw(r, cell, x + 2, y + 2);
 }
 
+void GameUi::drawSigns(SDL_Renderer* r) {
+    if (cam_.zoom == 0) return;
+    const World& w = sim_.world();
+    for (int a = 0; a < 128; ++a)
+        for (int b = 0; b < 128; ++b) {
+            const int v = w.xtxt.at(a, b);
+            if (v == 0 || v >= 0x33) continue;
+            int x, y;
+            renderer_.tileScreenPos(w, cam_, a, b, x, y);
+            if (x < -200 || y < 0 || x > width_ + 200 || y > height_) continue;
+            const std::string label = signText(sim_.context(), a, b);
+            if (label.empty()) continue;
+            const int tw = static_cast<int>(label.size()) * 8 + 6;
+            fill(r, x - tw / 2, y - 22, tw, 12, 250, 250, 220);
+            frame(r, x - tw / 2, y - 22, tw, 12, 60, 40, 20);
+            text(r, x - tw / 2 + 3, y - 20, label, 40, 20, 10);
+        }
+}
+
+void GameUi::drawQuery(SDL_Renderer* r) {
+    const int bw = 360, bh = 40 + 14 * static_cast<int>(query_.lines.size()) + 20;
+    int bx = std::min(std::max(0, mouseX_ + 20), width_ - bw), by = std::min(std::max(kTopBar, mouseY_ - bh / 2), height_ - kBottomBar - bh);
+    fill(r, bx, by, bw, bh, 250, 246, 210);
+    frame(r, bx, by, bw, bh, 70, 50, 20);
+    std::string name = res_.string(query_.nameString);
+    if (name.empty()) name = "(unnamed)";
+    if (query_.overlay >= 1 && query_.overlay < 0x33) { const std::string sg = signText(sim_.context(), query_.a, query_.b); if (!sg.empty()) name += " - sign: " + sg; }
+    text(r, bx + 10, by + 10, name, 20, 10, 0);
+    int y = by + 28;
+    for (const QueryLine& l : query_.lines) {
+        std::string label = l.labelString >= 0 ? res_.string(l.labelString) : std::string();
+        text(r, bx + 10, y, label, 60, 40, 20);
+        std::string value;
+        bool warn = false;
+        for (const QueryPiece& p : l.value) {
+            if (!value.empty()) value += " ";
+            value += p.stringId >= 0 ? res_.string(p.stringId) : p.text;
+            warn |= p.warn;
+        }
+        text(r, bx + 130, y, value, warn ? 200 : 20, warn ? 20 : 10, 0);
+        y += 14;
+    }
+    text(r, bx + 10, y + 4, "(" + std::to_string(query_.a) + ", " + std::to_string(query_.b) + ")  Esc closes", 120, 100, 80);
+}
+
 void GameUi::drawModal(SDL_Renderer* r) {
     const int n = static_cast<int>(modal_->options.size());
     const int bx = (width_ - 520) / 2, by = (height_ - (70 + 22 * n)) / 2;
@@ -586,6 +673,7 @@ void GameUi::drawModal(SDL_Renderer* r) {
     fill(r, bx, by, 520, 70 + 22 * n, 28, 32, 44);
     frame(r, bx, by, 520, 70 + 22 * n, 200, 200, 220);
     text(r, bx + 20, by + 22, modal_->title, 255, 255, 190);
+    if (modal_->textInput) { fill(r, bx + 20, by + 48, 480, 20, 12, 14, 20); text(r, bx + 26, by + 54, modal_->text + "_", 255, 255, 255); }
     for (int i = 0; i < n; ++i) {
         fill(r, bx + 20, by + 50 + 22 * i, 480, 20, 60, 70, 100);
         text(r, bx + 28, by + 56 + 22 * i, modal_->options[static_cast<size_t>(i)]);

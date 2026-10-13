@@ -279,6 +279,8 @@ void tileCentre(const World& w, const Camera& cam, int a, int b, int& cx, int& c
 }
 }  // namespace
 
+void MapRenderer::tileScreenPos(const World& w, const Camera& cam, int a, int b, int& x, int& y) const { tileCentre(w, cam, a, b, x, y); }
+
 bool MapRenderer::pickTile(const World& w, const Camera& cam, int px, int py, int& oa, int& ob) const {
     const int z = cam.zoom, tw = 4 << z, th = 2 << z;
     int bestSum = -1;
