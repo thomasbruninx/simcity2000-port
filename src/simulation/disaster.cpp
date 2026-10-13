@@ -640,7 +640,9 @@ void disasterTick(SimContext& c) {
         } else {
             s.disasterKind = kind;
             s.disasterActive = 1;
+            c.hooks.stopSound(-1);                       // 0x424B10
             c.hooks.playSound(0x208, 5);
+            c.hooks.playMusic(10004);                    // 0x406720(2): disaster music
             c.hooks.scrollTo(c.things.focusA, c.things.focusB);
             if (s.militaryType == 1 && c.lfsr.mask(3) == 0) spawnVisitor(c, kind);
         }

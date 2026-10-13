@@ -185,6 +185,7 @@ void GameUi::mouseDown(int x, int y, int button) {
             dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b;
             editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = y; editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
             editSample(a, b, y);
+            if (tool()->sub <= 2) playSound(0x1FC, -1);   // 0x424AD0 loop while the spray is held (stopped by 0x424AF0)
             break;
         case ToolKind::Landscape: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; landscapeAt(a, b); break;
         case ToolKind::Dispatch: placeDispatch(sim_.context(), ts_, t->sub, a, b) ? say("Dispatched") : say("Can't dispatch there"); break;
@@ -251,6 +252,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE) info_.open = InfoWindows::Which::None; return true; }
+    if (k == SDLK_M && audio) { audio->setMuted(!audio->muted()); say(audio->muted() ? "Sound off" : "Sound on"); return true; }
     if (k == SDLK_G) { info_.open = InfoWindows::Which::Graphs; return true; }
     if (k == SDLK_B) { budget_.open = true; return true; }
     if (k == SDLK_ESCAPE) {
@@ -374,6 +376,7 @@ void GameUi::finishDrag() {
     bool ok = false;
     if (t->kind == ToolKind::TerrainEdit) {
         if (t->sub == 4) terrainLevelEnd(c, editPrevA_, editPrevB_);
+        stopSound(0x1FC);
         return;
     }
     if (t->kind == ToolKind::Highway) {
@@ -390,6 +393,7 @@ void GameUi::finishDrag() {
         if (ok) say("Zoned for " + moneyText(cost));
         else say(cost > funds ? "Not enough funds (" + moneyText(cost) + ")" : "Nothing to zone there");
     }
+    if (t->kind == ToolKind::Highway || t->kind == ToolKind::Network || t->kind == ToolKind::Zone) playSound(ok ? (t->kind == ToolKind::Zone ? 0x1F7 : 0x1F5) : 0x1F4);
     preview_ = PathPreview{};
     previewCost_ = 0;
 }
@@ -408,14 +412,17 @@ void GameUi::applyClick(int a, int b) {
         else ok = placeRailLink(c, ts_, a, b);
         if (ok) say(std::string(t->name) + " built");
         else if (message_.empty()) say(std::string("Can't build: ") + t->name);
+        playSound(ok ? 0x1F5 : 0x1F4);
         return;
     }
     if (t->kind != ToolKind::Building) return;
     const int cost = unitCost(*t);
     if (sim_.state().treasury < cost) { say("Not enough funds (" + moneyText(cost) + ")"); return; }
     message_.clear();
-    if (placeBuilding(sim_.context(), ts_, t->cat, t->sub, a, b)) say(std::string(t->name) + " built for " + moneyText(cost));
+    const bool built = placeBuilding(sim_.context(), ts_, t->cat, t->sub, a, b);
+    if (built) say(std::string(t->name) + " built for " + moneyText(cost));
     else if (message_.empty()) say(std::string("Can't build the ") + t->name + " here");
+    playSound(built ? 0x1F5 : 0x1F4);
 }
 
 void GameUi::queryTile(int a, int b) {
@@ -589,8 +596,9 @@ void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ra
     Modal m; m.title = text; m.options = {"OK"};
     runModal(m);
 }
-void GameUi::playSound(int, int) {}
-void GameUi::stopSound(int) {}
+void GameUi::playSound(int id, int repeat) { if (audio) audio->playEffect(id, repeat); }
+void GameUi::stopSound(int id) { if (audio) audio->stopEffect(id); }
+void GameUi::playMusic(int id) { if (audio) audio->playMusic(id); }
 
 // ---- drawing -----------------------------------------------------------------------------------------------------------
 

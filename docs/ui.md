@@ -18,5 +18,5 @@ headlessly (`sc2k-app <dir> city.sc2 --screenshot out.png --do "..."`).
 * **Newspaper**: paper name from strings 360–365, poll lines from strings 353 / 367–373 with percentages scaled from the history indicators; the original's token-based article
   generator (TEXT_USA.DAT, "VERB the ADJECTIVE NOUN") and the real approval rating are not ported.
 * **City window** lists statistics; the original's population / health / education age graphs need the age model, which is not ported.
-* Query: custom building names (`DAT_004CBEE0`) and the building-specific microsimulation dialogs (strings 910–982, e.g. "Employees : #1") are not ported; the sign tool (0x44D140) is.
+* Query: building-specific microsimulation dialogs (strings 910–982, e.g. "Employees : #1") and building names are implemented (docs/simulation/tools.md); N renames the queried building. The sign tool (0x44D140) is ported too. Ctrl+N starts a new city (docs/simulation/new-city.md), M toggles the sound (docs/audio.md).
 * Bonds window shows each bond's rate and yearly cost, not the issue month.

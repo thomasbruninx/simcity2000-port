@@ -13,6 +13,7 @@
 #include <string>
 
 #include "app/game_ui.h"
+#include "audio/audio.h"
 #include "render/map_renderer.h"
 #include "resources/bmp.h"
 #include "resources/pe_resources.h"
@@ -74,6 +75,11 @@ int main(int argc, char** argv) {
         GameUi ui(*sim, renderer, cam, clock, resources, city);
         sim->setHooks(ui);
         ui.defaultMapPath = args.dir + "/DEFAULT.SC2";
+        SoundBank bank(args.dir);
+        Mixer mixer(&bank);
+        std::unique_ptr<AudioDevice> audioDevice;
+        int musicIndex = 0;
+        ui.audio = &mixer;
         ui.resize(width, height);
         ui.layers.underground = args.view == "underground";
         ui.layers.powerOverlay = args.view == "power";
@@ -82,6 +88,7 @@ int main(int argc, char** argv) {
         const bool headless = !args.shot.empty();
         if (headless) { SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy"); ui.headless = true; }
         if (!SDL_Init(SDL_INIT_VIDEO)) { std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
+        if (!headless) { audioDevice = std::make_unique<AudioDevice>(mixer); if (!audioDevice->ok()) std::fprintf(stderr, "audio: %s (continuing without sound)\n", SDL_GetError()); }
 
         SDL_Window* window = nullptr;
         SDL_Renderer* sdlr = nullptr;
@@ -160,6 +167,10 @@ int main(int argc, char** argv) {
             const Uint64 now = SDL_GetTicks();
             const int dt = static_cast<int>(now - last);
             last = now;
+            if (audioDevice && audioDevice->ok() && !mixer.muted() && !mixer.musicPlaying()) {   // 0x424B60: five tunes in turn
+                static const int kTunes[5] = {10001, 10004, 10008, 10012, 10018};
+                mixer.playMusic(kTunes[musicIndex++ % 5]);
+            }
             cycler.update(dt);
             ui.update(dt);
             const int steps = clock.advance(dt);

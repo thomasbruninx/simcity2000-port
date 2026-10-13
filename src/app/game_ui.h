@@ -15,6 +15,7 @@
 #include "app/icons.h"
 #include "app/info_windows.h"
 #include "app/tool_catalog.h"
+#include "audio/audio.h"
 #include "render/map_renderer.h"
 #include "resources/pe_resources.h"
 #include "save/city.h"
@@ -33,6 +34,7 @@ public:
     std::function<bool()> pump;
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;
+    Mixer* audio = nullptr;            // sound effects / music (optional)
 
     void resize(int w, int h) { width_ = w; height_ = h; }
     void mouseDown(int x, int y, int button);
@@ -71,7 +73,8 @@ public:
     void scrollTo(int a, int b) override;                    // centre the view on a disaster
     void gameOver(int kind) override;                        // scenario won / lost, bankruptcy
     void playSound(int id, int repeat = 0) override;
-    void stopSound(int id) override;
+    void stopSound(int id) override;                        // id < 0: everything (0x424B10)
+    void playMusic(int id) override;
     void scheduledEvent(int index) override;                 // a dated event fired: unlock tools
 
 private:

@@ -60,7 +60,10 @@ The editor's mouse loops (dispatcher 0x442040, polled with 0x4445A0 pointer→ti
 LEVEL=3 `sc2k-emu-diff tools` (20 runs x 800 ops on 43 files): identical up to a few runs where the *original* faults inside the emulator at 0x459442 / 0x45AC33 (an unstubbed redraw path), e.g. CERES v0 op 685; everything before the fault matched.
 
 ## Not ported yet
-Query / microsim editing (0x44D140, 0x44CB30, 0x471E80), the stadium sport dialog (0xD7), power-plant selection by year, and the budget-window counters stored beside the budget records for the same buildings. Bonds are not ported (strings 288–297 describe up to 50 bonds of $10,000 with rates).
+Query / microsim *editing* is done (building dialog below), the remaining gaps: the reward buildings' gating by the city council (0x441800: always available), building-specific dialog layout and sprite (the port shows the name, the class line list and a rename key), and the thing-update sounds. Bonds are ported (docs/simulation/finance.md).
+
+## Building dialog (0x44CB30), stadium sport (session 16)
+Microsim buildings (XTXT overlay 0x33..0xC8 with a record in XMIC) open a dialog with an editable name (XLAB[overlay], default from strings 831 + id - 0xC6 through `ZoneHooks::labelTemplate`) and up to five lines of text: `microsimClass[id]` selects a row of the table @0x4E6D90 (26 x 5 string offsets, string id = offset + 900) and the codes `#0` (record byte +1), `#1` / `#2` / `#3` (words +2 / +4 / +6), `#G` (letter grade F..A+ of byte +1), `#S` (sport, string 786 + word +4), `#T` (XLAB label number word +6), `#W` (wins-losses of 40 games) are substituted (`microsimInfo`, `formatMicrosimLine`, `renameBuilding`). The formatter was read from the unanalysed block 0x44CCE0..0x44D004. A new stadium (0xD7) asks for its sport (`ZoneHooks::chooseStadiumSport`, word +4 of the record; dialog 0x47CE40 assumed to write there -- STRONG INFERENCE).
 
 ## Emulator-harness notes (dev only)
 * The interactive loop 0x447F90 / 0x447910 is replaced by a 8-byte stub reading the drag target from memory (patching an immediate left stale translated blocks in Unicorn).

@@ -29,7 +29,8 @@ struct ZoneHooks {
     virtual void toolMessage(int /*id*/) {}                                // 0x45AFD0 / 0x408600 status or error text
     virtual int chooseStadiumSport() { return -1; }                          // 0x47CE40 dialog after a stadium is built: 0..4 (strings 786..790) or -1
     virtual void playSound(int /*id*/, int /*repeat*/ = 0) {}                // 0x424AA0 (repeat 0) / 0x424AD0: sound effect 500 + n (SOUNDS/5xx.WAV)
-    virtual void stopSound(int /*id*/) {}                                   // 0x424AF0
+    virtual void stopSound(int /*id*/) {}
+    virtual void playMusic(int /*id*/) {}                                  // 0x424B30: start a MIDI tune (10000 + n)                                   // 0x424AF0
                          // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)
 };
 
