@@ -100,11 +100,18 @@ bool GameUi::openMenu(const std::string& groupName) {
     return false;
 }
 
+bool GameUi::groupAllowed(size_t g) const {   // the map editor offers only the terrain tools
+    if (!mapEdit_) return true;
+    const std::string n = toolCatalog()[g].name;
+    return n == "Landscape" || n == "Terrain editor" || n == "Terrain";
+}
+
 GameUi::Rect GameUi::groupRect(int i) const { return {0, kTopBar + i * kGroupH, kGroupW, kGroupH}; }
 GameUi::Rect GameUi::itemRect(int i) const { return {kGroupW + 2, kTopBar + std::max(0, group_) * kGroupH + i * kItemH, kItemW, kItemH}; }
 
 bool GameUi::overUi(int x, int y) const {
     if (modal_ || budget_.open || info_.open != InfoWindows::Which::None) return true;
+    if (mapEdit_ && editPanel().contains(x, y)) return true;
     if (y < kTopBar || y >= height_ - kBottomBar) return true;
     const int groups = static_cast<int>(toolCatalog().size());
     if (x < kGroupW && y < kTopBar + groups * kGroupH) return true;
@@ -157,6 +164,7 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (queryOpen_ && button == 1) queryOpen_ = false;
     if (button != 1) { scrolling_ = true; return; }
     if (info_.mouseDown(x, y, width_, height_)) return;
+    if (mapEdit_ && mapEditorMouse(x, y, true)) return;
     if (y >= kMenuBar && y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
         const int k = (x - (width_ - kTopButtonCount * kTopButtonStep - 4)) / kTopButtonStep;
         if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2); }
@@ -174,6 +182,7 @@ void GameUi::mouseDown(int x, int y, int button) {
         const auto& cat = toolCatalog();
         for (size_t g = 0; g < cat.size(); ++g)
             if (groupRect(static_cast<int>(g)).contains(x, y)) {
+                if (!groupAllowed(g)) { say("Not while editing the map"); return; }
                 group_ = static_cast<int>(g);
                 item_ = std::max(0, item_ < static_cast<int>(cat[g].items.size()) ? item_ : 0);
                 if (cat[g].items.size() == 1) { item_ = 0; menuOpen_ = false; } else menuOpen_ = true;
@@ -227,6 +236,7 @@ void GameUi::mouseDown(int x, int y, int button) {
 
 void GameUi::mouseUp(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
+    sliderDrag_ = -1;
     if (button != 1) { scrolling_ = false; return; }
     if (dragging_) { mouseMove(x, y); finishDrag(); }
     dragging_ = false;
@@ -234,6 +244,7 @@ void GameUi::mouseUp(int x, int y, int button) {
 
 void GameUi::mouseMove(int x, int y) {
     menu_.mouseMove(x, y);
+    if (sliderDrag_ >= 0) { mapEditorMouse(x, y, false); mouseX_ = x; mouseY_ = y; return; }
     const int dx = x - mouseX_, dy = y - mouseY_;
     mouseX_ = x; mouseY_ = y;
     if (scrolling_) {   // the map moves in its own (magnified) pixels
@@ -343,7 +354,100 @@ void GameUi::loadCity(const CityFile& f) {
     message_.clear();
 }
 
+void GameUi::terrainProgress(int stage) {
+    progressText_ = res_.string(801 + stage);
+    if (!headless && pump) pump();   // redraw with the step name, like the generator's progress window
+}
+
+void GameUi::enterMapEditor() {
+    if (defaultMapPath.empty()) { say("No default map available"); return; }
+    CityFile map = CityFile::load(defaultMapPath);
+    sim_.replaceCity(map);
+    base_ = map;
+    group_ = item_ = -1; dragging_ = false; queryOpen_ = false; menuOpen_ = false;
+    mapEdit_ = true;
+    makeTerrain();
+}
+
+void GameUi::makeTerrain() {   // MAKE: a new random landscape from the sliders
+    progressText_.clear();
+    generateTerrain(sim_.context(), editParams_);
+    cam_.rotation = 0;
+    cam_.centerOn(0x40, 0x40, mapW() / 2, mapH() / 2);
+    progressText_.clear();
+    say(res_.string(413));   // "Editing Terrain..."
+}
+
+void GameUi::finishMapEditor() {   // DONE: the edited landscape becomes the new city (start year and difficulty, dialog 101)
+    Modal year; year.title = "Starting year"; year.options = {"1900", "1950", "2000", "2050"};
+    const int era = runModal(year);
+    if (era < 0) return;
+    Modal diff; diff.title = "Difficulty"; diff.options = {"Easy ($20,000)", "Medium ($10,000)", "Hard ($10K bond)"};
+    const int d = runModal(diff);
+    if (d < 0) return;
+    CityFile edited = sim_.toCity(base_);
+    mapEdit_ = false;
+    sim_.startNewCity(edited, era, d, nullptr);
+    base_ = edited;
+    avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
+    cam_.rotation = 0;
+    cam_.centerOn(0x40, 0x40, mapW() / 2, mapH() / 2);
+    group_ = item_ = -1; dragging_ = false; queryOpen_ = false;
+    say("New city started");
+}
+
+bool GameUi::mapEditorMouse(int x, int y, bool press) {
+    const Rect p = editPanel();
+    if (!p.contains(x, y) && sliderDrag_ < 0) return false;
+    const int trackX = p.x + 16, trackW = 196;
+    int* vals[3] = {&editParams_.hills, &editParams_.water, &editParams_.trees};
+    for (int i = 0; i < 3; ++i) {
+        const Rect row{trackX - 4, p.y + 56 + i * 34, trackW + 8, 24};
+        if ((press && row.contains(x, y)) || sliderDrag_ == i) {
+            sliderDrag_ = i;
+            *vals[i] = std::clamp((x - trackX) * 47 / trackW, 0, 47);
+            return true;
+        }
+    }
+    if (!press) return true;
+    if (Rect{p.x + 16, p.y + 160, 100, 18}.contains(x, y)) editParams_.coast = !editParams_.coast;
+    else if (Rect{p.x + 120, p.y + 160, 100, 18}.contains(x, y)) editParams_.river = !editParams_.river;
+    else if (Rect{p.x + 16, p.y + 192, 90, 26}.contains(x, y)) makeTerrain();
+    else if (Rect{p.x + 120, p.y + 192, 90, 26}.contains(x, y)) finishMapEditor();
+    return true;
+}
+
+void GameUi::drawMapEditor(SDL_Renderer* r) {
+    const Rect p = editPanel();
+    fill(r, p.x, p.y, p.w, p.h, 28, 32, 44);
+    frame(r, p.x, p.y, p.w, p.h, 200, 200, 220);
+    const auto* dlg = res_.dialog(104);
+    text(r, p.x + 16, p.y + 10, dlg && !dlg->controls.empty() ? "Terrain Generation" : "Terrain Generation", 255, 255, 190);
+    text(r, p.x + 16, p.y + 28, progressText_.empty() ? res_.string(413) : progressText_, 190, 220, 160);
+    static const char* names[3] = {"Hills", "Water", "Trees"};
+    const int vals[3] = {editParams_.hills, editParams_.water, editParams_.trees};
+    for (int i = 0; i < 3; ++i) {
+        const int y = p.y + 56 + i * 34;
+        text(r, p.x + 16, y, std::to_string(vals[i] * 100 / 47) + "% " + names[i], 235, 235, 235);
+        fill(r, p.x + 16, y + 16, 196, 4, 80, 90, 120);
+        fill(r, p.x + 16 + vals[i] * 196 / 47 - 3, y + 11, 7, 14, 230, 230, 140);
+    }
+    auto check = [&](int x, int y, bool on, const std::string& label) {
+        frame(r, x, y + 2, 12, 12, 200, 200, 220);
+        if (on) fill(r, x + 3, y + 5, 6, 6, 120, 230, 120);
+        text(r, x + 18, y + 4, label, 235, 235, 235);
+    };
+    check(p.x + 16, p.y + 160, editParams_.coast, res_.string(791));
+    check(p.x + 120, p.y + 160, editParams_.river, res_.string(792));
+    fill(r, p.x + 16, p.y + 192, 90, 26, 40, 80, 56); frame(r, p.x + 16, p.y + 192, 90, 26, 190, 230, 200);
+    text(r, p.x + 16 + 45 - 16, p.y + 201, res_.string(793), 255, 255, 220);
+    fill(r, p.x + 120, p.y + 192, 90, 26, 80, 60, 40); frame(r, p.x + 120, p.y + 192, 90, 26, 230, 210, 190);
+    text(r, p.x + 120 + 45 - 16, p.y + 201, res_.string(794), 255, 255, 220);
+    text(r, p.x + 16, p.y + 228, "Use the tools on the left", 150, 160, 180);
+}
+
 void GameUi::newCityDialog(bool randomMap) {
+    if (randomMap) { enterMapEditor(); return; }
     // the original: "Edit New Map" (terrain generation dialog 104) or the flat default map, then the start year and difficulty (dialog 101)
     Modal mapChoice; mapChoice.title = "New city: map"; mapChoice.options = {"Flat default map", "Random terrain (hills, water, trees)"};
     const int m = randomMap ? 1 : runModal(mapChoice);
@@ -846,6 +950,7 @@ void GameUi::draw(SDL_Renderer* r) {
         const Rect rc = groupRect(static_cast<int>(g));
         const bool sel = static_cast<int>(g) == group_;
         fill(r, rc.x, rc.y, rc.w, rc.h, sel ? 60 : 34, sel ? 70 : 38, sel ? 100 : 48);
+        if (!groupAllowed(g)) fill(r, rc.x, rc.y, rc.w, rc.h, 0, 0, 0, 150);
         frame(r, rc.x, rc.y, rc.w, rc.h, 12, 14, 20);
         const IconRef ic = groupIcon(cat[g].name);
         drawIcon(r, ic.strip, ic.cell, rc.x + 2, rc.y + 1);
@@ -891,6 +996,7 @@ void GameUi::draw(SDL_Renderer* r) {
     SDL_SetRenderClipRect(r, nullptr);
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);
+    if (mapEdit_) drawMapEditor(r);
     menu_.draw(r, width_);
     if (queryOpen_) drawQuery(r);
     if (modal_) drawModal(r);

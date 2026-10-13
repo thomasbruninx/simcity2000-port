@@ -14,6 +14,7 @@ namespace sc2k {
 // the stubs used when the original code is run in the differential-test emulator.
 struct ZoneHooks {
     virtual ~ZoneHooks() = default;
+    virtual void terrainProgress(int /*stage*/) {}                         // 0x414E50: the terrain generator enters stage 0..8 (strings 801..809)
     virtual void scrollTo(int /*a*/, int /*b*/) {}                       // 0x440C90 (UI)
     virtual void newsAge() {}                                            // 0x479F40: the news queue ages (called once a month from the event phase)
     virtual void postMessage(int /*id*/, int /*arg*/) {}                 // 0x47BA90 (advisor/news queue)

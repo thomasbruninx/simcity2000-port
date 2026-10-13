@@ -44,7 +44,7 @@ public:
     float mapMag() const { return mag_; }                // magnification of the map framebuffer on screen
     int mapW() const { return std::max(1, static_cast<int>(std::ceil(width_ / mag_))); }   // size of the map framebuffer
     int mapH() const { return std::max(1, static_cast<int>(std::ceil(height_ / mag_))); }
-    bool paused() const { return pauseOpen_ || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
+    bool paused() const { return pauseOpen_ || mapEdit_ || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
     static std::string savesDir();     // where saved games go (next to the settings file)
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;
@@ -74,6 +74,8 @@ public:
     bool saveCity(const std::string& path);
     void newCity(int era, int difficulty, const TerrainParams* terrain = nullptr);             // start a new city on the default map (scripting)
     void newCityDialog(bool randomMap = false);
+    void enterMapEditor();                              // File > Edit New Map: the terrain generator panel (Hills / Water / Trees, Coast, River, MAKE, DONE) and the terrain tools
+    bool mapEditing() const { return mapEdit_; }
     void loadCity(const CityFile& f);                  // a city / scenario was loaded into the simulation                              // asks for the starting year and the difficulty (the original dialog 101)
     std::string defaultMapPath;
     void setCityName(const std::string& n) { info_.cityName = n; }
@@ -88,6 +90,7 @@ public:
     void showDialog(int stringId) override;
     const uint8_t* labelTemplate(int id, bool custom) override;   // default building names (strings 831..888) for new microsim buildings
     StadiumChoice chooseStadiumTeam(int takenMask) override;
+    void terrainProgress(int stage) override;                // 0x414E50: shows the generator's current step
     void scrollTo(int a, int b) override;                    // 0x440C90: centre the view on a disaster (only with Options > Auto-Goto)
     void centerView(int a, int b) { cam_.centerOn(a, b, mapW() / 2, mapH() / 2); }
     void gameOver(int kind) override;                        // scenario won / lost, bankruptcy
@@ -127,6 +130,17 @@ private:
     MenuBar menu_;
     bool autoBudget_ = false, autoGoto_ = true, soundOn_ = true, musicOn_ = true;   // Options menu (the original keeps them in the profile; defaults = the menu's check marks)
     int lastMonth_ = -1;
+    bool mapEdit_ = false;
+    TerrainParams editParams_;
+    int sliderDrag_ = -1;
+    std::string progressText_;
+    Rect editPanel() const { return {width_ - 236, kTopBarPx + 8, 228, 252}; }
+    static constexpr int kTopBarPx = 46;
+    void drawMapEditor(SDL_Renderer* r);
+    bool mapEditorMouse(int x, int y, bool press);
+    void makeTerrain();
+    void finishMapEditor();
+    bool groupAllowed(size_t g) const;
     bool debugMenu_ = false;           // the hidden Debug menu (resource 223), enabled by typing the cheat word
     std::string cheatTyped_;
     void buildMenu();

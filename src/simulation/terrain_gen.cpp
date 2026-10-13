@@ -163,15 +163,19 @@ void generateTerrain(SimContext& c, const TerrainParams& p) {
             w.xbit.at(a, b) &= 0xFB;
         }
     c.s.rotation = 0;
+    c.hooks.terrainProgress(0);
     g.hills(p.hills + 0xB);
     int sea = (p.water + 4 + ((p.water + 4) >> 31 & 7)) >> 3;
     c.s.seaLevel = sea;
     if (p.coast || p.river) {
+        c.hooks.terrainProgress(1);
         if (c.s.seaLevel < 4) c.s.seaLevel = 4;
         if (p.coast) g.coastLine(c.s.seaLevel);
         if (p.river) g.riverLine(c.s.seaLevel);
     }
+    c.hooks.terrainProgress(2);
     g.smooth();
+    c.hooks.terrainProgress(3);
     g.smooth();
     for (int a = 0; a < 0x80; ++a)
         for (int b = 0; b < 0x80; ++b) {
@@ -182,13 +186,18 @@ void generateTerrain(SimContext& c, const TerrainParams& p) {
             if (u < 4) { r = t; if (u >= 0) r = 4; }
             g.alt(a, b) = static_cast<uint16_t>(r);
         }
+    c.hooks.playSound(0x211);   // 0x4106A6: the generator's sound (529.WAV) after the altitude transform
+    c.hooks.terrainProgress(4);
     g.smooth();
     for (int a = 0; a < 0x80; ++a)
         for (int b = 0; b < 0x80; ++b) { g.alt(a, b) &= 0xFC1F; g.alt(a, b) &= 0x3FF; }
+    c.hooks.terrainProgress(5);
     for (int a = 0; a < 0x80; ++a) for (int b = 0; b < 0x80; ++b) g.cliff(a, b);
     for (int a = 0; a < 0x80; ++a) for (int b = 0; b < 0x80; ++b) fixShore(c, a, b);
+    c.hooks.terrainProgress(6);
     g.forests((p.trees * p.trees) / 2);
-    if (p.coast) g.coastFlags();
+    if (p.coast) { c.hooks.terrainProgress(7); g.coastFlags(); }
+    c.hooks.terrainProgress(8);
     ToolState ts;
     for (int n = p.water / 4; n > 0; --n) {
         const int len = (c.rng.next() & 0x7F) + 0x32;
