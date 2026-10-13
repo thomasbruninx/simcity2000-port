@@ -26,6 +26,8 @@
 using namespace sc2k;
 
 namespace {
+constexpr Uint64 kThingFrameMs = 100;   // animation frame interval of ships, planes, vehicles, smoke ... (10 frames per second)
+
 struct Args {
     std::string dir, city, shot, view, script;
     int days = 0, width = 1280, height = 800;
@@ -272,7 +274,7 @@ int main(int argc, char** argv) {
             const int steps = ui.paused() ? 0 : clock.advance(dt);
             for (int i = 0; i < steps; ++i) sim->tick();
             thingAcc += static_cast<Uint64>(dt);
-            while (thingAcc >= 40) { thingAcc -= 40; if (!ui.paused()) sim->thingFrames(1); }
+            while (thingAcc >= kThingFrameMs) { thingAcc -= kThingFrameMs; if (!ui.paused()) sim->thingFrames(1); }   // the original ran its frame update every 30-45 ms on 1996 hardware, which looks too fast today
             renderFrame();
             SDL_Delay(8);
         };
