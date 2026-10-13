@@ -26,6 +26,8 @@ public:
     CityState& state();
     const GameTables& tables() const;
     SimContext& context();
+    void replaceCity(const CityFile& city);       // loads another city into the same objects (references stay valid)
+    void startNewCity(const CityFile& map, int era, int difficulty);   // replaceCity + the new-city setup 0x42DDE0
     uint64_t fingerprint() const;                 // worldFingerprint of the current state
     CityFile toCity(CityFile base) const;         // writes the current world + state into a copy of `base`
 

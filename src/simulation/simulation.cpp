@@ -1,4 +1,5 @@
 #include "simulation/simulation.h"
+#include "simulation/new_city.h"
 
 #include "world/world_hash.h"
 
@@ -39,6 +40,19 @@ void Simulation::setHooks(ZoneHooks& hooks) {
     impl_->ctx = std::make_unique<SimContext>(SimContext{impl_->world, impl_->state, impl_->tables, impl_->rng, impl_->lfsr, hooks, impl_->traffic, {}});
     impl_->ctx->things = std::move(old.things);
     impl_->ctx->lcg = old.lcg;
+}
+void Simulation::replaceCity(const CityFile& c) {
+    impl_->world = World::fromCity(c);
+    impl_->state = CityState::fromCity(c);
+    CityState& st = impl_->state;
+    st.catPop = {st.zonePop[1] + st.zonePop[2], st.zonePop[3] + st.zonePop[4], st.zonePop[5] + st.zonePop[6]};
+    if (st.rateLevel == 0) st.rateLevel = 1;
+    impl_->ctx->things = ThingState{};
+}
+void Simulation::startNewCity(const CityFile& map, int era, int difficulty) {
+    replaceCity(map);
+    NewCityOptions o; o.era = era; o.difficulty = difficulty;
+    setupNewCity(impl_->world, impl_->state, impl_->tables, impl_->rng, o);
 }
 World& Simulation::world() { return impl_->world; }
 CityState& Simulation::state() { return impl_->state; }

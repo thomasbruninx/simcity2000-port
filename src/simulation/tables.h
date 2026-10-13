@@ -95,6 +95,7 @@ struct GameTables {
     std::array<uint8_t, 0x860> highwayData{};           // raw bytes 0x4E75E8..0x4E7E48: highway tile classes, piece tables, direction deltas (highway.cpp)
     std::array<uint8_t, 0x5B0> valueData{};              // raw bytes 0x4DACB8..0x4DB268: per-building asset values (cost tables) used by the city value
     std::array<uint8_t, 0x40> terrainData{};            // raw bytes 0x4E6848..0x4E6888+16: 8-neighbour offsets and masks of the terrain tools              // raw bytes 0x4E75A8..0x4E75E8: bridge cost per tile and direction deltas
+    std::array<int16_t, 17> eventYearBase{};              // @0x4E89D8: nominal years of the 17 dated events (new-city setup adds rand%20)
     std::array<int32_t, 18> toolAvailBase{};             // @0x4E8550: initial enabled-button mask per tool category
     std::array<uint8_t, 216> toolBuildingSize{};         // @0x4DAEC8 [category*12 + subtype]: footprint size (255 = none)
     std::array<int32_t, 216> toolCost{};                 // @0x4DAFA0 [category*12 + subtype]: cost per tile / per building (-1 = n/a)

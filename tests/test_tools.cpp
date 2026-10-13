@@ -3,6 +3,7 @@
 #include "simulation/tool_script.h"
 #include "simulation/availability.h"
 #include "simulation/bonds.h"
+#include "simulation/new_city.h"
 #include "simulation/query.h"
 #include "simulation/finance.h"
 #include "world/world_hash.h"
@@ -154,4 +155,20 @@ TEST(query_names_follow_the_exe_string_groups_and_report_the_tile) {
     // signs
     CHECK(placeSign(ctx, 20, 20, "Downtown", false) && signText(ctx, 20, 20) == "Downtown" && w.xtxt.at(20, 20) >= 1);
     CHECK(placeSign(ctx, 20, 20, "", false) && signText(ctx, 20, 20).empty() && w.xtxt.at(20, 20) == 0);
+}
+
+TEST(new_city_setup_follows_era_and_difficulty) {
+    GameTables t;
+    for (size_t i = 0; i < t.eventYearBase.size(); ++i) t.eventYearBase[i] = static_cast<int16_t>(1900 + 10 * i);
+    World w{}; CityState s; CrtRand rng(5);
+    w.altm.at(3, 4) = 0xFC05;
+    NewCityOptions o; o.era = 1; o.difficulty = 2;
+    setupNewCity(w, s, t, rng, o);
+    CHECK(s.startYear == 1950 && s.nationalPop == 25000 && s.gnp == 7500 && s.rateLevel == 3);
+    CHECK(s.treasury == 10000 && s.debt == 1 && s.bondRates[0] == 3 && s.budget[kBond].fundingPercent == 30000);
+    CHECK(w.altm.at(3, 4) == 0x0005);                                // status flags above bit 9 are cleared
+    CHECK(s.eventYears[0] == 0 && s.eventYears[16] >= 2060);       // 1900.. is before 1950; 2060 + rand%20 is not
+    o.difficulty = 0;
+    setupNewCity(w, s, t, rng, o);
+    CHECK(s.treasury == 20000 && s.debt == 0 && s.budget[kBond].currentCosts == 0);
 }

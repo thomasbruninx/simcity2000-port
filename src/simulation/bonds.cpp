@@ -16,6 +16,8 @@ void refreshBudget(CityState& s) {
 }
 }  // namespace
 
+void refreshBondBudget(CityState& s) { refreshBudget(s); }
+
 int32_t computeCityValue(const CityState& s, const GameTables& t) {
     int32_t v = s.c9434 * tbl(t, 0x4DB118);
     for (int id = 0xE; id < 0x70; ++id) {

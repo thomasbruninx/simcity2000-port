@@ -55,6 +55,9 @@ public:
     void signTool(int a, int b, const std::string& text) { placeSign(sim_.context(), a, b, text, false); }   // scripting     // press on (a0,b0), release on (a1,b1) with the selected tool
     const std::string& message() const { return message_; }
     bool saveCity(const std::string& path);
+    void newCity(int era, int difficulty);             // start a new city on the default map (scripting)
+    void newCityDialog();                              // asks for the starting year and the difficulty (the original dialog 101)
+    std::string defaultMapPath;                        // DEFAULT.SC2 of the game directory
 
     // ZoneHooks
     bool confirm(int stringId, int amount = 0) override;

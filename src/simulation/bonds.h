@@ -9,6 +9,7 @@ namespace sc2k {
 int32_t computeCityValue(const CityState& s, const GameTables& t);           // 0x469BF0
 int currentBondRate(const CityState& s);                                    // the rate a new bond would get: federal rate + 1
 bool bondsAvailable(const CityState& s, const GameTables& t);               // issue allowed by the city-value rule of 0x41ABF0
+void refreshBondBudget(CityState& s);                                      // budget[kBond] from the count and rates
 bool issueBond(SimContext& c);                                              // 0x41ABF0 + 0x473F20
 bool repayOldestBond(SimContext& c);                                        // 0x4740B0
 

@@ -246,6 +246,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         return true;
     }
     if (queryOpen_ && k == SDLK_ESCAPE) { queryOpen_ = false; return true; }
+    if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
     if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE) info_.open = InfoWindows::Which::None; return true; }
@@ -264,6 +265,28 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     else if (k == SDLK_P) layers.powerOverlay = !layers.powerOverlay;
     else if (k == SDLK_O) layers.waterOverlay = !layers.waterOverlay;
     return true;
+}
+
+void GameUi::newCity(int era, int difficulty) {
+    if (defaultMapPath.empty()) { say("No default map available"); return; }
+    CityFile map = CityFile::load(defaultMapPath);
+    sim_.startNewCity(map, era, difficulty);
+    base_ = map;
+    avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
+    cam_.rotation = 0;
+    cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
+    group_ = item_ = -1; dragging_ = false; queryOpen_ = false;
+    say("New city started");
+}
+
+void GameUi::newCityDialog() {
+    Modal year; year.title = "Starting year"; year.options = {"1900", "1950", "2000", "2050"};
+    const int era = runModal(year);
+    if (era < 0) return;
+    Modal diff; diff.title = "Difficulty"; diff.options = {"Easy ($20,000)", "Medium ($10,000)", "Hard ($10K bond)"};
+    const int d = runModal(diff);
+    if (d < 0) return;
+    newCity(era, d);
 }
 
 // ---- tools -------------------------------------------------------------------------------------------------------------

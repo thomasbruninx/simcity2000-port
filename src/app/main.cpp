@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
         clock.speed = GameSpeed::Llama;
         GameUi ui(*sim, renderer, cam, clock, resources, city);
         sim->setHooks(ui);
+        ui.defaultMapPath = args.dir + "/DEFAULT.SC2";
         ui.resize(width, height);
         ui.layers.underground = args.view == "underground";
         ui.layers.powerOverlay = args.view == "power";
@@ -187,6 +188,7 @@ int main(int argc, char** argv) {
                 else if (op == "center") { int a, b; words >> a >> b; cam.centerOn(a, b, width / 2, height / 2); }
                 else if (op == "days") { int d; words >> d; sim->advanceDays(d); }
                 else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2); }
+                else if (op == "newcity") { int e = 0, d = 0; words >> e >> d; ui.newCity(e, d); }
                 else if (op == "funds") { int f; words >> f; sim->state().treasury = f; }
                 else if (op == "key") { std::string k; words >> k; ui.keyDown(keyByName(k), false); }
                 else if (op == "budget") { std::string d; words >> d; ui.keyDown(SDLK_B, false); if (!d.empty()) ui.openBudgetDetail(std::atoi(d.c_str())); }
