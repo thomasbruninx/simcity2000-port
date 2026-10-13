@@ -11,7 +11,7 @@ Sprite ids are `base + 500 * z`: zoom 2 → LARGE.DAT (1000+), zooms 0/1 → SMA
 
 ## What a tile shows (STRONG INFERENCE; the viewer reproduces it for ordinary city views)
 * **Ground**: sprite `terrainSprite[XTER]` (table `0x4E6608`, shore/slope variants 256.., water 270..). An empty zoned lot (XBLD = 0, XTER = 0, zone ≠ 0) uses the zone tile `0x50A + zone − 1000` (+500·z).
-* **Small objects** (XBLD 0x01–0x6F: rubble, trees, roads, rails, power lines, bridges): ground first, then sprite `XBLD + 500·z` with its bottom at the tile; XBIT bit 2 mirrors the sprite. Bridge pieces (0x51–0x5C) are shifted by `(landAlt − waterAlt)·step`.
+* **Small objects** (XBLD 0x01–0x6F: rubble, trees, roads, rails, power lines, bridges): ground first, then sprite `XBLD + 500·z` with its bottom at the tile; XBIT bit 2 mirrors the sprite. Bridge pieces stand at the (water-level) altitude of their tile like the ground — the earlier "shifted by (landAlt − waterAlt)·step" inference was wrong (0x43C0DB has no such term); the drawbridge (0x58) is drawn raised (0x59) when a ship is within a Manhattan distance of 8.
 * **Buildings** (XBLD ≥ 0x70): no ground; the sprite is drawn once, from the corner tile whose XZON high-nibble bit matches `rotationZoneMask[rotation]` (the left-most corner on screen); `y_top = yBottom + width/4 − (2<<z) − height`.
 * **Order**: painter's order by `a+b` (display coordinates), left to right.
 * **View rotation**: display coordinates `(da,db)` from file `(a,b)`: rot 0 `(a,b)`, rot 1 `(b,127−a)`, rot 2 `(127−a,127−b)`, rot 3 `(127−b,a)` — derived so that the corner flags written by building stamps select the left-most corner in each case; visually verified.

@@ -314,6 +314,15 @@ void MapRenderer::highlightTile(Framebuffer& fb, const World& w, const Camera& c
     }
 }
 
+// 0x43C0DB: the drawbridge (piece 0x58) is drawn raised (0x59) when a ship (thing type 3) is within a Manhattan distance of 8 tiles
+bool MapRenderer::drawbridgeUp(const World& w, int a, int b) const {
+    for (int slot = 1; slot < 0x28; ++slot) {
+        const uint8_t* rec = &w.xthg[static_cast<size_t>(slot) * 12];
+        if (rec[0] == 3 && std::abs(rec[3] - a) + std::abs(rec[4] - b) < 8) return true;
+    }
+    return false;
+}
+
 void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, const Camera& cam, const RenderLayers& layers) const {
     const int z = cam.zoom;
     const int zoomBase = 500 * z;
@@ -416,8 +425,9 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
             if (id != 0 && layers.buildings) {
                 int sid = id + zoomBase;
                 int top;
-                if (id > 0x50 && id < 0x5D) top = bottom + (altLand - altWater) * step - height(sid);   // bridges: drawn at the level of the water surface
-                else top = bottom - height(sid) - (xter == 0xD && id < 0x1D ? 12 : 0);
+                // 0x43C0DB: objects stand on the (water-level) altitude of their tile like the ground; only slope type 0xD lifts the small ones by one step
+                if (id == 0x58 && drawbridgeUp(w, a, b)) sid = 0x59 + zoomBase;   // the drawbridge opens for a ship within 8 tiles (Manhattan distance)
+                top = bottom - height(sid) - (xter == 0xD && id < 0x1D ? 12 : 0);
                 blit(fb, sid, x, top, flip);
                 if (layers.traffic && id >= 0x1D) {
                     const int density = w.xtrf.at(a >> 1, b >> 1);

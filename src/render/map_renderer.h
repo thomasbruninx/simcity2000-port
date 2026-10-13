@@ -55,6 +55,7 @@ public:
     void highlightTile(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, uint32_t color, int alpha, bool outline = false) const;
 
 private:
+    bool drawbridgeUp(const World& w, int a, int b) const;
     void blit(Framebuffer& fb, int spriteId, int x, int yTop, bool flip, bool shadow = false) const;
     void tint(Framebuffer& fb, int x, int yTop, uint32_t color, int alpha, int zoom) const;   // blends a colour over a tile diamond whose sprite box starts at (x, yTop)
     void drawUndergroundTile(Framebuffer& fb, const World& w, const Camera& cam, const RenderLayers& layers, int a, int b, int x, int yBase) const;
