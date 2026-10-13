@@ -46,6 +46,7 @@ AudioSettings AudioSettings::load() {
         if (k == "synth") s.synth = v == "fluidsynth" ? Synth::FluidSynth : Synth::Builtin;
         else if (k == "soundfont") s.soundfont = v;
         else if (k == "volume") s.volume = std::clamp(std::atoi(v.c_str()), 0, 100);
+        else if (k == "uiscale") { const int u = std::atoi(v.c_str()); s.uiScale = (u == 150 || u == 200 || u == 400) ? u : 100; }
     }
     return s;
 }
@@ -55,7 +56,7 @@ bool AudioSettings::save() const {
     mkdirs(path.substr(0, path.rfind('/')));
     std::ofstream out(path);
     if (!out) return false;
-    out << "synth=" << (synth == Synth::FluidSynth ? "fluidsynth" : "builtin") << "\nsoundfont=" << soundfont << "\nvolume=" << volume << "\n";
+    out << "synth=" << (synth == Synth::FluidSynth ? "fluidsynth" : "builtin") << "\nsoundfont=" << soundfont << "\nvolume=" << volume << "\nuiscale=" << uiScale << "\n";
     return static_cast<bool>(out);
 }
 

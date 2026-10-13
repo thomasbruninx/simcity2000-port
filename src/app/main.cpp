@@ -30,6 +30,7 @@ struct Args {
     std::string dir, city, shot, view, script;
     int days = 0, width = 1280, height = 800;
     bool title = false;
+    int uiScale = 0;   // --uiscale PCT (percent): overrides the saved High DPI setting
 };
 
 Args parse(int argc, char** argv) {
@@ -42,6 +43,7 @@ Args parse(int argc, char** argv) {
         else if (s == "--view" && i + 1 < argc) a.view = argv[++i];
         else if (s == "--do" && i + 1 < argc) a.script = argv[++i];
         else if (s == "--title") a.title = true;
+        else if (s == "--uiscale" && i + 1 < argc) a.uiScale = std::atoi(argv[++i]);
         else if (s == "--size" && i + 2 < argc) { a.width = std::atoi(argv[++i]); a.height = std::atoi(argv[++i]); }
         else a.city = s;
     }
@@ -135,35 +137,49 @@ int main(int argc, char** argv) {
 
         SDL_Texture*& tex = sdl.texture;
         Framebuffer fb;
-        float scaleX = 1.f, scaleY = 1.f;   // window points -> framebuffer pixels
+        float scaleX = 1.f, scaleY = 1.f;   // window points -> logical UI pixels
+        float uiScale = 1.f;
+        bool sized = false;
         Uint64 last = SDL_GetTicks(), thingAcc = 0;
         int shots = 0;
         bool running = true;
         bool ctrl = false;
 
         auto renderFrame = [&] {
-            int pw = width, ph = height;
+            int pw = width, ph = height;   // physical pixels of the window
             if (window) SDL_GetWindowSizeInPixels(window, &pw, &ph);
-            if (pw != fb.width || ph != fb.height || !tex) {
-                fb = Framebuffer(pw, ph);
-                if (tex) SDL_DestroyTexture(tex);
-                tex = SDL_CreateTexture(sdlr, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, pw, ph);
-                width = pw; height = ph;
-                ui.resize(pw, ph);
+            else if (target) { pw = target->w; ph = target->h; }
+            // High DPI mode: the whole interface is laid out in pixels / scale and stretched to the window
+            const float S = static_cast<float>(args.uiScale > 0 ? args.uiScale : titleScreen.settings.uiScale) / 100.f;
+            const int lw = std::max(320, static_cast<int>(pw / S)), lh = std::max(200, static_cast<int>(ph / S));
+            uiScale = S;
+            if (lw != width || lh != height) {
+                width = lw; height = lh;
+                ui.resize(lw, lh);
+                if (!sized) { sized = true; ui.scrollTo(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
+                SDL_SetRenderLogicalPresentation(sdlr, lw, lh, SDL_LOGICAL_PRESENTATION_STRETCH);
             }
             if (titleScreen.active) {   // title screen and pickers replace the game view
                 SDL_SetRenderDrawColor(sdlr, 8, 12, 24, 255);
                 SDL_RenderClear(sdlr);
-                titleScreen.draw(sdlr, pw, ph);
+                titleScreen.draw(sdlr, lw, lh);
                 SDL_RenderPresent(sdlr);
                 return;
+            }
+            const int mw = ui.mapW(), mh = ui.mapH();   // the map framebuffer: logical size / zoom magnification
+            if (mw != fb.width || mh != fb.height || !tex) {
+                fb = Framebuffer(mw, mh);
+                if (tex) SDL_DestroyTexture(tex);
+                tex = SDL_CreateTexture(sdlr, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, mw, mh);
+                if (tex) SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
             }
             fb.clear(0xFF101820u);
             renderer.draw(fb, sim->world(), sim->state(), cam, ui.layers);
             ui.overlay(fb);
-            SDL_UpdateTexture(tex, nullptr, fb.pixels.data(), pw * 4);
+            SDL_UpdateTexture(tex, nullptr, fb.pixels.data(), mw * 4);
             SDL_RenderClear(sdlr);
-            SDL_RenderTexture(sdlr, tex, nullptr, nullptr);
+            const SDL_FRect dst{0.f, 0.f, mw * ui.mapMag(), mh * ui.mapMag()};
+            SDL_RenderTexture(sdlr, tex, nullptr, &dst);
             ui.draw(sdlr);
             SDL_RenderPresent(sdlr);
         };
@@ -173,7 +189,7 @@ int main(int argc, char** argv) {
             sim->replaceCity(f);
             ui.loadCity(f);
             cam.rotation = sim->state().rotation & 3;
-            cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2);
+            ui.scrollTo(sim->state().centerA2 / 2, sim->state().centerB2 / 2);
             titleScreen.active = false;
         };
         auto handleTitle = [&] {
@@ -198,8 +214,8 @@ int main(int argc, char** argv) {
                 int ww = 1, wh = 1, pw = 1, ph = 1;
                 SDL_GetWindowSize(window, &ww, &wh);
                 SDL_GetWindowSizeInPixels(window, &pw, &ph);
-                scaleX = static_cast<float>(pw) / static_cast<float>(ww);
-                scaleY = static_cast<float>(ph) / static_cast<float>(wh);
+                scaleX = static_cast<float>(pw) / static_cast<float>(ww) / uiScale;
+                scaleY = static_cast<float>(ph) / static_cast<float>(wh) / uiScale;
             }
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
@@ -266,10 +282,10 @@ int main(int argc, char** argv) {
                 else if (op == "sign") { int a, b; words >> a >> b; std::string t; std::getline(words >> std::ws, t); ui.signTool(a, b, t); }
                 else if (op == "click") { int a, b; words >> a >> b; ui.dragTool(a, b, a, b); }
                 else if (op == "press") { int a, b; words >> a >> b; ui.mouseDown(a, b, 1); }
-                else if (op == "zoom") { int z; words >> z; cam.zoom = std::clamp(z, 0, 2); }
-                else if (op == "center") { int a, b; words >> a >> b; cam.centerOn(a, b, width / 2, height / 2); }
+                else if (op == "zoom") { int z; words >> z; ui.setZoomLevel(z); }
+                else if (op == "center") { int a, b; words >> a >> b; ui.scrollTo(a, b); }
                 else if (op == "days") { int d; words >> d; sim->advanceDays(d); }
-                else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2); }
+                else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; ui.scrollTo(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }
                 else if (op == "find") { int id = 0; words >> id; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xbld.at(a, b) == id) { std::printf("building %d at %d %d\n", id, a, b); a = b = 128; } }
                 else if (op == "title") titleScreen.show();
                 else if (op == "settings") { titleScreen.show(); titleScreen.openSettings(); }
@@ -285,13 +301,14 @@ int main(int argc, char** argv) {
                 else if (!op.empty()) std::fprintf(stderr, "unknown command '%s'\n", op.c_str());
             }
             renderFrame();
-            Framebuffer out(width, height);
+            const int ow = target->w, oh = target->h;
+            Framebuffer out(ow, oh);
             const auto* px = static_cast<const Uint8*>(target->pixels);
-            for (int y = 0; y < height; ++y)
-                for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < oh; ++y)
+                for (int x = 0; x < ow; ++x) {
                     uint32_t v;
                     std::memcpy(&v, px + static_cast<size_t>(y) * static_cast<size_t>(target->pitch) + static_cast<size_t>(x) * 4, 4);
-                    out.pixels[static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)] = v | 0xFF000000u;
+                    out.pixels[static_cast<size_t>(y) * static_cast<size_t>(ow) + static_cast<size_t>(x)] = v | 0xFF000000u;
                 }
             const bool ok = writePng(args.shot.c_str(), out);
             std::printf("%s funds %d\nmessage: %s\n", ok ? "wrote screenshot" : "write failed", sim->state().treasury, ui.message().c_str());

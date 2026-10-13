@@ -16,6 +16,7 @@ struct AudioSettings {
     Synth synth = Synth::Builtin;
     std::string soundfont;          // path of the .sf2 for FluidSynth ("" = first one found)
     int volume = 80;                // music volume 0..100 (FluidSynth gain scale)
+    int uiScale = 100;              // High DPI mode: user interface scale in percent (100, 150, 200 or 400)
 
     static std::string settingsPath();                  // ~/Library/Application Support/sc2k-port/settings.ini (or $XDG_CONFIG_HOME / ~/.config)
     static AudioSettings load();

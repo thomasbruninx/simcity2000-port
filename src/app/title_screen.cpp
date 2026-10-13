@@ -173,6 +173,14 @@ std::string baseName(const std::string& p) { const size_t k = p.rfind('/'); retu
 void TitleScreen::drawSettings(SDL_Renderer* r, int w, int h) {
     text(r, 60, 60, "Settings - music", 255, 255, 190);
     text(r, 60, 100, "Music synthesizer", 200, 210, 230);
+    text(r, 330, 60, "High DPI mode (UI scale):", 200, 210, 230);
+    for (int i = 0; i < 4; ++i) {
+        static const int pct[4] = {100, 150, 200, 400};
+        static const char* names[4] = {"x1", "x1.5", "x2", "x4"};
+        const bool sel = settings.uiScale == pct[i];
+        fill(r, 560 + i * 60, 52, 54, 24, sel ? 70 : 28, sel ? 100 : 36, sel ? 150 : 56); frame(r, 560 + i * 60, 52, 54, 24, 190, 200, 230);
+        text(r, 560 + i * 60 + 27 - static_cast<int>(std::string(names[i]).size()) * 4, 60, names[i], 255, 255, 220);
+    }
     const bool fluid = settings.synth == AudioSettings::Synth::FluidSynth;
     const bool haveFluid = fluidSynthAvailable();
     fill(r, 60, 120, 260, 30, !fluid ? 70 : 28, !fluid ? 100 : 36, !fluid ? 150 : 56); frame(r, 60, 120, 260, 30, 190, 200, 230);
@@ -200,6 +208,8 @@ void TitleScreen::drawSettings(SDL_Renderer* r, int w, int h) {
 void TitleScreen::settingsClick(int x, int y, int w, int h) {
     (void)w; (void)h;
     auto apply = [&] { if (applySettings) status_ = applySettings(settings); settings.save(); };
+    for (int i = 0; i < 4; ++i)
+        if (Rect{560 + i * 60, 52, 54, 24}.in(x, y)) { static const int pct[4] = {100, 150, 200, 400}; settings.uiScale = pct[i]; settings.save(); return; }
     if (Rect{60, 120, 260, 30}.in(x, y)) { settings.synth = AudioSettings::Synth::Builtin; apply(); return; }
     if (Rect{340, 120, 260, 30}.in(x, y)) {
         if (!fluidSynthAvailable()) { status_ = "This build was made without FluidSynth (install fluid-synth and rebuild)."; return; }

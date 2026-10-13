@@ -6,6 +6,7 @@
 
 #include <array>
 #include <functional>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <utility>
@@ -35,6 +36,12 @@ public:
     std::function<bool()> pump;
     std::function<void()> onTitle;     // Ctrl+O: back to the title screen
     std::function<void(int)> onPauseAction;   // pause menu: 1 load game, 2 settings, 3 exit
+    static constexpr int kZoomLevelCount = 7;
+    void setZoomLevel(int level);                       // 0..6, see game_ui.cpp
+    int zoomLevel() const { return zoomLevel_; }
+    float mapMag() const { return mag_; }                // magnification of the map framebuffer on screen
+    int mapW() const { return std::max(1, static_cast<int>(std::ceil(width_ / mag_))); }   // size of the map framebuffer
+    int mapH() const { return std::max(1, static_cast<int>(std::ceil(height_ / mag_))); }
     bool paused() const { return pauseOpen_ || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
     static std::string savesDir();     // where saved games go (next to the settings file)
     bool headless = false;          // modal questions are answered with their first option
@@ -114,6 +121,9 @@ private:
     Modal* modal_ = nullptr;
     BudgetWindow budget_;
     InfoWindows info_;
+    int zoomLevel_ = 2;
+    float mag_ = 1.f, scrollRemX_ = 0, scrollRemY_ = 0;
+    int mapPx(int v) const { return static_cast<int>(std::floor(v / mag_)); }
     ToolAvailability avail_;
     bool available(const ToolItem& t) const;
     std::unique_ptr<IconStrip> toolbarIcons_, terrainIcons_, bookIcon_;   // created on the first draw (need the renderer)

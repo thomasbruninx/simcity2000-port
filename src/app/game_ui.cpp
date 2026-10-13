@@ -145,10 +145,10 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (info_.mouseDown(x, y, width_, height_)) return;
     if (y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
         const int k = (x - (width_ - kTopButtonCount * kTopButtonStep - 4)) / kTopButtonStep;
-        if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2); }
-        else if (k == 2) cam_.zoom = std::max(0, cam_.zoom - 1);
-        else if (k == 3) cam_.zoom = std::min(2, cam_.zoom + 1);
-        else if (k == 4) cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
+        if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2); }
+        else if (k == 2) setZoomLevel(zoomLevel_ - 1);
+        else if (k == 3) setZoomLevel(zoomLevel_ + 1);
+        else if (k == 4) cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2);
         else if (k == 5) info_.open = InfoWindows::Which::City;
         else if (k == 6) info_.open = InfoWindows::Which::Graphs;
         else if (k == 7) info_.open = InfoWindows::Which::Advisors;
@@ -184,14 +184,14 @@ void GameUi::mouseDown(int x, int y, int button) {
     menuOpen_ = false;
     const ToolItem* t = tool();
     int a, b;
-    if (!renderer_.pickTile(sim_.world(), cam_, x, y, a, b)) return;
+    if (!renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b)) return;
     if (!t) { queryTile(a, b); return; }
     switch (t->kind) {
         case ToolKind::Bulldoze: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
         case ToolKind::TerrainEdit:
             dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b;
-            editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = y; editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
-            editSample(a, b, y);
+            editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = mapPx(y); editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
+            editSample(a, b, mapPx(y));
             if (tool()->sub <= 2) playSound(0x1FC, -1);   // 0x424AD0 loop while the spray is held (stopped by 0x424AF0)
             break;
         case ToolKind::Landscape: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; landscapeAt(a, b); break;
@@ -218,12 +218,17 @@ void GameUi::mouseUp(int x, int y, int button) {
 void GameUi::mouseMove(int x, int y) {
     const int dx = x - mouseX_, dy = y - mouseY_;
     mouseX_ = x; mouseY_ = y;
-    if (scrolling_) { cam_.scrollX += dx; cam_.scrollY += dy; return; }
+    if (scrolling_) {   // the map moves in its own (magnified) pixels
+        scrollRemX_ += dx / mag_; scrollRemY_ += dy / mag_;
+        const int ix = static_cast<int>(scrollRemX_), iy = static_cast<int>(scrollRemY_);
+        cam_.scrollX += ix; cam_.scrollY += iy; scrollRemX_ -= ix; scrollRemY_ -= iy;
+        return;
+    }
     int a, b;
-    if (overUi(x, y) || !renderer_.pickTile(sim_.world(), cam_, x, y, a, b)) { hoverA_ = hoverB_ = -1; return; }
+    if (overUi(x, y) || !renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b)) { hoverA_ = hoverB_ = -1; return; }
     hoverA_ = a; hoverB_ = b;
     if (dragging_ && tool() && tool()->kind == ToolKind::TerrainEdit) {
-        if (tool()->sub >= 3) editSample(a, b, y);
+        if (tool()->sub >= 3) editSample(a, b, mapPx(y));
         lastA_ = a; lastB_ = b;
         return;
     }
@@ -242,8 +247,8 @@ void GameUi::mouseMove(int x, int y) {
 }
 
 void GameUi::wheel(int, int, int dy) {
-    if (dy > 0) cam_.zoom = std::min(2, cam_.zoom + 1);
-    else if (dy < 0) cam_.zoom = std::max(0, cam_.zoom - 1);
+    if (dy > 0) setZoomLevel(zoomLevel_ + 1);
+    else if (dy < 0) setZoomLevel(zoomLevel_ - 1);
 }
 
 bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
@@ -278,9 +283,9 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         else pauseOpen_ = true;   // Escape with nothing to cancel opens the pause menu
     } else if (k == SDLK_SPACE) clock_.speed = clock_.speed == GameSpeed::Paused ? GameSpeed::Llama : GameSpeed::Paused;
     else if (k >= SDLK_1 && k <= SDLK_5) clock_.speed = static_cast<GameSpeed>(k - SDLK_1 + 1);
-    else if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) cam_.zoom = std::min(2, cam_.zoom + 1);
-    else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) cam_.zoom = std::max(0, cam_.zoom - 1);
-    else if (k == SDLK_R) { cam_.rotation = (cam_.rotation + 1) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2); }
+    else if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) setZoomLevel(zoomLevel_ + 1);
+    else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) setZoomLevel(zoomLevel_ - 1);
+    else if (k == SDLK_R) { cam_.rotation = (cam_.rotation + 1) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2); }
     else if (k == SDLK_U) layers.underground = !layers.underground;
     else if (k == SDLK_P) layers.powerOverlay = !layers.powerOverlay;
     else if (k == SDLK_O) layers.waterOverlay = !layers.waterOverlay;
@@ -294,8 +299,8 @@ void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
     base_ = map;
     avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
     cam_.rotation = 0;
-    if (terrain) cam_.centerOn(0x40, 0x40, width_ / 2, height_ / 2);   // 0x412050(view, 0x40, 0x40) at the end of the generator
-    else cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, width_ / 2, height_ / 2);
+    if (terrain) cam_.centerOn(0x40, 0x40, mapW() / 2, mapH() / 2);   // 0x412050(view, 0x40, 0x40) at the end of the generator
+    else cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2);
     group_ = item_ = -1; dragging_ = false; queryOpen_ = false;
     say("New city started");
 }
@@ -682,7 +687,21 @@ ZoneHooks::StadiumChoice GameUi::chooseStadiumTeam(int takenMask) {   // dialog 
         return out;
     }
 }
-void GameUi::scrollTo(int a, int b) { cam_.centerOn(a, b, width_ / 2, height_ / 2); }
+// Zoom levels: the three sprite sets of the original (8, 16, 32 px tiles) and then the large set magnified 1.5x, 2x, 3x, 4x
+namespace { const struct { int sprites; float mag; } kZoomLevels[GameUi::kZoomLevelCount] = {{0, 1.f}, {1, 1.f}, {2, 1.f}, {2, 1.5f}, {2, 2.f}, {2, 3.f}, {2, 4.f}}; }
+
+void GameUi::setZoomLevel(int level) {
+    level = std::clamp(level, 0, kZoomLevelCount - 1);
+    if (level == zoomLevel_ && cam_.zoom == kZoomLevels[level].sprites) return;
+    int a = -1, b = -1;
+    const bool have = renderer_.pickTile(sim_.world(), cam_, mapW() / 2, mapH() / 2, a, b);   // keep the tile in the middle of the view
+    zoomLevel_ = level;
+    cam_.zoom = kZoomLevels[level].sprites;
+    mag_ = kZoomLevels[level].mag;
+    if (have) cam_.centerOn(a, b, mapW() / 2, mapH() / 2);
+}
+
+void GameUi::scrollTo(int a, int b) { cam_.centerOn(a, b, mapW() / 2, mapH() / 2); }
 void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ran out), 287 (bankrupt)
     static const int kString[3] = {286, 285, 287};
     const std::string text = res_.string(kString[kind < 0 || kind > 2 ? 2 : kind]);
@@ -826,6 +845,7 @@ void GameUi::drawSigns(SDL_Renderer* r) {
             if (v == 0 || v >= 0x33) continue;
             int x, y;
             renderer_.tileScreenPos(w, cam_, a, b, x, y);
+            x = static_cast<int>(x * mag_); y = static_cast<int>(y * mag_);
             if (x < -200 || y < 0 || x > width_ + 200 || y > height_) continue;
             const std::string label = signText(sim_.context(), a, b);
             if (label.empty()) continue;
