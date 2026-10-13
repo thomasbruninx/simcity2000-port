@@ -268,7 +268,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (ctrl && k == SDLK_O && onTitle) { onTitle(); return true; }
     if (ctrl && k == SDLK_S) { saveDialog(); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
-    if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE) info_.open = InfoWindows::Which::None; return true; }
+    if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE && !info_.closeArticle()) info_.open = InfoWindows::Which::None; return true; }
     if (k == SDLK_M && audio) { audio->setMuted(!audio->muted()); say(audio->muted() ? "Sound off" : "Sound on"); return true; }
     if (k == SDLK_G) { info_.open = InfoWindows::Which::Graphs; return true; }
     if (k == SDLK_B) { budget_.open = true; return true; }

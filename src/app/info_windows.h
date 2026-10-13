@@ -31,6 +31,7 @@ public:
     void age() { news_.age(); }                               // from ZoneHooks::newsAge (0x479F4B)
     void initNews(const std::string& gameDir);                // loads DATA/DATA_USA.* (the newspaper's text grammar)
     bool popupDue() { const bool d = popup_; popup_ = false; return d; }   // a milestone / new-tool story arrived: the newspaper pops up
+    bool closeArticle();                                      // Escape: closes the open story first (true if one was open)
     const NewsRoom& news() const { return news_; }
 
 private:
@@ -59,6 +60,10 @@ private:
     void drawCity(SDL_Renderer* r, int x, int y);
     void drawAdvisors(SDL_Renderer* r, int x, int y);
     void drawNewspaper(SDL_Renderer* r, int x, int y);
+    void drawArticle(SDL_Renderer* r, int x, int y);
+    std::string storyText(int k, bool article);
+    bool articleOpen_ = false;
+    std::string articleText_;
 };
 
 }  // namespace sc2k

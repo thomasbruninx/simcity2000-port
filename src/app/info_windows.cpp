@@ -56,6 +56,7 @@ void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
         page_ = newsOpened_ - 1;
     }
     last_ = open;
+    if (open != Which::Newspaper) articleOpen_ = false;
     const int x = ox(sw), y = oy(sh);
     fill(r, 0, 0, sw, sh, 0, 0, 0, 100);
     fill(r, x, y, kW, kH, 30, 34, 46);
@@ -73,7 +74,7 @@ void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
         case Which::Graphs: drawGraphs(r, x, y + 34); break;
         case Which::City: drawCity(r, x, y + 34); break;
         case Which::Advisors: drawAdvisors(r, x, y + 34); break;
-        case Which::Newspaper: drawNewspaper(r, x, y + 34); break;
+        case Which::Newspaper: drawNewspaper(r, x, y + 34); if (articleOpen_) drawArticle(r, x, y); break;
         default: break;
     }
 }
@@ -314,6 +315,7 @@ void InfoWindows::drawNewspaper(SDL_Renderer* r, int x0, int y0) {
     const int topic = pages[static_cast<size_t>(pg) * 5 + 3], weatherTitle = pages[static_cast<size_t>(pg) * 5 + 4];
     const uint32_t seed = session_ + static_cast<uint32_t>(pg) * 500u + static_cast<uint32_t>(s.day / 25);
     CrtRand layoutRng(seed ^ 0x5eed);
+    (void)seed;
     Painter P{r, *font_, layoutRng, x0, y0 + 4};
     const int ox = x0, oy = y0 + 4;
     fill(r, ox, oy, 640, 400, 238, 234, 220);
@@ -340,17 +342,10 @@ void InfoWindows::drawNewspaper(SDL_Renderer* r, int x0, int y0) {
         const int step = std::min(4, (s.startYear - 1900) / 50 + years / 50);
         P.fit3(rc, res_.string(377 + pages[static_cast<size_t>(pg) * 5 + 2] % 3 * 5 + std::max(0, step)), H[2], A[2]);
     }
-    NewsRoom::Context ctx;
-    ctx.cityName = cityName.empty() ? std::string("the city") : cityName;
-    ctx.label = [&](int idx) { const char* p = reinterpret_cast<const char*>(&sim_.world().xlab[static_cast<size_t>(idx & 0xFF) * 25]); return std::string(p, strnlen(p, 24)); };
-    auto headline = [&](int entry) {
-        if (!newsData_.loaded) return std::string("(DATA/DATA_USA.DAT not found)");
-        CrtRand rg(entry == 0 ? seed + 0x1c : static_cast<uint32_t>(entry + 6) * 7u + seed);
-        return news_.headline(entry, rg, ctx);
-    };
+    auto headline = [&](int k) { return storyText(k, false); };
     // lead headline
-    if (H[4] < 16) P.story(R[4], headline(0), H[4], A[4]);   // small lead type: a column story like the others
-    else P.fitBig(R[4], headline(0), H[4], A[4]);
+    if (H[4] < 16) P.story(R[4], headline(4), H[4], A[4]);   // small lead type: a column story like the others
+    else P.fitBig(R[4], headline(4), H[4], A[4]);
     // picture of the lead story (BITMAPS/400..411.BMP chosen by the story's message id, table 0x4E9418) or a greeked box
     if (H[3] < 1) {
         static const int16_t pictureOf[80] = {0, 0, 404, 404, 405, 402, 406, 0, 0, 0, 0, 404, 406, 408, 0, 0, 410, 401, 411, 0, 0, 0, 408, 0, 408, 409, 400, 406, 408, 408, 408, 411, 411, 409, 403, 411, 410, 404, 402, 403, 407, 0, 0, 0, 0, 411, 403, 410, 408, 403, 403, 403, 411, 411, 403, 403, 403, 403, 411, 410, 401, 411, 404, 407, 407, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -366,13 +361,13 @@ void InfoWindows::drawNewspaper(SDL_Renderer* r, int x0, int y0) {
         P.greek(R[3]);
     }
     // headlines of stories 1..4 with their greeked columns
-    for (int k = 1; k <= 4; ++k) P.story(R[6 + k], headline(k), H[6 + k], A[6 + k]);
+    for (int k = 1; k <= 4; ++k) P.story(R[6 + k], headline(6 + k), H[6 + k], A[6 + k]);
     // opinion box (rect 5): title, a filler story, then the mayor's rating or the poll's four top complaints
     {
         Rc rc = R[5];
         if (H[5] > 0) {
             P.fit3(rc, res_.string(354 + std::min(5, topic)), H[5], A[5]);
-            P.fit3(rc, headline(8), H[5], A[5]);
+            P.fit3(rc, headline(5), H[5], A[5]);
             auto fmt = [&](std::string t, int v) {
                 const size_t p = t.find("%d");
                 if (p != std::string::npos) t.replace(p, 2, std::to_string(v));
@@ -393,21 +388,80 @@ void InfoWindows::drawNewspaper(SDL_Renderer* r, int x0, int y0) {
         Rc rc = R[6];
         if (H[6] > 0) {
             P.fit3(rc, res_.string(347 + std::min(5, weatherTitle)), H[6], A[6]);
-            P.fit3(rc, headline(7), H[6], A[6]);
+            P.fit3(rc, headline(6), H[6], A[6]);
             P.fit3(rc, std::to_string(s.c9df8 - 100) + "\xB0" "F " + std::to_string(s.wind) + "mph " + std::to_string(s.cloudiness) + "mm", H[6], A[6]);
         }
         P.greek(rc);
     }
 }
 
+// The text of the story shown in rect `k` of the page (0x4780E2 seeds the C rand with session + page * 500 + day / 25 + 7 * k before the headline,
+// and 0x47A050 does the same before the headline and again before the article): k 4 = lead, 5 = filler opinion, 6 = weather, 7..10 = stories 1..4.
+std::string InfoWindows::storyText(int k, bool article) {
+    static const int entryOf[11] = {0, 0, 0, 0, 0, 8, 7, 1, 2, 3, 4};
+    if (!newsData_.loaded) return "(DATA/DATA_USA.DAT not found)";
+    NewsRoom::Context ctx;
+    ctx.cityName = cityName.empty() ? std::string("the city") : cityName;
+    ctx.label = [&](int idx) { const char* p = reinterpret_cast<const char*>(&sim_.world().xlab[static_cast<size_t>(idx & 0xFF) * 25]); return std::string(p, strnlen(p, 24)); };
+    const uint32_t seed = session_ + static_cast<uint32_t>(page_ % 6) * 500u + static_cast<uint32_t>(sim_.context().s.day / 25) + static_cast<uint32_t>(k) * 7u;
+    CrtRand rg(seed);
+    const std::string head = news_.headline(entryOf[k], rg, ctx);
+    if (!article) return head;
+    CrtRand ra(seed);
+    return head + " -\n" + news_.article(entryOf[k], ra, ctx);
+}
+
+void InfoWindows::drawArticle(SDL_Renderer* r, int x, int y) {
+    if (!font_) font_ = std::make_unique<TextRenderer>(r);
+    const int bw = 460, bx = x + (kW - bw) / 2;
+    // word-wrap in pixels
+    std::vector<std::string> lines;
+    for (size_t pos = 0; pos <= articleText_.size();) {
+        size_t nl = articleText_.find('\n', pos);
+        if (nl == std::string::npos) nl = articleText_.size();
+        std::string para = articleText_.substr(pos, nl - pos), cur;
+        for (size_t i = 0; i < para.size();) {
+            size_t j = para.find(' ', i);
+            if (j == std::string::npos) j = para.size();
+            const std::string word = para.substr(i, j - i);
+            if (!cur.empty() && font_->width(cur + " " + word, 17) > bw - 40) { lines.push_back(cur); cur.clear(); }
+            cur += (cur.empty() ? "" : " ") + word;
+            i = j + 1;
+        }
+        lines.push_back(cur);
+        pos = nl + 1;
+    }
+    const int bh = 70 + static_cast<int>(lines.size()) * 21, by = y + 40 + std::max(0, (330 - bh) / 2);
+    fill(r, bx, by, bw, bh, 244, 240, 226);
+    frame(r, bx, by, bw, bh, 20, 18, 14);
+    frame(r, bx + 3, by + 3, bw - 6, bh - 6, 20, 18, 14);
+    int ty = by + 14;
+    for (const std::string& l : lines) { font_->draw(l, bx + 20, ty, 17, 20, 18, 14); ty += 21; }
+    fill(r, bx + bw / 2 - 30, by + bh - 34, 60, 22, 214, 208, 188);
+    frame(r, bx + bw / 2 - 30, by + bh - 34, 60, 22, 20, 18, 14);
+    font_->draw("OK", bx + bw / 2 - font_->width("OK", 15) / 2, by + bh - 31, 15, 20, 18, 14);
+}
+
+bool InfoWindows::closeArticle() { const bool was = articleOpen_; articleOpen_ = false; return was; }
+
+
 bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
     if (open == Which::None) return false;
     const int x = ox(sw), y = oy(sh);
     if (mx < x || my < y || mx >= x + kW || my >= y + kH) return true;
+    if (articleOpen_) { articleOpen_ = false; return true; }   // the message box: any click is its OK
     if (my < y + 26) {
         if (mx > x + kW - 70) open = Which::None;
         for (int i = 0; i < 4; ++i) if (mx >= x + 110 + i * 100 && mx < x + 202 + i * 100) open = static_cast<Which>(i + 1);
         return true;
+    }
+    if (open == Which::Newspaper && my >= y + 38) {   // clicking a story (rects 4..10 of the page) opens its text (0x477FF0 -> 0x47A050)
+        const int style = news_.pages()[static_cast<size_t>(page_ % 6) * 5 + 1] % 3;
+        for (int k = 4; k <= 10; ++k) {
+            const Rc& q = kRects[style][k];
+            if ((k == 5 || k == 6) && style == 2) continue;
+            if (mx - x >= q.l && mx - x < q.r && my - (y + 38) >= q.t && my - (y + 38) < q.b) { articleText_ = storyText(k, true); articleOpen_ = true; break; }
+        }
     }
     if (open == Which::City) {
         for (int m = 0; m < 3; ++m) if (mx >= x + 24 + m * 110 && mx < x + 124 + m * 110 && my >= y + 8 + 16 * 14 + 6 && my < y + 8 + 16 * 14 + 22) ageMode_ = m;
