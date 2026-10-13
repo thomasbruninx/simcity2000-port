@@ -24,6 +24,9 @@ struct ZoneHooks {
     virtual void scheduledEvent(int /*index*/) {}                          // 0x469A10: a dated event fired (unlocks tools; UI only)
     virtual void milestoneReached(int /*newIndex*/) {}                     // phase 22: city class changed (0x413D80 may grant a military base; dialogs)
     virtual void gameOver(int /*kind*/) {}                                 // 0x414470: 0 lost scenario, 1 won, 2 bankrupt
+    virtual bool confirm(int /*stringId*/) { return false; }               // yes/no message box (neighbour connection fee, ...)
+    virtual int chooseBridge(int /*length*/, int allowedMask) { return allowedMask ? __builtin_ctz(static_cast<unsigned>(allowedMask)) : -1; }   // 0x45B140 dialog: bridge type or -1
+    virtual void toolMessage(int /*id*/) {}                                // 0x45AFD0 / 0x408600 status or error text
     virtual bool scenarioGoalsMet() { return false; }                      // phase 22 scenario goal test (scenario data is not modelled yet)                       // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)
 };
 
@@ -115,6 +118,8 @@ bool spawnTornado(SimContext& c);                                        // 0x45
 bool startFire(SimContext& c, int a, int b, int flag);                   // 0x460780
 void floodTile(SimContext& c, int a, int b);                             // 0x446000
 
+void refreshPower(SimContext& c);                                       // phase 1 body (0x4671F0): also run by building tools while the city is small
+void refreshWater(SimContext& c);                                       // phase 20 body (0x463EE0)
 void runEconomy(SimContext& c);
 void yearlyMicrosimUpdate(SimContext& c);                               // 0x44DD10: January upkeep of microsim buildings (power plants age and explode, capacities, city-size bonus)
 int findOverlayTile(const SimContext& c, int overlay);                  // 0x44F210: y*256 + x of the tile carrying this XTXT overlay, or 0

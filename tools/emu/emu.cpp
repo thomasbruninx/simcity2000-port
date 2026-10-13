@@ -1,8 +1,11 @@
+#include <cstdlib>
+#include <cstdio>
 #include "emu/emu.h"
 
 #include <cstring>
 
 namespace sc2k::emu {
+static uint32_t g_ring[48]; static int g_ringPos = 0;
 namespace {
 constexpr uint32_t kStackBase = 0x7FF00000, kStackSize = 0x00100000, kStackTop = 0x7FFF0000;
 constexpr uint32_t kSentinel = 0x7FFFF800;
@@ -24,6 +27,8 @@ Emu::Emu(const std::string& exePath) {
         const uint32_t n = std::min(s.rawSize, s.vsize ? s.vsize : s.rawSize);
         if (n && s.rawPtr + n <= pe.file().size()) check(uc_mem_write(uc_, base + s.va, pe.file().data() + s.rawPtr, n), "write section");
     }
+    if (std::getenv("EMUTRACE"))
+        uc_hook_add(uc_, &hook_, UC_HOOK_CODE, reinterpret_cast<void*>(+[](uc_engine*, uint64_t addr, uint32_t, void*) { g_ring[g_ringPos++ % 48] = uint32_t(addr); }), nullptr, 1, 0);
     check(uc_mem_map(uc_, kStackBase, kStackSize, UC_PROT_ALL), "map stack");
     check(uc_mem_map(uc_, kFakeBase, kFakeSize, UC_PROT_ALL), "map fake region");
     check(uc_mem_map(uc_, heapNext_, heapEnd_ - heapNext_, UC_PROT_ALL), "map heap");
@@ -64,6 +69,7 @@ uint32_t Emu::call(uint32_t fn, std::initializer_list<uint32_t> args, uint32_t e
     if (err != UC_ERR_OK) {
         uint32_t eip = 0; uc_reg_read(uc_, UC_X86_REG_EIP, &eip);
         char msg[160]; std::snprintf(msg, sizeof msg, "emulation failed in %#x at EIP=%#x: %s", fn, eip, uc_strerror(err));
+        if (std::getenv("EMUTRACE")) { std::fprintf(stderr, "last EIPs:"); for (int i = 0; i < 48; ++i) std::fprintf(stderr, " %x", g_ring[(g_ringPos + i) % 48]); std::fprintf(stderr, "\n"); }
         throw std::runtime_error(msg);
     }
     uint32_t eax = 0; uc_reg_read(uc_, UC_X86_REG_EAX, &eax);

@@ -285,6 +285,19 @@ void chooseDisaster(SimContext& c) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // 0x412FE0: one simulation day
+void refreshPower(SimContext& c) {
+    PowerInputs in; in.ordinances = c.s.ordinances; in.wind = static_cast<uint8_t>(c.s.wind); in.cloudiness = static_cast<uint8_t>(c.s.cloudiness);
+    const PowerResult r = runPowerScan(c.w, in, c.rng);
+    c.s.powerPct = r.percentUsed; c.s.powerCapacity = r.capacity;
+}
+
+void refreshWater(SimContext& c) {
+    WaterInputs in; in.rotation = c.s.rotation; in.cloudiness = static_cast<uint8_t>(c.s.cloudiness); in.waterFactor = static_cast<int16_t>(c.s.seaLevel);
+    const WaterResult r = runWaterScan(c.w, in);
+    c.s.waterPct = r.percent; c.s.waterSupply = static_cast<int>(r.supply);
+    c.s.waterFlag = (r.served <= static_cast<unsigned>(quarter(c.s.census[0xF4]) * 2000)) ? 1 : 0;
+}
+
 void simulationTick(SimContext& c) {
     CityState& s = c.s;
     World& w = c.w;
@@ -296,12 +309,7 @@ void simulationTick(SimContext& c) {
             runMonthlyFinance(s, t, c.rng, [&] { yearlyMicrosimUpdate(c); });
             for (auto& z : s.zonePop) z = 0;
             break;
-        case 1: {
-            PowerInputs in; in.ordinances = s.ordinances; in.wind = static_cast<uint8_t>(s.wind); in.cloudiness = static_cast<uint8_t>(s.cloudiness);
-            const PowerResult r = runPowerScan(w, in, c.rng);
-            s.powerPct = r.percentUsed; s.powerCapacity = r.capacity;
-            break;
-        }
+        case 1: refreshPower(c); break;
         case 2: {
             EnvInputs in;
             in.ordinances = s.ordinances; in.waterFlag = s.waterFlag; in.c8440 = s.c8440; in.policeBase = s.policeBase;
@@ -313,13 +321,7 @@ void simulationTick(SimContext& c) {
             break;
         }
         case 19: trafficDecay(c); break;
-        case 20: {
-            WaterInputs in; in.rotation = s.rotation; in.cloudiness = static_cast<uint8_t>(s.cloudiness); in.waterFactor = static_cast<int16_t>(s.seaLevel);
-            const WaterResult r = runWaterScan(w, in);
-            s.waterPct = r.percent; s.waterSupply = static_cast<int>(r.supply);
-            s.waterFlag = (r.served <= static_cast<unsigned>(quarter(s.census[0xF4]) * 2000)) ? 1 : 0;
-            break;
-        }
+        case 20: refreshWater(c); break;
         case 21: {
             DemandExtra x; x.c9408 = s.c9408; x.cb4f0 = s.cb4f0;
             runDemand(s, t, x);

@@ -45,6 +45,7 @@ private:
     uc_engine* uc_ = nullptr;
     uint32_t heapNext_ = 0x10000000, heapEnd_ = 0x10000000 + 0x04000000;
     uint64_t insnCount_ = 0;
+    uc_hook hook_ = 0;
 };
 
 // Layer helpers: the game stores maps as a table of row pointers (layer[a][b]).

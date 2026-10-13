@@ -89,6 +89,11 @@ struct GameTables {
     std::array<int16_t, 16> monsterPart{};               // @0x4E7248.. (-15,-3 | -24,14 | 6,52 | 43,33 | -15,2 | -20,18 | 6,32 | 49,46)
     std::array<int16_t, 256> undergroundSprite{};        // @0x4E6698: ground sprite of the underground view by XTER value
     std::array<uint8_t, 16> zoneFootprint{};             // @0x4E6798: flat footprint sprite offset by zone type (underground view)
+    // Tool tables (docs/simulation/tools.md)
+    std::array<uint8_t, 0x308> connectData{};            // raw bytes 0x4E6B08..0x4E6E10: direction deltas, slope/connection tables (typed views in tools.cpp)
+    std::array<uint8_t, 0x40> bridgeData{};              // raw bytes 0x4E75A8..0x4E75E8: bridge cost per tile and direction deltas
+    std::array<uint8_t, 216> toolBuildingSize{};         // @0x4DAEC8 [category*12 + subtype]: footprint size (255 = none)
+    std::array<int32_t, 216> toolCost{};                 // @0x4DAFA0 [category*12 + subtype]: cost per tile / per building (-1 = n/a)
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

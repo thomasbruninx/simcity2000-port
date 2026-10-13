@@ -2,7 +2,10 @@
 // Usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy|things <SIMCITY.EXE> <city files...>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <cstring>
+#include <map>
+#include <vector>
 #include <string>
 
 #include "emu/emu.h"
@@ -16,6 +19,7 @@
 #include "simulation/finance.h"
 #include "simulation/power.h"
 #include "simulation/water.h"
+#include "simulation/tool_script.h"
 
 using namespace sc2k;
 using namespace sc2k::emu;
@@ -577,10 +581,142 @@ int destroyDiff(const std::string& exe, const std::string& path, long& tiles, lo
     }
     return failures;
 }
+
+// ---- building tools: bulldozer, zoning, network drags, bridges and single buildings ----
+struct ToolHooks : ZoneHooks {
+    bool confirm(int) override { return true; }
+};
+
+void stubTools(Emu& e) {
+    e.patchRet(0x40CED0); e.patchRet(0x438E00); e.patchRet(0x43A660); e.patchRetN(0x4B1223, 12); e.patchRetN(0x4B1243, 12); e.patchRet(0x45AFD0);
+    e.patchRetN(0x424AF0, 4); e.patchRet(0x42B0C0); e.patchRetN(0x406CA0, 4); e.patchRetN(0x4A2347, 4);
+    const uint8_t yes1[3] = {0xB0, 0x01, 0xC3}; e.write(0x42AD70, yes1, 3);                                  // confirm -> true
+    const uint8_t idyes[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x408600, idyes, 8);           // message box -> IDYES
+    const uint8_t chooser[12] = {0x8B, 0x44, 0x24, 0x08, 0x0F, 0xBC, 0xC0, 0x75, 0x04, 0x66, 0xB8, 0xFF};    // bridge type = lowest allowed bit, else -1
+    uint8_t full[14]; std::memcpy(full, chooser, 12); full[12] = 0xFF; full[13] = 0xC3; e.write(0x45B140, full, 14);
+    // SEH frame set-up through FS:[0] in the single-building routine
+    std::vector<uint8_t> code(0x1000); e.read(0x43FB20, code.data(), code.size());
+    for (size_t i = 0; i + 7 <= code.size(); ++i) {
+        const uint32_t va = 0x43FB20 + uint32_t(i);
+        if (code[i] == 0x64 && code[i + 1] == 0xA1 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t p[6] = {0x31, 0xC0, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 6); }
+        else if (code[i] == 0x64 && code[i + 1] == 0xA3 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t p[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 6); }
+        else if (code[i] == 0x64 && code[i + 1] == 0x89 && !code[i + 3] && !code[i + 4] && !code[i + 5] && !code[i + 6]) { const uint8_t p[7] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 7); }
+    }
+}
+
+int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, int variant, int nOps, std::string& report, long& done) {
+    World w = World::fromCity(city); CityState s = CityState::fromCity(city);
+    s.treasury = variant == 0 ? 4000000 : 20000;
+    if (s.population10 == 0) s.population10 = 1000;
+    const uint32_t seed = 11 + variant, lfsrSeed = 0xACE1 + variant;
+    Emu e(exe); e.installCrtRand(seed);
+    SimImage img(e);
+    img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi(); stubTools(e);
+    World pw = w; CityState ps = s;
+    CrtRand rng(seed); Lfsr lf(lfsrSeed); ToolHooks hooks; TrafficStats ts;
+    SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+    ToolState tst;
+    ToolScript script(0x1234u + 77u * uint32_t(variant));
+    static const struct { uint32_t entry, subGlobal; } netEntry[5] = {{0x449530, 0x4CB974}, {0x4498D0, 0x4CB976}, {0x449C90, 0x4CB96E}, {0x44A0A0, 0x4CB976}, {0x449F20, 0x4CB970}};
+    done = 0;
+    std::map<std::string, std::pair<int, int>> stat;   // op kind -> (succeeded, attempted)
+    for (int opIndex = 0; opIndex < nOps; ++opIndex) {
+        const ToolOp op = script.next(pw, t);
+        const std::string desc = script.describe(op);
+        const World prev = pw;
+        if (std::getenv("OPDBG")) std::printf("  start op %d %s\n", opIndex, desc.c_str());
+        int origRet = 0;
+        switch (op.kind) {
+            case ToolOp::Bulldoze:
+                e.put<int32_t>(0x4E8E38, op.underground); e.put<uint16_t>(0x4CB968, 0);
+                origRet = int(e.call(0x442C20, {uint32_t(op.a), uint32_t(op.b)}, 0) & 0xFF);
+                break;
+            case ToolOp::Network: {
+                const auto& ne = netEntry[static_cast<int>(op.net)];
+                e.put<int32_t>(0x4E8E38, 0); e.put<uint16_t>(ne.subGlobal, uint16_t(op.sub));
+                uint32_t code = 0xFFFF; int cost = 0;
+                if (!op.bridgeStart) {
+                    e.put<int32_t>(0x4C6DA0, int(op.net));
+                    if (e.call(0x448410, {uint32_t(op.a), uint32_t(op.b), uint32_t(op.ta), uint32_t(op.tb)}, img.fakeView) & 0xFF) {
+                        cost = e.get<int32_t>(0x4C6D9C) * op.unit + e.get<int32_t>(0x4C6D70) * 25;
+                        code = uint32_t(op.ta) + uint32_t(op.tb) * 256;
+                    }
+                }
+                e.put<int32_t>(0x4C6D90, cost);
+                e.put<uint32_t>(Emu::kRandState + 0x2800, code);   // the stub reads it (patching immediates would leave stale translated blocks)
+                const uint8_t stub[8] = {0xA1, 0x00, 0x28, 0x00, 0x7E, 0xC2, 0x0C, 0x00}; e.write(0x447F90, stub, 8);
+                origRet = int(e.call(ne.entry, {uint32_t(op.a), uint32_t(op.b)}, img.fakeView) & 0xFF);
+                break;
+            }
+            case ToolOp::Build:
+                origRet = int(e.call(0x43FB20, {uint32_t(op.a), uint32_t(op.b), uint32_t(op.cat), uint32_t(op.sub)}) & 0xFF);
+                break;
+            case ToolOp::Zone: {
+                int count = 0;   // 0x447D00: tiles that would change zone
+                for (int x = std::min(op.a, op.ta); x <= std::max(op.a, op.ta); ++x)
+                    for (int y = std::min(op.b, op.tb); y <= std::max(op.b, op.tb); ++y) {
+                        if (pw.xter.at(x, y) != 0) continue;
+                        const int id = pw.xbld.at(x, y), z = pw.xzon.at(x, y) & 0xF;
+                        if (id < 0x1D && id != 5 && id != 0xD && z != 7 && z != op.zone) ++count;
+                    }
+                const bool water = (pw.xbit.at(op.a, op.b) & 4) != 0;
+                const uint32_t code = water ? 0xFFFF : uint32_t(op.ta) + uint32_t(op.tb) * 256;
+                e.put<int32_t>(0x4C6D90, count * op.unit);
+                e.put<uint32_t>(Emu::kRandState + 0x2800, code);
+                const uint8_t stub[8] = {0xA1, 0x00, 0x28, 0x00, 0x7E, 0xC2, 0x0C, 0x00}; e.write(0x447910, stub, 8);
+                origRet = int(e.call(0x448F70, {uint32_t(op.a), uint32_t(op.b), uint32_t(op.cat), uint32_t(op.sub)}, img.fakeView) & 0xFF);
+                break;
+            }
+        }
+        const int portRet = runToolOp(ctx, tst, op);
+        ++done;
+        { auto& st = stat[op.name]; st.first += origRet != 0; ++st.second; }
+        World ew = pw; CityState es = ps; img.store(ew, es);
+        std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
+        const bool retSame = (origRet != 0) == (portRet != 0);
+        if (std::getenv("OPDBG")) std::printf("  op %d %s -> %d/%d\n", opIndex, desc.c_str(), origRet, portRet);
+        if (n || !retSame || e.crtRandState() != rng.state() || img.lfsrState() != lf.state()) {
+            char buf[400]; std::snprintf(buf, sizeof buf, "op %d %s: return %d/%d%s rand %s lfsr %s", opIndex, desc.c_str(), origRet, portRet, d.c_str(),
+                                         e.crtRandState() == rng.state() ? "same" : "DIFF", img.lfsrState() == lf.state() ? "same" : "DIFF");
+            report = buf;
+            if (std::getenv("OPDBG")) {
+                int shown = 0;
+                for (int a = 0; a < 128 && shown < 40; ++a) for (int b = 0; b < 128 && shown < 40; ++b)
+                    if (ew.xund.at(a, b) != pw.xund.at(a, b) || ew.xter.at(a, b) != pw.xter.at(a, b) || ew.xbit.at(a, b) != pw.xbit.at(a, b) || ew.xbld.at(a, b) != pw.xbld.at(a, b)) {
+                        ++shown;
+                        std::printf("   (%d,%d) orig bld %02x und %02x ter %02x bit %02x | port bld %02x und %02x ter %02x bit %02x | before bld %02x und %02x ter %02x bit %02x alt %02x\n", a, b,
+                                    ew.xbld.at(a, b), ew.xund.at(a, b), ew.xter.at(a, b), ew.xbit.at(a, b), pw.xbld.at(a, b), pw.xund.at(a, b), pw.xter.at(a, b), pw.xbit.at(a, b),
+                                    prev.xbld.at(a, b), prev.xund.at(a, b), prev.xter.at(a, b), prev.xbit.at(a, b), pw.altm.at(a, b) & 0x1F);
+                    }
+            }
+            return 1;
+        }
+    }
+    char hb[60]; std::snprintf(hb, sizeof hb, "ok hash %016llx", (unsigned long long)worldFingerprint(pw, ps)); report = hb;
+    for (const auto& [k, v] : stat) report += " " + k + " " + std::to_string(v.first) + "/" + std::to_string(v.second);
+    return 0;
+}
+
+int toolsDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    const int nOps = std::getenv("OPS") ? std::atoi(std::getenv("OPS")) : 150;
+    for (int variant = 0; variant < 2; ++variant) {
+        std::string report; long done = 0;
+        int f = 0;
+        try { f = toolsRun(exe, t, c, variant, nOps, report, done); } catch (const std::exception& ex) { report = std::string("original faulted: ") + ex.what(); f = 1; }
+        tiles += 1; bad += f;
+        std::printf("%-34s variant %d ops %ld: %s\n", path.c_str(), variant, done, report.c_str());
+        failures += f;
+    }
+    return failures;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 4) { std::fprintf(stderr, "usage: sc2k-emu-diff power|water|env|demand|finance|zone|destroy|things <SIMCITY.EXE> <files...>\n"); return 2; }
+    if (std::getenv("OPDBG")) std::setvbuf(stdout, nullptr, _IONBF, 0);
     const std::string mode = argv[1], exe = argv[2];
     long tiles = 0, bad = 0; int failures = 0;
     for (int i = 3; i < argc; ++i) {
@@ -592,6 +728,7 @@ int main(int argc, char** argv) {
             else if (mode == "tick") failures += tickDiff(exe, argv[i], tiles, bad);
             else if (mode == "economy") failures += economyDiff(exe, argv[i], tiles, bad);
             else if (mode == "things") failures += thingsDiff(exe, argv[i], tiles, bad);
+            else if (mode == "tools") failures += toolsDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);
