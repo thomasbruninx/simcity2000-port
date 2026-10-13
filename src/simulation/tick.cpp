@@ -307,6 +307,7 @@ void simulationTick(SimContext& c) {
     const int phase = s.day % 25;
     switch (phase) {
         case 0:
+            if (s.budgetYearFlag != 0) c.hooks.yearlyBudget();   // 0x4736C0(0), before 0x473980
             runMonthlyFinance(s, t, c.rng, [&] { yearlyMicrosimUpdate(c); });
             for (auto& z : s.zonePop) z = 0;
             break;

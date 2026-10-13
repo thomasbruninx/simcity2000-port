@@ -180,6 +180,7 @@ void destroyTile(SimContext& c, int a, int b, int animate) {
     World& w = c.w;
     const int id = w.xbld.at(a, b);
     if (id < 6) return;
+    if (animate != 0) c.hooks.playSound(0x1F8);   // the demolition sound (0x458690 plays it once per tile)
     int x = a, y = b;
     const int size = footprintOf(c, x, y, id);
 

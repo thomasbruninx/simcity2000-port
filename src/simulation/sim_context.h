@@ -28,9 +28,14 @@ struct ZoneHooks {
     virtual bool confirm(int /*stringId*/, int /*amount*/ = 0) { return false; }               // yes/no message box (neighbour connection fee, ...)
     virtual int chooseBridge(int /*length*/, int allowedMask) { return allowedMask ? __builtin_ctz(static_cast<unsigned>(allowedMask)) : -1; }   // 0x45B140 dialog: bridge type or -1
     virtual void toolMessage(int /*id*/) {}                                // 0x45AFD0 / 0x408600 status or error text
-    virtual int chooseStadiumSport() { return -1; }                          // 0x47CE40 dialog after a stadium is built: 0..4 (strings 786..790) or -1
+    // 0x47CE40 "Pick a Team and Name It" after a stadium is built: `takenMask` = sports that already have a team (bit k = sport k, MISC 1034);
+    // the dialog offers the free sports (all when every one is taken). sport < 0 = closed without choosing.
+    struct StadiumChoice { int sport = -1; std::string name; };
+    virtual StadiumChoice chooseStadiumTeam(int /*takenMask*/) { return {}; }
     virtual void playSound(int /*id*/, int /*repeat*/ = 0) {}                // 0x424AA0 (repeat 0) / 0x424AD0: sound effect 500 + n (SOUNDS/5xx.WAV)
+    virtual void yearlyBudget() {}                                          // 0x4736C0 at the start of a new budget year (before the settlement): music + the annual budget dialog
     virtual void stopSound(int /*id*/) {}
+    virtual uint32_t tickCount() { return 0; }                              // GetTickCount (real-time gates of some sounds); 0 = none
     virtual void playMusic(int /*id*/) {}                                  // 0x424B30: start a MIDI tune (10000 + n)                                   // 0x424AF0
                          // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)
 };

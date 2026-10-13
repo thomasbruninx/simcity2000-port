@@ -202,60 +202,102 @@ std::vector<std::string> wrap(const std::string& s, size_t width) {
 }
 }  // namespace
 
-void InfoWindows::drawNewspaper(SDL_Renderer* r, int x, int y) {
+namespace {
+struct Rc { int l, t, r, b; };
+// The three page layouts of the original painter (0x4780E2; rect tables at 0x4CC640 / 0x4CC6F0 / 0x4CC7A0 in the 640x400 page).
+// Which rect plays which role is inferred from shapes and neighbours (STRONG INFERENCE).
+struct Layout { Rc mast, date, motto, pic, head, article, poll, side[4]; };
+const Layout kLayouts[3] = {
+    {{0, 6, 640, 36}, {5, 16, 218, 31}, {315, 16, 635, 31}, {243, 76, 456, 176}, {0, 36, 640, 76}, {0, 76, 213, 300}, {0, 300, 213, 400},
+     {{426, 76, 640, 300}, {213, 176, 320, 400}, {320, 176, 426, 400}, {426, 300, 640, 400}}},
+    {{0, 0, 640, 37}, {5, 53, 218, 68}, {421, 53, 635, 68}, {178, 186, 434, 286}, {0, 37, 640, 53}, {128, 73, 640, 186}, {0, 300, 128, 400},
+     {{0, 73, 128, 300}, {128, 287, 384, 400}, {384, 186, 512, 400}, {512, 186, 640, 400}}},
+    {{0, 0, 384, 30}, {0, 0, 635, 12}, {0, 12, 635, 24}, {256, 30, 384, 135}, {128, 30, 256, 240}, {256, 135, 384, 400}, {0, 30, 128, 400},
+     {{128, 240, 256, 400}, {384, 24, 512, 400}, {512, 24, 640, 339}, {512, 339, 640, 400}}},
+};
+// Draws wrapped text in a rect with the 8x8 font scaled to `scale`, shrinking (x4/5, x2/3 like the original's fit retries) until it fits.
+void fitText(SDL_Renderer* r, const Rc& rc, const std::string& t, float scale, Uint8 cr, Uint8 cg, Uint8 cb, bool centre = false) {
+    const int w = rc.r - rc.l - 4, h = rc.b - rc.t - 2;
+    std::vector<std::string> lines;
+    float sc = scale;
+    for (;;) {
+        const int cols = std::max(1, static_cast<int>(w / (8 * sc)));
+        lines = wrap(t, static_cast<size_t>(cols));
+        size_t longest = 0;
+        for (const std::string& ln : lines) longest = std::max(longest, ln.size());
+        if ((static_cast<int>(lines.size()) * (8 * sc + 2) <= h && longest <= static_cast<size_t>(cols)) || sc <= 1.0f) break;
+        sc = std::max(1.0f, sc * (sc > 1.6f ? 0.8f : 0.67f));
+    }
+    SDL_SetRenderScale(r, sc, sc);
+    const SDL_Rect clip{static_cast<int>(rc.l / sc), static_cast<int>(rc.t / sc), static_cast<int>((rc.r - rc.l) / sc), static_cast<int>((rc.b - rc.t) / sc)};
+    SDL_SetRenderClipRect(r, &clip);
+    SDL_SetRenderDrawColor(r, cr, cg, cb, 255);
+    float y = rc.t + 1;
+    for (const std::string& ln : lines) {
+        if (y + 8 * sc > rc.b) break;
+        const float tw = ln.size() * 8 * sc;
+        const float x = rc.l + 2 + (centre ? (w - tw) / 2 : 0);
+        SDL_RenderDebugText(r, x / sc, y / sc, ln.c_str());
+        y += 8 * sc + 2;
+    }
+    SDL_SetRenderScale(r, 1, 1);
+    SDL_SetRenderClipRect(r, nullptr);
+}
+}  // namespace
+
+void InfoWindows::drawNewspaper(SDL_Renderer* r, int x0, int y0) {
     SimContext& c = sim_.context();
     CityState& s = c.s;
     const std::array<uint8_t, 30>& pages = news_.pages();
     const int pg = page_ % 6;
+    const Layout& L = kLayouts[pages[static_cast<size_t>(pg) * 5 + 1] % 3];
+    const int ox = x0, oy = y0 + 4;
+    auto R = [&](const Rc& q) { return Rc{q.l + ox, q.t + oy, q.r + ox, q.b + oy}; };
+    fill(r, ox, oy, 640, 400, 236, 232, 214);
     const std::string name = res_.string(0x168 + pages[static_cast<size_t>(pg) * 5]);
-    fill(r, x + 20, y + 4, kW - 40, 420, 236, 232, 214);
-    frame(r, x + 20, y + 4, kW - 40, 420, 70, 60, 40);
-    text(r, x + kW / 2 - static_cast<int>(name.size() + 4) * 12 / 2, y + 12, "THE " + name, 20, 16, 10);
     static const char* months[12] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
-    text(r, x + 36, y + 30, std::string(months[s.month()]) + " " + std::to_string(s.startYear + s.day / 300) + "    " + res_.string(377 + (pages[static_cast<size_t>(pg) * 5 + 2] % 4)), 60, 50, 30);
+    fitText(r, R(L.mast), "THE " + name, 3.0f, 20, 16, 10, true);
+    fitText(r, R(L.date), std::string(months[s.month()]) + " " + std::to_string(s.startYear + s.day / 300), 1.0f, 60, 50, 30);
+    fitText(r, R(L.motto), res_.string(377 + (pages[static_cast<size_t>(pg) * 5 + 2] % 4)), 1.0f, 60, 50, 30, true);
+    for (const Rc* q : {&L.head, &L.article, &L.poll, &L.pic}) { Rc b = R(*q); frame(r, b.l + 1, b.t, b.r - b.l - 2, b.b - b.t, 190, 184, 160); }
     NewsRoom::Context ctx;
-    ctx.cityName = sim_.state().scenario ? std::string("the city") : std::string("the city");
+    ctx.cityName = cityName.empty() ? std::string("the city") : cityName;
     ctx.label = [&](int idx) { const char* p = reinterpret_cast<const char*>(&sim_.world().xlab[static_cast<size_t>(idx & 0xFF) * 25]); return std::string(p, strnlen(p, 24)); };
-    // the city's name: the first label of the file is not it; CNAM is shown by the file loader, the port keeps "the city" unless the game gives one
-    if (!cityName.empty()) ctx.cityName = cityName;
     const uint32_t seed = session_ + static_cast<uint32_t>(pg) * 500u + static_cast<uint32_t>(s.day / 25);
     if (newsData_.loaded) {
         CrtRand rg(seed + 0x1c);
-        const std::string head = news_.headline(0, rg, ctx);
-        text(r, x + 36, y + 52, head, 10, 8, 4);
-        CrtRand ra(seed + 0x1c);
-        news_.headline(0, ra, ctx);   // same rule choice and word cache as the headline
+        fitText(r, R(L.head), news_.headline(0, rg, ctx), 3.0f, 10, 8, 4, true);
         CrtRand rb(seed + 0x1c);
-        const std::string body = news_.article(0, rb, ctx);
-        int ty = y + 76;
-        for (const std::string& line : wrap(body, 56)) { if (ty > y + 190) break; text(r, x + 36, ty, line, 40, 30, 20); ty += 12; }
+        news_.headline(0, rb, ctx);   // same rule choice and word cache as the headline
+        CrtRand rd(seed + 0x1c);
+        fitText(r, R(L.article), news_.article(0, rd, ctx), 1.0f, 40, 30, 20);
         for (int k = 1; k <= 4; ++k) {
             CrtRand rs(static_cast<uint32_t>(k + 6) * 7u + seed);
             const std::string h = news_.headline(k, rs, ctx);
-            const int col = (k - 1) % 2, row = (k - 1) / 2;
-            text(r, x + 36 + col * 290, y + 200 + row * 14, "* " + h.substr(0, 40), 30, 24, 16);
+            fitText(r, R(L.side[k - 1]), h, 2.0f, 30, 24, 16);
         }
     } else {
-        text(r, x + 36, y + 60, "(DATA/DATA_USA.DAT not found: no stories)", 120, 60, 40);
+        fitText(r, R(L.article), "(DATA/DATA_USA.DAT not found: no stories)", 1.0f, 120, 60, 40);
     }
+    // the picture slot: a framed placeholder (the original draws an art strip chosen by the story)
+    { Rc b = R(L.pic); fill(r, b.l + 2, b.t + 2, b.r - b.l - 4, b.b - b.t - 4, 200, 196, 176); }
     // the opinion poll of the day (0x4729F0): the four most common complaints and the mayor's approval
-    text(r, x + 36, y + 240, res_.string(357), 20, 16, 10);   // "Opinion Poll"
-    int line = 0;
-    for (int i = 0; i < 4 && s.pollCount[static_cast<size_t>(i)] != 0; ++i, ++line) {
+    std::string poll = res_.string(357) + " ";
+    for (int i = 0; i < 4 && s.pollCount[static_cast<size_t>(i)] != 0; ++i) {
         std::string t = res_.string(0x16F + s.pollOrder[static_cast<size_t>(i)]);
         const size_t p = t.find("%d");
         if (p != std::string::npos) t.replace(p, 2, std::to_string(s.pollCount[static_cast<size_t>(i)]));
         for (size_t q; (q = t.find("%%")) != std::string::npos;) t.erase(q, 1);
-        text(r, x + 36, y + 260 + line * 16, t, 40, 30, 20);
+        poll += t + " ";
     }
     if (s.approval != 0) {
         std::string mayor = res_.string(353);
         const size_t p = mayor.find("%d");
         if (p != std::string::npos) mayor.replace(p, 2, std::to_string(s.approval));
         for (size_t q; (q = mayor.find("%%")) != std::string::npos;) mayor.erase(q, 1);
-        text(r, x + 36, y + 330, mayor, 20, 16, 10);
+        poll += mayor;
     }
-    text(r, x + 36, y + 360, "City population: " + std::to_string(s.population10) + "    Funds: " + money(s.treasury), 20, 16, 10);
+    fitText(r, R(L.poll), poll, 1.0f, 40, 30, 20);
 }
 
 bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {

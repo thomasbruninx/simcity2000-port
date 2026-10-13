@@ -78,11 +78,13 @@ public:
     void newsAge() override { info_.age(); }
     void showDialog(int stringId) override;
     const uint8_t* labelTemplate(int id, bool custom) override;   // default building names (strings 831..888) for new microsim buildings
-    int chooseStadiumSport() override;
+    StadiumChoice chooseStadiumTeam(int takenMask) override;
     void scrollTo(int a, int b) override;                    // centre the view on a disaster
     void gameOver(int kind) override;                        // scenario won / lost, bankruptcy
     void playSound(int id, int repeat = 0) override;
-    void stopSound(int id) override;                        // id < 0: everything (0x424B10)
+    void stopSound(int id) override;
+    void yearlyBudget() override;
+    uint32_t tickCount() override { return SDL_GetTicks(); }                        // id < 0: everything (0x424B10)
     void playMusic(int id) override;
     void scheduledEvent(int index) override;                 // a dated event fired: unlock tools
 

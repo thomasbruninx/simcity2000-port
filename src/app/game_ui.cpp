@@ -665,11 +665,22 @@ void GameUi::scheduledEvent(int index) {
 
 void GameUi::postMessage(int id, int arg) { info_.postMessage(id, arg); }
 void GameUi::showDialog(int id) { toolMessage(id); }
-int GameUi::chooseStadiumSport() {
-    Modal m; m.title = "Which sport does the new stadium host?";
-    for (int i = 0; i < 5; ++i) m.options.push_back(res_.string(786 + i));
-    const int r = runModal(m);
-    return r < 0 ? 0 : r;
+ZoneHooks::StadiumChoice GameUi::chooseStadiumTeam(int takenMask) {   // dialog 190 "Pick a Team and Name It"
+    StadiumChoice out;
+    std::vector<int> sports;
+    for (int k = 0; k < 5; ++k) if (takenMask == 0x1F || !(takenMask & (1 << k))) sports.push_back(k);
+    if (headless || !pump) { out.sport = sports.empty() ? 0 : sports.front(); return out; }
+    for (;;) {
+        Modal m; m.title = "Pick a Team and Name It: team sport";
+        for (int k : sports) m.options.push_back(res_.string(786 + k));
+        const int r = runModal(m);
+        if (r < 0) return out;
+        std::string name;
+        if (!askText("Team name", name)) continue;
+        out.sport = sports[static_cast<size_t>(r)];
+        out.name = name;
+        return out;
+    }
 }
 void GameUi::scrollTo(int a, int b) { cam_.centerOn(a, b, width_ / 2, height_ / 2); }
 void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ran out), 287 (bankrupt)
@@ -681,6 +692,13 @@ void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ra
 }
 void GameUi::playSound(int id, int repeat) { if (audio) audio->playEffect(id, repeat); }
 void GameUi::stopSound(int id) { if (audio) audio->stopEffect(id); }
+void GameUi::yearlyBudget() {   // 0x4736C0: one of four tunes while the annual budget is on the desk (the original picks with the LFSR; the port must not disturb the simulation's sequence)
+    static const int kTunes[4] = {10016, 10005, 10002, 10010};
+    static unsigned pick = 0;
+    stopSound(-1);
+    playMusic(kTunes[(sim_.state().day / 300 + pick++) % 4]);
+    if (!headless) budget_.open = true;
+}
 void GameUi::playMusic(int id) { if (audio) audio->playMusic(id); }
 
 // ---- drawing -----------------------------------------------------------------------------------------------------------

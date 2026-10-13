@@ -129,3 +129,9 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 * **Terrain generator** 0x410430 + helpers: emulator-identical on 7 parameter sets x 4 files; steps and strings in docs/simulation/terrain-generation.md.
 * **Title screen**: TITLESCR.BMP, dialog 103 labels, scenario pictures (PICT: 8-byte header, 65 rows of 66 bytes, PAL_MAC palette) and the two TEXT chunks.
 * Tools added: `tools/ghidra/CallArgs.java` (calls to a function with their pushed immediates), `ScanScalars.java` (instructions with an immediate in a range), `ListCallees.java`.
+
+## 2026-10-13 — Session 18: newspaper layouts, vehicle sounds, yearly-budget music, stadium team dialog
+* **Newspaper**: three layout rect tables recovered (painter 0x4780E2; text helpers 0x47B5B0/0x47B670/0x47A4F0) and drawn by the port; fonts approximated (no TTF dependency approved yet), pictures not ported.
+* **Sounds**: ship/plane/train/monster sound calls hooked at the original sites in things.cpp (de-dup within 60 ms in the mixer); tile-destroy sound 0x1F8.
+* **Yearly budget**: tune picked from {10016,10005,10002,10010} and the budget window opened before the monthly finance run.
+* **Stadium**: team-name dialog (sport list + name) applied in the tool placement (label 0xFB+sport, militaryMask bit).

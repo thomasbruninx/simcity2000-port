@@ -727,10 +727,19 @@ bool placeBuilding(SimContext& c, ToolState&, int category, int sub, int a, int 
         case 0xD6: ++c.s.budget[kSchool].currentCosts; break;
         case 0xD9: ++c.s.budget[kCollege].currentCosts; break;
         case 0xD7:
-            if (w.xtxt.at(a, b) != 0) {   // the new stadium asks which sport it hosts (word +4 of its microsim record)
-                const int sport = c.hooks.chooseStadiumSport();
-                const size_t rec = static_cast<size_t>(w.xtxt.at(a, b) - 0x33) * 8;
-                if (sport >= 0 && w.xtxt.at(a, b) >= 0x33) { w.xmic[rec + 4] = static_cast<uint8_t>(sport); w.xmic[rec + 5] = 0; }
+            if (w.xtxt.at(a, b) != 0) {   // 0x47D1F0 (the dialog's OK): the team name goes to label 0xFB + sport, the record keeps the sport and that label number
+                const auto choice = c.hooks.chooseStadiumTeam(c.s.militaryMask);
+                const int v = w.xtxt.at(a, b);
+                if (choice.sport >= 0 && choice.sport < 5 && v >= 0x33) {
+                    const size_t rec = static_cast<size_t>(v - 0x33) * 8;
+                    uint8_t* label = &w.xlab[static_cast<size_t>(0xFB + choice.sport) * 25];
+                    const size_t n = std::min<size_t>(choice.name.size(), 24);
+                    std::memcpy(label, choice.name.data(), n);
+                    label[n] = 0;
+                    w.xmic[rec + 4] = static_cast<uint8_t>(choice.sport); w.xmic[rec + 5] = 0;
+                    w.xmic[rec + 6] = static_cast<uint8_t>(choice.sport + 0xFB); w.xmic[rec + 7] = 0;
+                    c.s.militaryMask |= 1 << choice.sport;
+                }
             }
             break;
         case 0xDB: w.xbit.at(a, b) &= 0x7F; break;

@@ -266,7 +266,7 @@ void updateTrain(Th& t, int s) {
         if (t.lfsrMod(4) == 0) {
             const int nd = t.lfsrMod(2) == 0 ? d - 1 : d + 1;
             if (trainCanEnter(t, a + g.quadDx[static_cast<size_t>(nd & 3)], b + g.quadDy[static_cast<size_t>(nd & 3)], type)) d = nd & 3;
-            (void)t.randv();   // horn sound gate: (char)rand() == 0
+            if ((t.randv() & 0xFF) == 0) c.hooks.playSound(0x20C);   // horn
         }
         const int tx = a + g.quadDx[static_cast<size_t>(d)], ty = b + g.quadDy[static_cast<size_t>(d)];
         if (!trainCanEnter(t, tx, ty, type)) {
@@ -341,7 +341,7 @@ void updateShip(Th& t, int s) {
     SimContext& c = t.c;
     const GameTables& g = c.t;
     ++c.things.ships;
-    (void)t.randv();   // (char)rand() == 0 -> sound
+    if ((t.randv() & 0xFF) == 0) c.hooks.playSound(0x205);   // ship horn
     const int a = t.f(s, 3), b = t.f(s, 4);
     const int t8 = t.f(s, 8);
     int bStack2 = t.f(s, 9);
@@ -387,6 +387,7 @@ void updateShip(Th& t, int s) {
             case 3:
                 if (t.lfsrMod(0x1E) == 0) {
                     t.f(s, 2) = 4;
+                    c.hooks.playSound(0x205);
                     t.f(s, 8) = static_cast<uint8_t>(c.things.shipTargetA);
                     t.f(s, 9) = static_cast<uint8_t>(c.things.shipTargetB);
                     return;
@@ -461,7 +462,7 @@ void updateSailboat(Th& t, int s) {
         if (t.lfsrMod(4) == 0) {
             const int a = t.f(s, 3), b = t.f(s, 4);
             if (a < 0x80 && b < 0x80 && (c.w.xbit.at(a, b) & kWater)) {
-                if (t.lfsrMod(4000) == 0) t.f(s, 2) = 1;
+                if (t.lfsrMod(4000) == 0) { t.f(s, 2) = 1; c.hooks.playSound(0x20F); }
                 const int h = t.f(s, 1);
                 t.f(s, 1) = static_cast<uint8_t>((h + t.randMod(3) - 1) & 3);
                 return;
@@ -489,6 +490,7 @@ void updatePlane(Th& t, int s) {
         case 0: {
             moveThing(t, 1, s, t.f(s, 1));
             const int alt = t.f(s, 5);
+            if (alt == 0) c.hooks.playSound(0x206);   // take-off
             if (alt < 0xE) t.f(s, 5) = static_cast<uint8_t>(alt + 1);
             else t.f(s, 2) = 2;
             return;
@@ -497,6 +499,7 @@ void updatePlane(Th& t, int s) {
             moveThing(t, 1, s, t.f(s, 1));
             t.f(s, 5) = static_cast<uint8_t>(t.f(s, 5) - 1);
             if (t.f(s, 5) == 0) {
+                c.hooks.playSound(0x207);   // touch-down
                 const int ta = t.f(s, 3), tb = t.f(s, 4);
                 t.setTxt(ta, tb, t.f(s, 10));
                 if (c.w.xbld.at(ta, tb) != 0xDD) { makeExplosion(t, s, 5, 1); return; }
@@ -550,6 +553,7 @@ void updatePlane(Th& t, int s) {
         case 7:
             if (t.f(s, 5) != 0) {
                 t.f(s, 5) = static_cast<uint8_t>(t.f(s, 5) - 1);
+                if (t.f(s, 5) == 8) c.hooks.playSound(0x203);   // the monster scares the plane
                 const int h = t.f(s, 1);
                 t.f(s, 1) = static_cast<uint8_t>((h + 1) & 7);
                 moveThing(t, 1, s, h);
@@ -577,6 +581,10 @@ void updateHelicopter(Th& t, int s) {
             t.f(s, 1) = static_cast<uint8_t>(steerToward(h0, a, b, t.f(s, 8), t.f(s, 9)));
             avoidBlocked(t, s);
             moveThing(t, 2, s, t.f(s, 1));
+            if (c.w.xtrf.at(t.f(s, 3) / 2, t.f(s, 4) / 2) > 0xA9) {   // traffic report: at most one every five seconds of real time
+                const uint32_t now = c.hooks.tickCount();
+                if (now != 0 && static_cast<uint32_t>(c.things.soundGate) < now) { c.things.soundGate = static_cast<int>(now + 5000); c.hooks.playSound(0x1FE); }
+            }
             if (manhattan(t.f(s, 3), t.f(s, 4), t.f(s, 8), t.f(s, 9)) < 2) {
                 int na = ((t.randv() & 0x3F) - 0x20) + c.s.centerA2;
                 int nb = ((t.randv() & 0x3F) - 0x20) + c.s.centerB2;
@@ -603,6 +611,7 @@ void updateHelicopter(Th& t, int s) {
         case 5: {
             t.f(s, 1) = static_cast<uint8_t>((h0 + 2) & 7);
             const int alt = t.f(s, 5);
+            if (alt == 4) c.hooks.playSound(0x203);
             if (alt > 2) { t.f(s, 5) = static_cast<uint8_t>(alt - 1); return; }
             makeExplosion(t, s, 0x11, 1);
             return;
@@ -615,6 +624,7 @@ void updateHelicopter(Th& t, int s) {
 void updateEffect(Th& t, int s) {
     SimContext& c = t.c;
     const int phase = t.f(s, 1);
+    if (phase == 0) c.hooks.playSound(0x1F8);   // explosion
     if (phase < 2) { t.f(s, 1) = static_cast<uint8_t>(phase + 1); return; }
     bool lit = false;
     const int b = t.f(s, 4), a = t.f(s, 3);
@@ -720,6 +730,7 @@ void updateMonster(Th& t, int s) {
     }
     t.f(s, 1) = static_cast<uint8_t>(newDir);
     moveThing(t, 5, s, newDir);
+    if ((t.f(s, 8) & 0x80) != 0) c.hooks.playSound(0x202);   // stomping / breathing
 }
 
 // ---- visitor (type 0x10) ----
@@ -770,6 +781,7 @@ void updateVisitor(Th& t, int s) {
             if (v < 0xFB) {
                 if (v > 200) {
                     if (t.f(s, 11) == v - 0xC9 && (t.randv() & 3) == 0) {
+                        c.hooks.playSound(0x1F8);
                         removeThing(c, t.f(s, 11));
                         spawnEffect(c, nx, ny, t.f(s, 5), 0, 1);
                         t.f(s, 2) = 2;
@@ -902,6 +914,7 @@ void spawnShip(SimContext& c, int pierA, int pierB) {
             t.f(s, 10) = c.w.xtxt.at(fa, fb);
             t.f(s, 2) = 0;
             c.things.shipTargetB = fb; c.things.shipTargetA = fa;
+            c.hooks.playSound(0x205);
             ++c.things.ships;
             c.w.xtxt.at(fa, fb) = static_cast<uint8_t>(s + 0xC9);
         }
@@ -936,6 +949,7 @@ void spawnVisitor(SimContext& c, int kind) {
         case 7: case 8: t.f(s, 11) = static_cast<uint8_t>(c.things.lastSpawned); break;
         default: break;
     }
+    c.hooks.playSound(0x201);
     ++c.things.visitors;
     c.w.xtxt.at(a, b) = static_cast<uint8_t>(s + 0xC9);
 }
@@ -1183,8 +1197,8 @@ void thingFrame(SimContext& c) {
     if (++th.animFrame > 0x3FF) th.animFrame = 0;
     th.planes = th.helis = th.ships = th.sailboats = th.visitors = 0;
     th.monsters = th.trains = th.tornados = 0;
-    if (c.s.graph[4 * 52] > 0x23 && (t.randv() & 0xFF) == 0) { /* traffic sound */ }
-    if (c.s.census[0xD2] != 0 && c.s.graph[7 * 52] > 0x28 && (t.randv() & 0xFF) == 0) { /* siren sound */ }
+    if (c.s.graph[4 * 52] > 0x23 && (t.randv() & 0xFF) == 0) c.hooks.playSound(0x209);   // traffic noise
+    if (c.s.census[0xD2] != 0 && c.s.graph[7 * 52] > 0x28 && (t.randv() & 0xFF) == 0) c.hooks.playSound(0x1FA);   // police siren
     static const bool kActive[17] = {false, true, true, true, true, true, true, false, false, true, true, false, true, false, false, true, true};
     for (int s = 1; s < kSlots; ++s) {
         const int type = t.f(s, 0);
