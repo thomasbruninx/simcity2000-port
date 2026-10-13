@@ -476,8 +476,10 @@ void GameUi::applyClick(int a, int b) {
 }
 
 void GameUi::queryTile(int a, int b) {
+    pokeHelicopter(sim_.context(), a, b);
     query_ = ::sc2k::queryTile(sim_.context(), a, b);
     micro_ = microsimInfo(sim_.context(), a, b);
+    if (!micro_.valid) playSound(0x1F9);   // 0x43EBC0 case 0x11: the query click
     queryOpen_ = true;
 }
 

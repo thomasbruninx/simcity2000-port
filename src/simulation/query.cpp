@@ -181,3 +181,16 @@ bool placeSign(SimContext& c, int a, int b, const std::string& text, bool cancel
 }
 
 }  // namespace sc2k
+
+namespace sc2k {
+// 0x453FB0 (the Query tool, dispatcher case 0x11): a helicopter whose marker lies on the tile (a + 4, b + 4) is switched to state 5 and the siren plays
+void pokeHelicopter(SimContext& c, int a, int b) {
+    const int x = a + 4, y = b + 4;
+    if (x < 0 || x >= 0x80 || y < 0 || y >= 0x80) return;
+    const int v = c.w.xtxt.at(x, y);
+    if (v > 200 && v < 0xF1 && c.w.xthg[static_cast<size_t>(v - 0xC9) * 12] == 2) {
+        c.w.xthg[static_cast<size_t>(v - 0xC9) * 12 + 2] = 5;
+        c.hooks.playSound(0x204);
+    }
+}
+}  // namespace sc2k

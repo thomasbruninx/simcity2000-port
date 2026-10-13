@@ -49,4 +49,6 @@ bool renameBuilding(SimContext& c, int a, int b, const std::string& name);   // 
 bool placeSign(SimContext& c, int a, int b, const std::string& text, bool cancelled);
 std::string signText(const SimContext& c, int a, int b);        // text of the sign at the tile ("" if none)
 
+void pokeHelicopter(SimContext& c, int a, int b);   // 0x453FB0: Query tool on a helicopter marker
+
 }  // namespace sc2k
