@@ -4,10 +4,12 @@
 #pragma once
 #include <SDL3/SDL.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "app/ft_text.h"
 #include "app/icons.h"
 #include "resources/pe_resources.h"
 #include "simulation/advisors.h"
@@ -46,6 +48,10 @@ private:
     std::vector<std::string> seriesNames_;
     std::vector<std::unique_ptr<IconStrip>> portraits_;
     bool portraitsTried_ = false;
+    std::string gameDir_;
+    std::unique_ptr<TextRenderer> font_;
+    std::map<int, std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>> pictures_;   // BITMAPS/4xx.BMP photographs of the paper
+    SDL_Texture* picture(SDL_Renderer* r, int number);
     static constexpr int kW = 640, kH = 440;
     int ox(int sw) const { return (sw - kW) / 2; }
     int oy(int sh) const { return (sh - kH) / 2; }

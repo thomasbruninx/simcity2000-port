@@ -135,3 +135,4 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 * **Sounds**: ship/plane/train/monster sound calls hooked at the original sites in things.cpp (de-dup within 60 ms in the mixer); tile-destroy sound 0x1F8.
 * **Yearly budget**: tune picked from {10016,10005,10002,10010} and the budget window opened before the monthly finance run.
 * **Stadium**: team-name dialog (sport list + name) applied in the tool placement (label 0xFB+sport, militaryMask bit).
+* **Newspaper (second pass)**: decompilation of 0x4780E2 / 0x47B370 / 0x47B460 / 0x47B160 / 0x47B8B0 showed that pages have no article body: headlines plus greeked text bars; the photographs are BITMAPS/400..411.BMP (table 0x4E9418). Font/alignment tables fully decoded. FreeType added (approved) for Times New Roman; `libfreetype` found with pkg-config.
