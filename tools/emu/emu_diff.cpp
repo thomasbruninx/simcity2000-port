@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <vector>
 #include <string>
 
@@ -861,6 +862,102 @@ int toolsDiff(const std::string& exe, const std::string& path, long& tiles, long
     }
     return failures;
 }
+
+// ---- disasters: the handlers of 0x45C870 and the per-tick driver 0x45F0D0 ----
+int disasterRun(const std::string& exe, const GameTables& t, const CityFile& city, int variant, int nOps, std::string& report, long& done) {
+    World w = World::fromCity(city); CityState s = CityState::fromCity(city);
+    s.treasury = 40000;
+    if (s.population10 == 0) s.population10 = 20000;
+    const uint32_t seed = 0x51u + 13u * uint32_t(variant), lfsrSeed = 0x1D2Bu + uint32_t(variant);
+    Emu e(exe); e.installCrtRand(seed);
+    SimImage img(e);
+    img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi();
+    for (uint32_t f : {0x40DC20u, 0x424B10u, 0x4A17AFu, 0x4A17C6u, 0x43F8D0u, 0x438E00u, 0x402C1Bu}) e.patchRet(f);
+    e.patchRetN(0x424AD0, 8); e.patchRetN(0x438FF0, 8); e.patchRetN(0x406720, 4); e.patchRetN(0x406CA0, 4);
+    e.patchRetN(0x476AF0, 0x1C); e.patchRetN(0x476DE0, 0x24);
+    { const uint32_t v = img.fakeView; const uint8_t dc[8] = {0xB8, uint8_t(v), uint8_t(v >> 8), uint8_t(v >> 16), uint8_t(v >> 24), 0xC2, 0x04, 0x00}; e.write(0x4A9BF5, dc, 8); }   // window DC wrapper -> fake object
+    { auto zero = [](Emu&, uint32_t) { return 0u; };
+      e.nativeImport(0x4EED4C, 8, zero); e.nativeImport(0x4EED90, 4, zero); e.nativeImport(0x4EEDB8, 8, zero); e.nativeImport(0x4EEDC0, 4, zero);
+      auto ticks = std::make_shared<uint32_t>(0);
+      e.nativeImport(0x4EEAD8, 0, [ticks](Emu&, uint32_t) { *ticks += 5; return *ticks; }); }
+    e.patchRetN(0x4B1243, 12); e.patchRetN(0x4B1223, 12);   // message boxes
+    e.put<int32_t>(0x4C95F0, 0);   // no redraw requests
+    World pw = w; CityState ps = s;
+    CrtRand rng(seed); Lfsr lf(lfsrSeed); ZoneHooks hooks; TrafficStats ts;
+    SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+    uint32_t r32 = 0x9E3779B9u * uint32_t(variant + 1);
+    auto rn = [&](uint32_t n) { r32 ^= r32 << 13; r32 ^= r32 >> 17; r32 ^= r32 << 5; return r32 % n; };
+    struct Kind { int id; uint32_t fn; };
+    static const Kind kinds[] = {{1, 0x45E290}, {2, 0x45D460}, {3, 0x45DF50}, {4, 0x45DEF0}, {6, 0x45E490}, {9, 0x45EC20}, {10, 0x45EF30}, {0xB, 0x45DC00},
+                                 {0xC, 0x45D990}, {0xD, 0x45DAE0}, {0xE, 0x45D330}, {0xF, 0x45D210}, {0x10, 0x45CE40}, {0x12, 0x45E130}, {0, 0}};
+    const size_t nKinds = sizeof kinds / sizeof kinds[0];
+    auto compare = [&](const std::string& what, long ro, long rp, std::string& out) {
+        World ew = pw; CityState es = ps; ThingState et; img.store(ew, es); img.storeThings(et);
+        std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d) + diffThings(et, ctx.things, d);
+        if (e.crtRandState() != rng.state()) { ++n; d += " rand"; }
+        if (img.lfsrState() != lf.state()) { ++n; d += " lfsr"; }
+        if (ro != rp) { ++n; d += " return(" + std::to_string(ro) + "/" + std::to_string(rp) + ")"; }
+        if (n) { out = what + ":" + d; return false; }
+        return true;
+    };
+    done = 0;
+    std::map<int, std::pair<int, int>> stat;
+    for (int op = 0; op < nOps; ++op) {
+        const Kind& k = kinds[static_cast<size_t>(op) % nKinds];
+        const int fa = int(rn(128)), fb = int(rn(128));
+        if (op % 5 == 4 || k.id == 0) {   // scatter markers and units, flood state
+            for (int i = 0; i < 60; ++i) { const int a = int(rn(128)), b = int(rn(128)); if (pw.xtxt.at(a, b) < 0xC9) pw.xtxt.at(a, b) = uint8_t(0xFB + rn(5)); }
+            for (int slot = 1; slot <= 3; ++slot) {
+                static const uint8_t types[3] = {7, 8, 0xE};
+                const int a = int(rn(128)), b = int(rn(128));
+                if (pw.xtxt.at(a, b) != 0) continue;
+                uint8_t* th = &pw.xthg[size_t(slot) * 12];
+                std::fill(th, th + 12, uint8_t(0)); th[0] = types[rn(3)]; th[3] = uint8_t(a); th[4] = uint8_t(b);
+                pw.xtxt.at(a, b) = uint8_t(slot + 0xC9);
+            }
+            ctx.things.floodTimer = int(rn(90)); ctx.things.floodBudget = int(rn(4));
+            ctx.things.fireMessageKind = -1;
+            img.load(pw, ps); img.loadThings(ctx.things, ps);
+        }
+        ctx.things.focusA = fa; ctx.things.focusB = fb; ctx.things.monsters = ctx.things.tornados = 0;
+        img.loadThings(ctx.things, ps);
+        long ro = 0, rp = 0;
+        std::string what = "op " + std::to_string(op) + " kind " + std::to_string(k.id) + " focus (" + std::to_string(fa) + "," + std::to_string(fb) + ")";
+        if (k.id != 0) {
+            if (k.id == 3) { ro = e.call(k.fn) != 0; if (ro) { e.call(k.fn); e.call(k.fn); } }
+            else ro = e.call(k.fn) != 0;
+            rp = startDisaster(ctx, k.id) ? 1 : 0;
+            std::string out;
+            if (!compare(what, ro, rp, out)) { report = out; return 1; }
+            auto& st = stat[k.id]; st.first += int(ro != 0); ++st.second;
+        }
+        for (int f = 0; f < 4; ++f) {
+            ro = (e.call(0x45F0D0) & 0xFF) != 0; rp = disasterFrame(ctx) ? 1 : 0;
+            std::string out;
+            if (!compare(what + " frame " + std::to_string(f), ro, rp, out)) { report = out; return 1; }
+        }
+        ++done;
+    }
+    char hb[80]; std::snprintf(hb, sizeof hb, "ok hash %016llx", (unsigned long long)worldFingerprint(pw, ps));
+    report = hb;
+    for (const auto& [id, v] : stat) report += " k" + std::to_string(id) + " " + std::to_string(v.first) + "/" + std::to_string(v.second);
+    return 0;
+}
+
+int disasterDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    const int nOps = std::getenv("OPS") ? std::atoi(std::getenv("OPS")) : 60;
+    int failures = 0;
+    for (int variant = 0; variant < 2; ++variant) {
+        std::string report; long done = 0;
+        const int f = disasterRun(exe, t, c, variant, nOps, report, done);
+        ++tiles; bad += f;
+        std::printf("%-34s variant %d ops %ld: %s\n", path.c_str(), variant, done, report.c_str());
+        failures += f;
+    }
+    return failures;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -880,6 +977,7 @@ int main(int argc, char** argv) {
             else if (mode == "value") failures += valueDiff(exe, argv[i], tiles, bad);
             else if (mode == "avail") failures += availDiff(exe, argv[i], tiles, bad);
             else if (mode == "tools") failures += toolsDiff(exe, argv[i], tiles, bad);
+            else if (mode == "disaster") failures += disasterDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);

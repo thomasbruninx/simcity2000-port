@@ -246,6 +246,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         return true;
     }
     if (queryOpen_ && k == SDLK_ESCAPE) { queryOpen_ = false; return true; }
+    if (queryOpen_ && micro_.valid && k == SDLK_N) { renameQueried(); return true; }
     if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
     if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
@@ -419,7 +420,22 @@ void GameUi::applyClick(int a, int b) {
 
 void GameUi::queryTile(int a, int b) {
     query_ = ::sc2k::queryTile(sim_.context(), a, b);
+    micro_ = microsimInfo(sim_.context(), a, b);
     queryOpen_ = true;
+}
+
+void GameUi::renameQueried() {
+    std::string name = micro_.name;
+    if (!askText("Building name", name)) return;
+    if (renameBuilding(sim_.context(), query_.a, query_.b, name)) micro_ = microsimInfo(sim_.context(), query_.a, query_.b);
+}
+
+const uint8_t* GameUi::labelTemplate(int id, bool custom) {   // 0x44FB2F builds the table: string 831 + n names building 0xC6 + n
+    if (custom || id < 0xC6 || id > 0xFF) return nullptr;
+    const std::string s = res_.string(831 + id - 0xC6);
+    templateName_.fill(0);
+    std::memcpy(templateName_.data(), s.data(), std::min<size_t>(s.size(), 24));
+    return templateName_.data();
 }
 
 void GameUi::signAt(int a, int b) {
@@ -559,6 +575,22 @@ void GameUi::scheduledEvent(int index) {
 
 void GameUi::postMessage(int id, int arg) { info_.postMessage(id, arg); }
 void GameUi::showDialog(int id) { toolMessage(id); }
+int GameUi::chooseStadiumSport() {
+    Modal m; m.title = "Which sport does the new stadium host?";
+    for (int i = 0; i < 5; ++i) m.options.push_back(res_.string(786 + i));
+    const int r = runModal(m);
+    return r < 0 ? 0 : r;
+}
+void GameUi::scrollTo(int a, int b) { cam_.centerOn(a, b, width_ / 2, height_ / 2); }
+void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ran out), 287 (bankrupt)
+    static const int kString[3] = {286, 285, 287};
+    const std::string text = res_.string(kString[kind < 0 || kind > 2 ? 2 : kind]);
+    if (headless || !pump) { say(text); return; }
+    Modal m; m.title = text; m.options = {"OK"};
+    runModal(m);
+}
+void GameUi::playSound(int, int) {}
+void GameUi::stopSound(int) {}
 
 // ---- drawing -----------------------------------------------------------------------------------------------------------
 
@@ -695,6 +727,22 @@ void GameUi::drawSigns(SDL_Renderer* r) {
 }
 
 void GameUi::drawQuery(SDL_Renderer* r) {
+    if (micro_.valid) {
+        std::vector<std::string> lines;
+        const auto str = [this](int id) { return res_.string(id); };
+        for (int id : micro_.lineStrings) if (id >= 0) lines.push_back(formatMicrosimLine(micro_, res_.string(id), str));
+        const int bw = 360, bh = 52 + 16 * static_cast<int>(lines.size()) + 22;
+        const int bx = std::min(std::max(0, mouseX_ + 20), width_ - bw), by = std::min(std::max(kTopBar, mouseY_ - bh / 2), height_ - kBottomBar - bh);
+        fill(r, bx, by, bw, bh, 250, 246, 210);
+        frame(r, bx, by, bw, bh, 70, 50, 20);
+        std::string name = micro_.name.empty() ? res_.string(query_.nameString) : micro_.name;
+        text(r, bx + 10, by + 10, name, 20, 10, 0);
+        text(r, bx + 10, by + 26, res_.string(query_.nameString), 110, 90, 60);
+        int y = by + 46;
+        for (const std::string& l : lines) { text(r, bx + 10, y, l, 40, 20, 0); y += 16; }
+        text(r, bx + 10, y + 4, "N renames the building   Esc closes", 120, 100, 80);
+        return;
+    }
     const int bw = 360, bh = 40 + 14 * static_cast<int>(query_.lines.size()) + 20;
     int bx = std::min(std::max(0, mouseX_ + 20), width_ - bw), by = std::min(std::max(kTopBar, mouseY_ - bh / 2), height_ - kBottomBar - bh);
     fill(r, bx, by, bw, bh, 250, 246, 210);

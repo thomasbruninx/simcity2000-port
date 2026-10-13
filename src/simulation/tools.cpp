@@ -726,6 +726,13 @@ bool placeBuilding(SimContext& c, ToolState&, int category, int sub, int a, int 
         case 0xD3: ++c.s.budget[kFire].currentCosts; break;
         case 0xD6: ++c.s.budget[kSchool].currentCosts; break;
         case 0xD9: ++c.s.budget[kCollege].currentCosts; break;
+        case 0xD7:
+            if (w.xtxt.at(a, b) != 0) {   // the new stadium asks which sport it hosts (word +4 of its microsim record)
+                const int sport = c.hooks.chooseStadiumSport();
+                const size_t rec = static_cast<size_t>(w.xtxt.at(a, b) - 0x33) * 8;
+                if (sport >= 0 && w.xtxt.at(a, b) >= 0x33) { w.xmic[rec + 4] = static_cast<uint8_t>(sport); w.xmic[rec + 5] = 0; }
+            }
+            break;
         case 0xDB: w.xbit.at(a, b) &= 0x7F; break;
         case 0xDC: applyPipePiece(c, a, b); break;
         case 0xE9:

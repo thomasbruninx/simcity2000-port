@@ -1,5 +1,6 @@
 #include "simulation/query.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace sc2k {
@@ -97,6 +98,63 @@ QueryInfo queryTile(const SimContext& c, int a, int b) {
         }
     }
     return q;
+}
+
+static std::string labelText(const World& w, int index) {
+    if (index < 0 || index > 0xFF) return {};
+    const char* p = reinterpret_cast<const char*>(&w.xlab[static_cast<size_t>(index) * 25]);
+    return std::string(p, strnlen(p, 24));
+}
+
+MicrosimInfo microsimInfo(const SimContext& c, int a, int b) {
+    MicrosimInfo m;
+    const int v = c.w.xtxt.at(a, b);
+    if (v < 0x33 || v > 0xC8) return m;
+    const size_t r = static_cast<size_t>(v - 0x33) * 8;
+    const int id = c.w.xmic[r];
+    if (id == 0) return m;
+    m.valid = true; m.overlay = v; m.buildingId = id;
+    m.cls = c.t.microsimClass[static_cast<size_t>(id)];
+    for (size_t k = 0; k < 5; ++k) {
+        const int idx = c.t.microsimLines[static_cast<size_t>(m.cls) * 5 + k];
+        m.lineStrings[k] = m.cls < 26 && idx >= 0 ? idx + 900 : -1;
+    }
+    auto word = [&](size_t o) { return static_cast<uint16_t>(c.w.xmic[r + o] | (c.w.xmic[r + o + 1] << 8)); };
+    m.b1 = c.w.xmic[r + 1]; m.w2 = word(2); m.w4 = word(4); m.w6 = word(6);
+    m.name = labelText(c.w, v);
+    m.teamLabel = labelText(c.w, m.w6);
+    return m;
+}
+
+std::string formatMicrosimLine(const MicrosimInfo& m, const std::string& pattern, const std::function<std::string(int)>& string) {
+    static const char* grade[13] = {"F", "D-", "D", "D+", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+"};
+    std::string out;
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        if (pattern[i] != '#') { out += pattern[i]; continue; }
+        if (++i >= pattern.size()) break;
+        switch (pattern[i]) {
+            case '0': out += std::to_string(m.b1); break;
+            case '1': out += std::to_string(m.w2); break;
+            case '2': out += std::to_string(m.w4); break;
+            case '3': out += std::to_string(m.w6); break;
+            case 'G': out += grade[std::min<int>(m.b1, 12)]; break;
+            case 'S': out += string(0x312 + m.w4); break;
+            case 'T': out += m.teamLabel; break;
+            case 'W': if (m.b1 != 0) out += std::to_string(m.b1) + "-" + std::to_string(0x28 - m.b1); break;
+            default: break;
+        }
+    }
+    return out;
+}
+
+bool renameBuilding(SimContext& c, int a, int b, const std::string& name) {
+    const int v = c.w.xtxt.at(a, b);
+    if (v < 0x33 || v > 0xC8 || c.w.xmic[static_cast<size_t>(v - 0x33) * 8] == 0) return false;
+    uint8_t* label = &c.w.xlab[static_cast<size_t>(v) * 25];
+    const size_t n = std::min<size_t>(name.size(), 24);
+    std::memcpy(label, name.data(), n);
+    label[n] = 0;
+    return true;
 }
 
 std::string signText(const SimContext& c, int a, int b) {

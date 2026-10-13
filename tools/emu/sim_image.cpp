@@ -84,6 +84,7 @@ void SimImage::loadThings(const ThingState& t, const CityState& s) {
     e.put<uint16_t>(0x4C9438, uint16_t(t.disasterRequest)); e.put<int16_t>(0x4C9834, int16_t(t.lastSpawned));
     e.put<int32_t>(0x4E70BC, t.shipTargetA); e.put<int32_t>(0x4E70C0, t.shipTargetB);
     e.put<int32_t>(0x4C9D5C, t.scenarioFlag); e.put<int16_t>(0x4E76A4, int16_t(t.fireMessageKind));
+    e.put<int32_t>(0x4C83C0, t.floodTimer); e.put<int16_t>(0x4E76A0, int16_t(t.floodBudget)); e.put<int16_t>(0x4CB968, int16_t(t.dozerSub));
     e.put<int32_t>(0x4CA470, s.centerA2); e.put<int32_t>(0x4CA474, s.centerB2); e.put<int32_t>(0x4CB4EC, s.cb4ec);
     if (!t.spriteHeight.empty()) {
         const uint32_t tbl = e.get<uint32_t>(0x4CA1D0);
@@ -99,6 +100,7 @@ void SimImage::storeThings(ThingState& t) const {
     t.disasterRequest = e.get<uint16_t>(0x4C9438); t.lastSpawned = e.get<int16_t>(0x4C9834);
     t.shipTargetA = e.get<int32_t>(0x4E70BC); t.shipTargetB = e.get<int32_t>(0x4E70C0);
     t.scenarioFlag = e.get<int32_t>(0x4C9D5C); t.fireMessageKind = e.get<int16_t>(0x4E76A4);
+    t.floodTimer = e.get<int32_t>(0x4C83C0); t.floodBudget = e.get<int16_t>(0x4E76A0); t.dozerSub = e.get<int16_t>(0x4CB968);
 }
 
 void SimImage::store(World& w, CityState& s) const {
@@ -219,6 +221,7 @@ long diffThings(const ThingState& a, const ThingState& b, std::string& detail) {
     chk("focusA", a.focusA, b.focusA); chk("focusB", a.focusB, b.focusB); chk("disasterRequest", a.disasterRequest, b.disasterRequest);
     chk("lastSpawned", a.lastSpawned, b.lastSpawned); chk("shipTargetA", a.shipTargetA, b.shipTargetA); chk("shipTargetB", a.shipTargetB, b.shipTargetB);
     chk("fireMessageKind", a.fireMessageKind, b.fireMessageKind);
+    chk("floodTimer", a.floodTimer, b.floodTimer); chk("floodBudget", a.floodBudget, b.floodBudget);
     return d;
 }
 

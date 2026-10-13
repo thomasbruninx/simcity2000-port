@@ -5,6 +5,16 @@
 
 namespace sc2k {
 
+namespace {
+// A scenario file starts with its disaster pending (loader 0x433F30 stores the kind and the focus; the scenario flag 0x4C9D5C is set)
+void startScenario(SimContext& c) {
+    if (!c.s.scenario) return;
+    c.things.scenarioFlag = 1;
+    c.things.disasterRequest = c.s.scenario->disaster;
+    c.things.focusA = c.s.scenario->focusA; c.things.focusB = c.s.scenario->focusB;
+}
+}  // namespace
+
 struct Simulation::Impl {
     World world;
     CityState state;
@@ -23,13 +33,14 @@ struct Simulation::Impl {
         if (state.rateLevel == 0) state.rateLevel = 1;
         ctx = std::make_unique<SimContext>(SimContext{world, state, tables, rng, lfsr, *hooks, traffic, {}});
         ctx->lcg.seed(seed ^ 0x5DEECE6Du);
+        startScenario(*ctx);
     }
 };
 
 Simulation::Simulation(const CityFile& city, GameTables tables, uint32_t seed) : impl_(std::make_unique<Impl>(city, std::move(tables), seed)) {}
 Simulation::~Simulation() = default;
 
-void Simulation::tick() { simulationTick(*impl_->ctx); }
+void Simulation::tick() { simulationTick(*impl_->ctx); disasterTick(*impl_->ctx); }   // the app step machine runs 0x412FE0 then 0x45C870
 void Simulation::thingFrames(int n) { for (int i = 0; i < n; ++i) thingFrame(*impl_->ctx); }
 void Simulation::advanceDays(int days, int framesPerDay) {
     for (int d = 0; d < days; ++d) { tick(); thingFrames(framesPerDay); }
@@ -48,6 +59,7 @@ void Simulation::replaceCity(const CityFile& c) {
     st.catPop = {st.zonePop[1] + st.zonePop[2], st.zonePop[3] + st.zonePop[4], st.zonePop[5] + st.zonePop[6]};
     if (st.rateLevel == 0) st.rateLevel = 1;
     impl_->ctx->things = ThingState{};
+    startScenario(*impl_->ctx);
 }
 void Simulation::startNewCity(const CityFile& map, int era, int difficulty) {
     replaceCity(map);

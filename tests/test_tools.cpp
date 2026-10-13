@@ -4,6 +4,10 @@
 #include "simulation/availability.h"
 #include "simulation/bonds.h"
 #include "simulation/new_city.h"
+#include "simulation/scenario.h"
+#include "simulation/query.h"
+#include "resources/pe_resources.h"
+#include "simulation/simulation.h"
 #include "simulation/query.h"
 #include "simulation/finance.h"
 #include "world/world_hash.h"
@@ -171,4 +175,58 @@ TEST(new_city_setup_follows_era_and_difficulty) {
     o.difficulty = 0;
     setupNewCity(w, s, t, rng, o);
     CHECK(s.treasury == 20000 && s.debt == 0 && s.budget[kBond].currentCosts == 0);
+}
+
+TEST(scenarios_start_their_disaster_and_have_goals) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    CityFile c = CityFile::load(dir + "/SCENARIO/SANFRANC.SCN");
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    Simulation sim(c, t, 3);
+    const CityState& s0 = sim.state();
+    CHECK(s0.scenario && s0.scenario->disaster == 6 && s0.scenario->focusA == 41 && s0.scenario->focusB == 61 && s0.scenario->timeLimit == 60);
+    CHECK(s0.scenario->population10 == 68000 && !scenarioGoalsMet(*s0.scenario, s0));
+    sim.tick();
+    CHECK(sim.state().disasterKind == 6 && sim.state().disasterActive == 1);
+    long fires = 0;
+    for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) { const int v = sim.world().xtxt.at(a, b); fires += v >= 0xFB && v <= 0xFF; }
+    CHECK(fires > 0);
+    // the goals are met once the city reaches the target population
+    CityState met = sim.state();
+    met.population10 = 70000;
+    CHECK(scenarioGoalsMet(*met.scenario, met));
+    CityFile d = CityFile::load(dir + "/DEFAULT.SC2");
+    CHECK(!ScenarioInfo::fromCity(d).has_value());
+}
+
+TEST(microsim_dialog_lines_follow_the_building_class) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    CityFile c = CityFile::load(dir + "/CITIES/NYC.SC2");
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    Simulation sim(c, t, 3);
+    PeImage exe = PeImage::load(dir + "/SIMCITY.EXE");
+    PeResources res(exe);
+    const auto str = [&](int id) { return res.string(id); };
+    int found = 0;
+    bool sawPlant = false;
+    for (int a = 0; a < 128 && !sawPlant; ++a)
+        for (int b = 0; b < 128; ++b) {
+            const MicrosimInfo m = microsimInfo(sim.context(), a, b);
+            if (!m.valid) continue;
+            ++found;
+            if (m.buildingId >= 0xC9 && m.buildingId <= 0xCF) {   // a power plant: output, load, age
+                std::string all;
+                for (int id : m.lineStrings) if (id >= 0) all += formatMicrosimLine(m, res.string(id), str) + "|";
+                CHECK(all.find("MWatts") != std::string::npos && all.find("Capacity") != std::string::npos);
+                sawPlant = true;
+                break;
+            }
+        }
+    CHECK(found > 0 && sawPlant);
+    MicrosimInfo m; m.b1 = 12; m.w2 = 3; m.w4 = 2; m.w6 = 1990;
+    CHECK(formatMicrosimLine(m, "Built in : #3, grade #G, #W", str) == "Built in : 1990, grade A+, 12-28");
+    CHECK(formatMicrosimLine(m, "Design Capacity : #1000", str) == "Design Capacity : 3000");
 }

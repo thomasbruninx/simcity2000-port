@@ -26,6 +26,9 @@ CityState CityState::fromCity(const CityFile& c) {
     s.rotation = c.miscInt(misc::kRotation);
     s.graph = c.xgrp;
     s.c9448 = static_cast<int16_t>(c.miscWord(1038));
+    s.scenario = ScenarioInfo::fromCity(c);
+    if (s.scenario) s.scenarioMonthsLeft = s.scenario->timeLimit;
+    s.disasterKind = static_cast<int16_t>(c.miscWord(1041)); s.disasterActive = static_cast<int16_t>(c.miscWord(1042));
     s.milestone = static_cast<int16_t>(c.miscWord(8));
     s.weather = static_cast<uint8_t>(c.miscWord(misc::kWeather)); s.c9df8 = static_cast<uint8_t>(c.miscWord(24));
     for (size_t i = 0; i < 17; ++i) s.eventYears[i] = static_cast<int16_t>(c.miscWord(462 + i));
@@ -75,6 +78,7 @@ void CityState::writeBack(CityFile& c) const {
     for (size_t i = 0; i < 4; ++i) { put16(438 + 4 * i, nbrName[i]); put(439 + 4 * i, static_cast<int32_t>(nbr9d28[i])); put(440 + 4 * i, static_cast<int32_t>(nbr981c[i])); put(441 + 4 * i, static_cast<int32_t>(nbr9944[i])); }
     c.xgrp = graph;
     put16(1038, static_cast<int16_t>(c9448));
+    put16(1041, static_cast<int16_t>(disasterKind)); put16(1042, static_cast<int16_t>(disasterActive));
     put16(8, static_cast<int16_t>(milestone));
     for (size_t i = 0; i < 17; ++i) put16(462 + i, eventYears[i]);
     for (size_t i = 0; i < 50; ++i) put16(388 + i, bondRates[i]);

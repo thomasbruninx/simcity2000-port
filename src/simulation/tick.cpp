@@ -338,10 +338,13 @@ void simulationTick(SimContext& c) {
                 c.hooks.postMessage(3, old & 0xFF);
                 c.hooks.milestoneReached(s.milestone);
             }
-            if (c.things.scenarioFlag != 0) {
-                if (c.hooks.scenarioGoalsMet()) c.hooks.gameOver(1);
+            if (c.things.scenarioFlag != 0 && s.scenario) {
+                int result = -1;
+                if (scenarioGoalsMet(*s.scenario, s)) result = 1;
+                else if (static_cast<uint16_t>(--s.scenarioMonthsLeft) == 0) result = 0;
+                if (result >= 0) { c.hooks.gameOver(result); c.things.scenarioFlag = 0; }
             }
-            if (s.treasury < -100000) c.hooks.gameOver(2);
+            if (s.treasury < -100000) { c.hooks.gameOver(2); c.things.scenarioFlag = 0; }
             break;
         }
         case 24: chooseDisaster(c); break;

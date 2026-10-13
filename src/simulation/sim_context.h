@@ -27,7 +27,10 @@ struct ZoneHooks {
     virtual bool confirm(int /*stringId*/, int /*amount*/ = 0) { return false; }               // yes/no message box (neighbour connection fee, ...)
     virtual int chooseBridge(int /*length*/, int allowedMask) { return allowedMask ? __builtin_ctz(static_cast<unsigned>(allowedMask)) : -1; }   // 0x45B140 dialog: bridge type or -1
     virtual void toolMessage(int /*id*/) {}                                // 0x45AFD0 / 0x408600 status or error text
-    virtual bool scenarioGoalsMet() { return false; }                      // phase 22 scenario goal test (scenario data is not modelled yet)                       // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)
+    virtual int chooseStadiumSport() { return -1; }                          // 0x47CE40 dialog after a stadium is built: 0..4 (strings 786..790) or -1
+    virtual void playSound(int /*id*/, int /*repeat*/ = 0) {}                // 0x424AA0 (repeat 0) / 0x424AD0: sound effect 500 + n (SOUNDS/5xx.WAV)
+    virtual void stopSound(int /*id*/) {}                                   // 0x424AF0
+                         // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)
 };
 
 // Ridership statistics written by the traffic router.
@@ -49,6 +52,9 @@ struct ThingState {
     int fireMessageKind = -1;                   // 0x4E76A4: highest-priority burning building class since the last report (-1 = none)
     int lastSpawned = 0;                        // 0x4C9834: slot of the thing spawned last
     int shipTargetA = 0, shipTargetB = 0;       // 0x4E70BC / 0x4E70C0: pier a ship was sent to
+    int floodTimer = 0;                         // 0x4C83C0: counts down while a flood spreads (set to 60 by the flood handlers)
+    int floodBudget = 0;                        // 0x4E76A0: random flood-damage rolls left (set to 50 by the big flood)
+    int dozerSub = 0;                           // 0x4CB968: sub-tool of the terrain tools; the meteor's terrain raise reads it
     int scenarioFlag = 0;                       // 0x4C9D5C (written by the game-over / scenario code)
     std::vector<uint16_t> spriteHeight;         // word at +4 of each 8-byte sprite record (0x4CA1D0); read from the sprite archives
     int spriteHeightOf(int id) const { return id >= 0 && static_cast<size_t>(id) < spriteHeight.size() ? spriteHeight[static_cast<size_t>(id)] : 0; }
@@ -126,6 +132,10 @@ int findOverlayTile(const SimContext& c, int overlay);                  // 0x44F
 void runEvents(SimContext& c);                                           // second half of 0x467AE0: fire spread, news triggers, weather
 void recordHistory(SimContext& c);                                       // 0x413910 graph history
 void trafficDecay(SimContext& c);                                        // 0x458040 (phase 19)
+// ---- disasters (docs/simulation/disasters.md) ----
+bool startDisaster(SimContext& c, int kind);                             // the switch of 0x45C870: handler for one disaster kind 1..0x12, true when it happened
+bool disasterFrame(SimContext& c);                                       // 0x45F0D0: spreads / extinguishes fire, flood and crash markers; false when nothing is left burning
+void disasterTick(SimContext& c);                                        // 0x45C870: consumes the pending request, runs the frame while a disaster is active, posts the end-of-disaster message
 void chooseDisaster(SimContext& c);                                      // 0x4720A0: advisor topic + random disaster request (phase 24)
 void simulationTick(SimContext& c);                                      // 0x412FE0 (UI omitted)                                          // 0x4686C0 economy / job-market model (phase 21)
 

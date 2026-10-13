@@ -4,6 +4,7 @@
 #pragma once
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -65,6 +66,12 @@ public:
     void toolMessage(int id) override;
     void postMessage(int id, int arg) override;
     void showDialog(int stringId) override;
+    const uint8_t* labelTemplate(int id, bool custom) override;   // default building names (strings 831..888) for new microsim buildings
+    int chooseStadiumSport() override;
+    void scrollTo(int a, int b) override;                    // centre the view on a disaster
+    void gameOver(int kind) override;                        // scenario won / lost, bankruptcy
+    void playSound(int id, int repeat = 0) override;
+    void stopSound(int id) override;
     void scheduledEvent(int index) override;                 // a dated event fired: unlock tools
 
 private:
@@ -117,6 +124,9 @@ private:
     bool askText(const std::string& title, std::string& text);   // modal single-line text entry; false = cancelled
     bool queryOpen_ = false;
     QueryInfo query_;
+    MicrosimInfo micro_;                // building-specific data of the queried tile (valid = a microsim building)
+    std::array<uint8_t, 25> templateName_{};
+    void renameQueried();
     void drawQuery(SDL_Renderer* r);
     void drawSigns(SDL_Renderer* r);
     std::pair<int, int> footprint(const ToolItem& t, int a, int b, int& size) const;
