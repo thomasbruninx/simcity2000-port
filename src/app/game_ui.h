@@ -38,6 +38,7 @@ public:
     std::function<void(int)> onPauseAction;   // pause menu: 1 load game, 2 settings, 3 exit
     static constexpr int kZoomLevelCount = 7;
     void setZoomLevel(int level);                       // 0..6, see game_ui.cpp
+    bool pickScreen(int x, int y, int& a, int& b) { return renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b); }   // screen position -> file tile
     int zoomLevel() const { return zoomLevel_; }
     float mapMag() const { return mag_; }                // magnification of the map framebuffer on screen
     int mapW() const { return std::max(1, static_cast<int>(std::ceil(width_ / mag_))); }   // size of the map framebuffer

@@ -759,7 +759,13 @@ void GameUi::draw(SDL_Renderer* r) {
     char top[200];
     std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s   R%d C%d I%d   [%s]", kMonths[s.month()], s.startYear + s.day / 300, s.population10, moneyText(s.treasury).c_str(),
                   s.demand[0], s.demand[1], s.demand[2], kSpeedNames[static_cast<int>(clock_.speed)]);
-    text(r, 6, 10, top);
+    const int buttonsClip = width_ - kTopButtonCount * kTopButtonStep - 4;
+    {   // narrow windows (large UI scales): the status line stops where the buttons start
+        const SDL_Rect clip{0, 0, std::max(0, buttonsClip - 4), kTopBar};
+        SDL_SetRenderClipRect(r, &clip);
+        text(r, 6, 10, top);
+        SDL_SetRenderClipRect(r, nullptr);
+    }
     std::string right = message_;
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
     const int buttonsX = width_ - kTopButtonCount * kTopButtonStep - 4;
@@ -815,7 +821,10 @@ void GameUi::draw(SDL_Renderer* r) {
     button(4, 92, layers.underground ? "Underground" : "Surface", layers.underground);
     button(104, 72, "Power", layers.powerOverlay);
     button(184, 72, "Water", layers.waterOverlay);
+    const SDL_Rect hintClip{270, height_ - kBottomBar, std::max(0, width_ - 270), kBottomBar};
+    SDL_SetRenderClipRect(r, &hintClip);
     text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  B budget  G graphs  Ctrl+S save  Esc", 150, 160, 180);
+    SDL_SetRenderClipRect(r, nullptr);
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);
     if (queryOpen_) drawQuery(r);

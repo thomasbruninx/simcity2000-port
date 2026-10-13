@@ -276,3 +276,49 @@ TEST(random_terrain_matches_the_original_generator) {
     // the hashes printed by `sc2k-emu-diff terrain` for the same four parameter sets (identical on the original's machine code); seeds 31..34 there, the first set here
     CHECK(run(false, false, 20, 20, 20) == 0xe9e9f5a43cb300bcull);
 }
+
+namespace {
+struct StadiumHooks : YesHooks {
+    StadiumChoice chooseStadiumTeam(int) override { return {2, "Testers"}; }
+};
+}  // namespace
+
+TEST(stadium_team_dialog_result_is_stored_in_the_label_and_record) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    CityFile c = CityFile::load(std::string(root) + "/DEFAULT.SC2");
+    GameTables t = GameTables::fromExe(std::string(root) + "/SIMCITY.EXE");
+    World w = World::fromCity(c);
+    CityState s = CityState::fromCity(c);
+    s.treasury = 4000000; s.population10 = 1000;
+    CrtRand rng(11); Lfsr lf(0xACE1); StadiumHooks hooks; TrafficStats ts;
+    SimContext ctx{w, s, t, rng, lf, hooks, ts, {}};
+    ToolState tst;
+    int cat = -1, sub = -1;
+    for (int k = 0; k < 20 && cat < 0; ++k) for (int j = 0; j < 12; ++j) if (toolBuildingId(k, j) == 0xD7) { cat = k; sub = j; break; }
+    CHECK(cat >= 0);
+    bool placed = false;
+    int pa = 0, pb = 0;
+    for (int a = 4; a < 120 && !placed; a += 4) for (int b = 4; b < 120 && !placed; b += 4) if (placeBuilding(ctx, tst, cat, sub, a, b)) { placed = true; pa = a; pb = b; }
+    CHECK(placed);
+    const int v = w.xtxt.at(pa, pb) ? w.xtxt.at(pa, pb) : w.xtxt.at(pa + 1, pb + 1);
+    CHECK(v >= 0x33);
+    CHECK(std::strcmp(reinterpret_cast<const char*>(&w.xlab[static_cast<size_t>(0xFB + 2) * 25]), "Testers") == 0);
+    CHECK(w.xmic[static_cast<size_t>(v - 0x33) * 8 + 4] == 2 && w.xmic[static_cast<size_t>(v - 0x33) * 8 + 6] == 2 + 0xFB);
+    CHECK((s.militaryMask & 4) != 0);
+}
+
+TEST(labels_are_c_strings_in_the_world_and_pascal_strings_in_the_file) {
+    CityFile c;
+    const char* name = "Llamas";
+    c.xlab[0xFB * 25] = 6; std::memcpy(&c.xlab[0xFB * 25 + 1], name, 6);
+    World w = World::fromCity(c);
+    CHECK(std::strcmp(reinterpret_cast<const char*>(&w.xlab[0xFB * 25]), "Llamas") == 0);
+    CityFile back;
+    w.writeBack(back);
+    CHECK(back.xlab[0xFB * 25] == 6 && std::memcmp(&back.xlab[0xFB * 25 + 1], name, 6) == 0);
+    // a port-written C string (no length byte) is left alone
+    c.xlab[0xFC * 25] = 'M'; c.xlab[0xFC * 25 + 1] = 'e'; c.xlab[0xFC * 25 + 2] = 't'; c.xlab[0xFC * 25 + 3] = 's';
+    World w2 = World::fromCity(c);
+    CHECK(std::strcmp(reinterpret_cast<const char*>(&w2.xlab[0xFC * 25]), "Mets") == 0);
+}

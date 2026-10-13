@@ -281,6 +281,7 @@ int main(int argc, char** argv) {
                 else if (op == "drag") { int a0, b0, a1, b1; words >> a0 >> b0 >> a1 >> b1; ui.dragTool(a0, b0, a1, b1); }
                 else if (op == "sign") { int a, b; words >> a >> b; std::string t; std::getline(words >> std::ws, t); ui.signTool(a, b, t); }
                 else if (op == "click") { int a, b; words >> a >> b; ui.dragTool(a, b, a, b); }
+                else if (op == "pick") { int a, b, x, y; words >> x >> y; if (ui.pickScreen(x, y, a, b)) std::printf("pick %d %d -> tile %d %d\n", x, y, a, b); else std::printf("pick %d %d -> none\n", x, y); }
                 else if (op == "press") { int a, b; words >> a >> b; ui.mouseDown(a, b, 1); }
                 else if (op == "zoom") { int z; words >> z; ui.setZoomLevel(z); }
                 else if (op == "center") { int a, b; words >> a >> b; ui.scrollTo(a, b); }
