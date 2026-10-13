@@ -23,6 +23,10 @@ struct Camera {
 
 struct RenderLayers {
     bool terrain = true, buildings = true, zones = true, things = true, traffic = true;
+    bool underground = false;     // pipes, subway and water table instead of the surface (0x43A9E0)
+    bool powerOverlay = false;    // tint powered / unpowered tiles
+    bool waterOverlay = false;    // tint watered / piped / dry tiles
+    bool blinkOn = true;          // phase of the blinking no-power bolt
 };
 
 // Palette animation of the original (0x456A60 / 0x456B70): 49 entries from index 0xAB rotate (water shimmer) and 16 entries from 0xE0
@@ -46,6 +50,8 @@ public:
 
 private:
     void blit(Framebuffer& fb, int spriteId, int x, int yTop, bool flip, bool shadow = false) const;
+    void tint(Framebuffer& fb, int x, int yTop, uint32_t color, int alpha, int zoom) const;   // blends a colour over a tile diamond whose sprite box starts at (x, yTop)
+    void drawUndergroundTile(Framebuffer& fb, const World& w, const Camera& cam, const RenderLayers& layers, int a, int b, int x, int yBase) const;
     void drawThing(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, int da, int db, int slot) const;
     void drawMonster(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, int slot) const;
     const GameTables& t_;

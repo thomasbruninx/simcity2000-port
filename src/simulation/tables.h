@@ -87,6 +87,8 @@ struct GameTables {
     std::array<int16_t, 24> railDy{};                    // @0x4E71C0
     int16_t tornadoSprite = 0;                           // @0x4E708E
     std::array<int16_t, 16> monsterPart{};               // @0x4E7248.. (-15,-3 | -24,14 | 6,52 | 43,33 | -15,2 | -20,18 | 6,32 | 49,46)
+    std::array<int16_t, 256> undergroundSprite{};        // @0x4E6698: ground sprite of the underground view by XTER value
+    std::array<uint8_t, 16> zoneFootprint{};             // @0x4E6798: flat footprint sprite offset by zone type (underground view)
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 

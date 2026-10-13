@@ -74,6 +74,71 @@ void MapRenderer::blit(Framebuffer& fb, int spriteId, int x, int yTop, bool flip
     }
 }
 
+void MapRenderer::tint(Framebuffer& fb, int x, int yTop, uint32_t color, int alpha, int zoom) const {
+    const Sprite* flat = sprites_.get(1256 - 1000 + 500 * zoom);   // flat land tile: its opaque pixels are the tile diamond
+    if (!flat) return;
+    for (int row = 0; row < flat->height; ++row) {
+        const int y = yTop + row;
+        if (y < 0 || y >= fb.height) continue;
+        for (int col = 0; col < flat->width; ++col) {
+            if (!flat->opaque[static_cast<size_t>(row) * static_cast<size_t>(flat->width) + static_cast<size_t>(col)]) continue;
+            const int px = x + col;
+            if (px < 0 || px >= fb.width) continue;
+            uint32_t& d = fb.pixels[static_cast<size_t>(y) * static_cast<size_t>(fb.width) + static_cast<size_t>(px)];
+            auto mix = [&](int shift) { const int dv = (d >> shift) & 0xFF, cv = (color >> shift) & 0xFF; return static_cast<uint32_t>((dv * (255 - alpha) + cv * alpha) / 255) << shift; };
+            d = 0xFF000000u | mix(16) | mix(8) | mix(0);
+        }
+    }
+}
+
+void MapRenderer::drawUndergroundTile(Framebuffer& fb, const World& w, const Camera& cam, const RenderLayers& layers, int a, int b, int x, int yBase) const {
+    // 0x43A9E0 (zoom-2 body; other zooms use the same formulas with the zoom's sprite base)
+    const int z = cam.zoom, zoomBase = 500 * z, tw = 4 << z, step = 3 << z;
+    auto height = [&](int id) { const Sprite* sp = sprites_.get(id); return sp ? sp->height : 0; };
+    const uint16_t aw = w.altm.at(a, b);
+    const int altLand = aw & 0x1F;
+    const int yb = yBase - altLand * step;
+    const int xter = w.xter.at(a, b);
+    const int ug = t_.undergroundSprite[static_cast<size_t>(xter)];
+    const int groundTop = yb - height(ug + zoomBase);
+    const int wd = (aw & 0x7C00) >> 10;   // depth of the water table
+    if (wd != 0) {
+        int sid, dy;
+        if (wd == 1) { sid = zoomBase + xter + 0x3E; dy = -height(sid); }
+        else { sid = zoomBase + 0x160; dy = (wd - 1) * step - height(sid); }
+        blit(fb, sid, x, yb + dy, false);
+    }
+    const int xund = w.xund.at(a, b), xb = w.xbit.at(a, b);
+    const bool piped = (xb & xbit::kPiped) != 0, watered = (xb & xbit::kWatered) != 0;
+    if ((xund < 0x10 || xund > 0x1E) && xund != 0x1F && xund != 0x20) {
+        if (xund == 0) {
+            const int sid = !piped ? zoomBase + ug : (!watered ? zoomBase + 0x15F : zoomBase + 0x1D3);
+            blit(fb, sid, x, groundTop, false);
+        } else {
+            blit(fb, zoomBase + xund + 0x13E, x, groundTop, false);
+            if (piped) blit(fb, watered ? zoomBase + 0x1D3 : zoomBase + 0x15F, x, groundTop, false);
+        }
+    } else {
+        int sid = xund;
+        if ((xb & 0x30) == 0x30) sid += 0x74;
+        blit(fb, zoomBase + sid + 0x13E, x, groundTop, false);
+    }
+    const int id = w.xbld.at(a, b);
+    if (id == 0 || !layers.buildings) return;
+    if (id < 0x70) {
+        if (id >= 0x61 && id <= 0x6B) return;       // elevated highways are not shown underground
+        if (id < 0xE) return;
+        int by = yb;
+        if (xb & xbit::kWater) by += (altLand - ((aw & 0x3E0) >> 5)) * step;
+        else if (ug == 0x13E) by -= step;
+        blit(fb, id + zoomBase, x, by - height(id + zoomBase), (xb & xbit::kFlipped) != 0);
+    } else {
+        const int fid = zoomBase + 0x162 + t_.zoneFootprint[static_cast<size_t>(w.xzon.at(a, b) & 0xF)];
+        blit(fb, fid, x, yb - height(fid), false);
+    }
+    (void)tw;
+}
+
 void MapRenderer::drawMonster(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, int slot) const {
     // 0x451880: the monster is composed of mirrored body parts; coordinates are zoom-2 pixels scaled down for lower zooms
     const uint8_t* r = &w.xthg[static_cast<size_t>(slot) * 12];
@@ -238,6 +303,23 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
             const bool flip = ((w.xbit.at(a, b) & xbit::kFlipped) != 0) != ((cam.rotation & 1) != 0);
             const int thingValue = w.xtxt.at(a, b);
 
+            if (layers.underground) {
+                drawUndergroundTile(fb, w, cam, layers, a, b, x, yBase);
+                continue;
+            }
+            auto overlay = [&] {
+                if (!layers.powerOverlay && !layers.waterOverlay) return;
+                if (!(zone != 0 || id >= 0x70)) return;           // only zoned land and buildings consume power/water
+                const int xb = w.xbit.at(a, b);
+                const int ty = bottom - height(t_.terrainSprite[0] + zoomBase);
+                if (layers.powerOverlay) {
+                    if (xb & xbit::kPowered) tint(fb, x, ty, 0xFFFFE040u, 90, z);
+                    else if (layers.blinkOn) tint(fb, x, ty, 0xFFFF2020u, 150, z);
+                } else if (layers.waterOverlay) {
+                    if (xb & xbit::kWatered) tint(fb, x, ty, 0xFF2080FFu, 90, z);
+                    else if (layers.blinkOn) tint(fb, x, ty, 0xFFB07030u, 150, z);
+                }
+            };
             auto drawThings = [&] {
                 if (layers.things && thingValue >= 0xC9 && thingValue <= 0xF0) drawThing(fb, w, cam, a, b, da, db, thingValue - 0xC9);
             };
@@ -248,6 +330,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
                     const int sid = id + 1000 + (z - 2) * 500;
                     blit(fb, sid, x, bottom + (widthOf(sid) >> 2) - th - height(sid), flip);
                 }
+                overlay();
                 drawThings();
                 continue;
             }
@@ -304,6 +387,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
                     }
                 }
             }
+            overlay();
             drawThings();
         }
     }
