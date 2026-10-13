@@ -44,7 +44,7 @@ public:
     float mapMag() const { return mag_; }                // magnification of the map framebuffer on screen
     int mapW() const { return std::max(1, static_cast<int>(std::ceil(width_ / mag_))); }   // size of the map framebuffer
     int mapH() const { return std::max(1, static_cast<int>(std::ceil(height_ / mag_))); }
-    bool paused() const { return pauseOpen_ || mapEdit_ || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
+    bool paused() const { return pauseOpen_ || mapEdit_ || budget_.open || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
     static std::string savesDir();     // where saved games go (next to the settings file)
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;

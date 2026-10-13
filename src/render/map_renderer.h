@@ -23,6 +23,7 @@ struct Camera {
 
 struct RenderLayers {
     bool terrain = true, buildings = true, zones = true, things = true, traffic = true;
+    bool streets = true;          // underground view: also show the roads, rails and bridges of the surface (off = hidden)
     bool underground = false;     // pipes, subway and water table instead of the surface (0x43A9E0)
     bool powerOverlay = false;    // tint powered / unpowered tiles
     bool waterOverlay = false;    // tint watered / piped / dry tiles

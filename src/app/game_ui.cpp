@@ -201,6 +201,7 @@ void GameUi::mouseDown(int x, int y, int button) {
             if (x < 100) layers.underground = !layers.underground;
             else if (x < 180) { layers.powerOverlay = !layers.powerOverlay; }
             else if (x < 260) { layers.waterOverlay = !layers.waterOverlay; }
+            else if (x < 340) { layers.streets = !layers.streets; }
         }
         return;
     }
@@ -328,6 +329,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) setZoomLevel(zoomLevel_ - 1);
     else if (k == SDLK_R) { cam_.rotation = (cam_.rotation + 1) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2); }
     else if (k == SDLK_U) layers.underground = !layers.underground;
+    else if (k == SDLK_T) layers.streets = !layers.streets;
     else if (k == SDLK_P) layers.powerOverlay = !layers.powerOverlay;
     else if (k == SDLK_O) layers.waterOverlay = !layers.waterOverlay;
     return true;
@@ -990,9 +992,10 @@ void GameUi::draw(SDL_Renderer* r) {
     button(4, 92, layers.underground ? "Underground" : "Surface", layers.underground);
     button(104, 72, "Power", layers.powerOverlay);
     button(184, 72, "Water", layers.waterOverlay);
-    const SDL_Rect hintClip{270, height_ - kBottomBar, std::max(0, width_ - 270), kBottomBar};
+    button(264, 72, "Streets", layers.streets);   // underground view: show / hide the roads and rails of the surface
+    const SDL_Rect hintClip{346, height_ - kBottomBar, std::max(0, width_ - 346), kBottomBar};
     SDL_SetRenderClipRect(r, &hintClip);
-    text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  B budget  G graphs  Ctrl+S save  Esc", 150, 160, 180);
+    text(r, 346, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O/T views  right-drag scroll  B budget  G graphs  Ctrl+S save  Esc", 150, 160, 180);
     SDL_SetRenderClipRect(r, nullptr);
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);

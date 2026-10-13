@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "simulation/sim_context.h"
+
 namespace sc2k {
 
 namespace {
@@ -127,6 +129,7 @@ void MapRenderer::drawUndergroundTile(Framebuffer& fb, const World& w, const Cam
     if (id == 0 || !layers.buildings) return;
     if (id < 0x70) {
         if (id >= 0x61 && id <= 0x6B) return;       // elevated highways are not shown underground
+        if (!layers.streets && (isRoad(id) || isRail(id) || (id >= 0x49 && id <= 0x5C))) return;   // roads, rails, highway ramps and bridges can be hidden
         if (id < 0xE) return;
         int by = yb;
         if (xb & xbit::kWater) by += (altLand - ((aw & 0x3E0) >> 5)) * step;
