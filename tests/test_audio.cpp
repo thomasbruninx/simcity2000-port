@@ -55,3 +55,25 @@ TEST(original_sounds_and_music_load_and_render) {
     CHECK(mixer.activeEffects() == 0);
     for (int id = 10000; id <= 10018; ++id) CHECK(bank.music(id) != nullptr);
 }
+
+TEST(fluidsynth_backend_renders_the_music_when_available) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root || !fluidSynthAvailable()) { std::printf("  (skipped: no game data or no FluidSynth)\n"); return; }
+    const auto fonts = AudioSettings::discoverSoundfonts();
+    if (fonts.empty()) { std::printf("  (skipped: no .sf2 found)\n"); return; }
+    AudioSettings s; s.synth = AudioSettings::Synth::FluidSynth; s.soundfont = fonts.front();
+    std::string err;
+    auto backend = makeMusicBackend(s, 44100, &err);
+    CHECK(backend && backend->name() == "FluidSynth" && err.empty());
+    SoundBank bank(root);
+    Mixer mixer(&bank);
+    mixer.setBackend(std::move(backend));
+    mixer.playMusic(10001);
+    std::vector<float> out(2 * 44100, 0.f);
+    float peak = 0;
+    for (int i = 0; i < 6; ++i) { mixer.render(out.data(), 44100); for (float v : out) peak = std::max(peak, std::fabs(v)); }
+    CHECK(peak > 0.02f && peak <= 1.0f && mixer.musicPlaying());
+    s.soundfont = "/nonexistent.sf2";
+    auto fallback = makeMusicBackend(s, 44100, &err);
+    CHECK(fallback && fallback->name() == "Built-in synthesizer" && !err.empty());
+}

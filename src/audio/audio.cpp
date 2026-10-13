@@ -83,18 +83,29 @@ void Mixer::playMusic(int id) {
     const MidiFile* m = bank_ ? bank_->music(id) : nullptr;
     std::lock_guard<std::mutex> lock(mutex_);
     musicId_ = id;
-    if (m) synth_.start(m); else synth_.stop();
+    if (m) synth_->start(m); else synth_->stop();
 }
 
-void Mixer::stopMusic() { std::lock_guard<std::mutex> lock(mutex_); synth_.stop(); }
-bool Mixer::musicPlaying() const { std::lock_guard<std::mutex> lock(mutex_); return synth_.playing(); }
+void Mixer::setBackend(std::unique_ptr<MusicBackend> backend) {
+    if (!backend) return;
+    const MidiFile* running = bank_ && musicId_ ? bank_->music(musicId_) : nullptr;
+    std::lock_guard<std::mutex> lock(mutex_);
+    const bool was = synth_->playing();
+    synth_->stop();
+    synth_ = std::move(backend);
+    if (was && running) synth_->start(running);
+}
+std::string Mixer::backendName() const { std::lock_guard<std::mutex> lock(mutex_); return synth_->name(); }
+
+void Mixer::stopMusic() { std::lock_guard<std::mutex> lock(mutex_); synth_->stop(); }
+bool Mixer::musicPlaying() const { std::lock_guard<std::mutex> lock(mutex_); return synth_->playing(); }
 int Mixer::activeEffects() const { std::lock_guard<std::mutex> lock(mutex_); return static_cast<int>(voices_.size()); }
 
 void Mixer::render(float* out, int frames) {
     std::fill(out, out + 2 * frames, 0.f);
     std::lock_guard<std::mutex> lock(mutex_);
-    if (muted_) { if (synth_.playing()) { std::vector<float> scratch(static_cast<size_t>(2 * frames), 0.f); synth_.render(scratch.data(), frames); } return; }
-    synth_.render(out, frames);
+    if (muted_) { if (synth_->playing()) { std::vector<float> scratch(static_cast<size_t>(2 * frames), 0.f); synth_->render(scratch.data(), frames); } return; }
+    synth_->render(out, frames);
     for (int i = 0; i < 2 * frames; ++i) out[i] *= 0.6f;
     for (Voice& v : voices_) {
         const double step = static_cast<double>(v.wave->rate) / rate_;

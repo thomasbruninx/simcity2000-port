@@ -49,13 +49,16 @@ std::vector<std::string> wrapText(const std::string& s, size_t width) {
 
 TitleScreen::TitleScreen(const std::string& gameDir, const PeResources& res, const std::array<uint32_t, 256>& gamePalette) : dir_(gameDir), res_(res), palette_(gamePalette) {
     // labels of the original's main menu (dialog 103)
-    menuLabels_ = {"Start New City", "Edit New Map", "Load Scenario", "Load Saved City", "Quit"};
+    menuLabels_ = {"Start New City", "Edit New Map", "Load Scenario", "Load Saved City", "Settings", "Quit"};
     if (const auto* d = res.dialog(103)) {
         auto text = [&](int id) { for (const auto& c : d->controls) if (c.id == id) return c.text; return std::string(); };
-        const int ids[5] = {112, 113, 114, 111, 115};
-        for (int i = 0; i < 5; ++i) if (!text(ids[i]).empty()) menuLabels_[static_cast<size_t>(i)] = text(ids[i]);
+        const int ids[4] = {112, 113, 114, 111};
+        for (int i = 0; i < 4; ++i) if (!text(ids[i]).empty()) menuLabels_[static_cast<size_t>(i)] = text(ids[i]);
+        if (!text(115).empty()) menuLabels_[5] = text(115);
     }
     try { palette_ = Bmp8::load(gameDir + "/BITMAPS/PAL_MAC.BMP").palette; } catch (const std::exception&) {}   // the scenario pictures use the Macintosh palette
+    settings = AudioSettings::load();
+    fonts_ = AudioSettings::discoverSoundfonts(gameDir);
     scan();
 }
 
@@ -107,7 +110,7 @@ void TitleScreen::ensureTextures(SDL_Renderer* r) {
     }
 }
 
-TitleScreen::Rect TitleScreen::menuButton(int i, int w, int h) const { return {w - 330, h / 2 - 110 + i * 48, 260, 38}; }
+TitleScreen::Rect TitleScreen::menuButton(int i, int w, int h) const { return {w - 330, h / 2 - 140 + i * 48, 260, 38}; }
 TitleScreen::Rect TitleScreen::button(int which, int w, int h) const { return {w / 2 - 170 + which * 190, h - 70, 160, 34}; }
 
 void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
@@ -119,14 +122,15 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
         SDL_RenderTexture(r, titleTex_, nullptr, &dst);
     }
     if (mode_ == Mode::Menu) {
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 6; ++i) {
             const Rect b = menuButton(i, w, h);
             fill(r, b.x, b.y, b.w, b.h, 40, 56, 96); frame(r, b.x, b.y, b.w, b.h, 190, 200, 230);
             text(r, b.x + 16, b.y + 15, menuLabels_[static_cast<size_t>(i)], 255, 255, 220);
         }
-        text(r, w - 330, h / 2 + 150, "SimCity 2000 (port) - needs your own game files", 150, 160, 190);
+        text(r, w - 330, h / 2 + 170, "SimCity 2000 (port) - needs your own game files", 150, 160, 190);
         return;
     }
+    if (mode_ == Mode::Settings) { drawSettings(r, w, h); return; }
     const bool scen = mode_ == Mode::Scenarios;
     text(r, 60, 70, scen ? "Select Scenario" : "Load Saved City", 255, 255, 190);
     const size_t n = scen ? scenarios_.size() : cities_.size();
@@ -155,12 +159,64 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
     text(r, cancel.x + 50, cancel.y + 13, "Cancel", 255, 255, 220);
 }
 
+namespace {
+std::string baseName(const std::string& p) { const size_t k = p.rfind('/'); return k == std::string::npos ? p : p.substr(k + 1); }
+}
+
+// layout of the settings screen: synth buttons, SoundFont list, volume, test / back
+void TitleScreen::drawSettings(SDL_Renderer* r, int w, int h) {
+    text(r, 60, 60, "Settings - music", 255, 255, 190);
+    text(r, 60, 100, "Music synthesizer", 200, 210, 230);
+    const bool fluid = settings.synth == AudioSettings::Synth::FluidSynth;
+    const bool haveFluid = fluidSynthAvailable();
+    fill(r, 60, 120, 260, 30, !fluid ? 70 : 28, !fluid ? 100 : 36, !fluid ? 150 : 56); frame(r, 60, 120, 260, 30, 190, 200, 230);
+    text(r, 76, 131, "Built-in synthesizer", 255, 255, 220);
+    fill(r, 340, 120, 260, 30, fluid ? 70 : 28, fluid ? 100 : 36, fluid ? 150 : 56); frame(r, 340, 120, 260, 30, haveFluid ? 190 : 90, haveFluid ? 200 : 90, haveFluid ? 230 : 100);
+    text(r, 356, 131, haveFluid ? "FluidSynth + SoundFont" : "FluidSynth (not in this build)", haveFluid ? 255 : 130, haveFluid ? 255 : 130, haveFluid ? 220 : 140);
+    text(r, 60, 180, "SoundFont (.sf2) for FluidSynth", 200, 210, 230);
+    if (fonts_.empty()) text(r, 60, 204, "none found - put a .sf2 into the resources folder next to the game", 230, 150, 120);
+    for (size_t i = 0; i < fonts_.size() && i < 8; ++i) {
+        const bool sel = settings.soundfont == fonts_[i] || (settings.soundfont.empty() && i == 0);
+        fill(r, 60, 200 + static_cast<int>(i) * 22, 1100, 20, sel ? 70 : 20, sel ? 100 : 28, sel ? 150 : 44);
+        text(r, 68, 206 + static_cast<int>(i) * 22, baseName(fonts_[i]) + "   (" + fonts_[i] + ")", 235, 235, 235);
+    }
+    text(r, 60, 400, "Music volume", 200, 210, 230);
+    fill(r, 60, 420, 40, 26, 40, 56, 96); frame(r, 60, 420, 40, 26, 190, 200, 230); text(r, 76, 429, "-");
+    fill(r, 108, 420, 120, 26, 20, 28, 44); text(r, 130, 429, std::to_string(settings.volume) + " %", 255, 255, 220);
+    fill(r, 236, 420, 40, 26, 40, 56, 96); frame(r, 236, 420, 40, 26, 190, 200, 230); text(r, 252, 429, "+");
+    fill(r, 60, 470, 160, 34, 40, 80, 56); frame(r, 60, 470, 160, 34, 190, 230, 200); text(r, 84, 483, "Play test tune", 255, 255, 220);
+    fill(r, 240, 470, 160, 34, 80, 40, 40); frame(r, 240, 470, 160, 34, 230, 190, 190); text(r, 292, 483, "Back", 255, 255, 220);
+    if (!status_.empty()) text(r, 60, 530, status_, 200, 220, 160);
+    text(r, 60, h - 30, "Settings are saved to " + AudioSettings::settingsPath(), 130, 140, 160);
+    (void)w;
+}
+
+void TitleScreen::settingsClick(int x, int y, int w, int h) {
+    (void)w; (void)h;
+    auto apply = [&] { if (applySettings) status_ = applySettings(settings); settings.save(); };
+    if (Rect{60, 120, 260, 30}.in(x, y)) { settings.synth = AudioSettings::Synth::Builtin; apply(); return; }
+    if (Rect{340, 120, 260, 30}.in(x, y)) {
+        if (!fluidSynthAvailable()) { status_ = "This build was made without FluidSynth (install fluid-synth and rebuild)."; return; }
+        settings.synth = AudioSettings::Synth::FluidSynth;
+        if (settings.soundfont.empty() && !fonts_.empty()) settings.soundfont = fonts_.front();
+        apply();
+        return;
+    }
+    for (size_t i = 0; i < fonts_.size() && i < 8; ++i)
+        if (Rect{60, 200 + static_cast<int>(i) * 22, 1100, 20}.in(x, y)) { settings.soundfont = fonts_[i]; if (settings.synth == AudioSettings::Synth::FluidSynth) apply(); else settings.save(); return; }
+    if (Rect{60, 420, 40, 26}.in(x, y)) { settings.volume = std::max(0, settings.volume - 10); apply(); return; }
+    if (Rect{236, 420, 40, 26}.in(x, y)) { settings.volume = std::min(100, settings.volume + 10); apply(); return; }
+    if (Rect{60, 470, 160, 34}.in(x, y)) { if (testMusic) testMusic(); return; }
+    if (Rect{240, 470, 160, 34}.in(x, y)) { settings.save(); mode_ = Mode::Menu; return; }
+}
+
 void TitleScreen::activateMenu(int i) {
     switch (i) {
         case 0: action = Action::NewCity; break;
         case 1: action = Action::NewMap; break;
         case 2: mode_ = Mode::Scenarios; selected_ = 0; break;
         case 3: mode_ = Mode::Cities; selected_ = 0; break;
+        case 4: mode_ = Mode::Settings; status_.clear(); break;
         default: action = Action::Quit; break;
     }
 }
@@ -176,9 +232,10 @@ void TitleScreen::choose() {
 
 void TitleScreen::mouseDown(int x, int y, int w, int h) {
     if (mode_ == Mode::Menu) {
-        for (int i = 0; i < 5; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
+        for (int i = 0; i < 6; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
         return;
     }
+    if (mode_ == Mode::Settings) { settingsClick(x, y, w, h); return; }
     const size_t n = mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size();
     for (size_t i = 0; i < n; ++i) if (Rect{60, 110 + static_cast<int>(i) * 20, 300, 18}.in(x, y)) { selected_ = static_cast<int>(i); return; }
     if (button(0, w, h).in(x, y)) choose();
@@ -191,9 +248,11 @@ void TitleScreen::keyDown(SDL_Keycode k) {
         else if (k == SDLK_E) activateMenu(1);
         else if (k == SDLK_S) activateMenu(2);
         else if (k == SDLK_L) activateMenu(3);
-        else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(4);
+        else if (k == SDLK_C) activateMenu(4);
+        else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(5);
         return;
     }
+    if (mode_ == Mode::Settings) { if (k == SDLK_ESCAPE) { settings.save(); mode_ = Mode::Menu; } return; }
     const int n = static_cast<int>(mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size());
     if (k == SDLK_ESCAPE) mode_ = Mode::Menu;
     else if (k == SDLK_DOWN && selected_ + 1 < n) ++selected_;

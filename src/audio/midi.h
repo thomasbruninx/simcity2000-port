@@ -24,14 +24,25 @@ struct MidiFile {
     static MidiFile load(const std::string& path);
 };
 
-class MidiSynth {
+class MusicBackend {
+public:
+    virtual ~MusicBackend() = default;
+    virtual void start(const MidiFile* file) = 0;        // the file must outlive playback
+    virtual void stop() = 0;
+    virtual bool playing() const = 0;
+    virtual void render(float* out, int frames) = 0;     // adds `frames` interleaved stereo frames to `out`
+    virtual std::string name() const = 0;
+};
+
+class MidiSynth : public MusicBackend {
 public:
     explicit MidiSynth(int sampleRate = 44100) : rate_(sampleRate) {}
-    void start(const MidiFile* file);                 // the file must outlive playback
-    void stop();
-    bool playing() const { return file_ != nullptr && !finished_; }
+    void start(const MidiFile* file) override;        // the file must outlive playback
+    void stop() override;
+    bool playing() const override { return file_ != nullptr && !finished_; }
     // Adds `frames` stereo float frames to `out` (interleaved L R) and advances the sequencer.
-    void render(float* out, int frames);
+    void render(float* out, int frames) override;
+    std::string name() const override { return "Built-in synthesizer"; }
     int activeVoices() const;
 
 private:

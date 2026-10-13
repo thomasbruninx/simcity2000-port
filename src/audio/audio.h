@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "audio/midi.h"
+#include "audio/music_backend.h"
 
 namespace sc2k {
 
@@ -31,7 +32,10 @@ private:
 
 class Mixer {
 public:
-    Mixer(SoundBank* bank, int sampleRate = 44100) : bank_(bank), rate_(sampleRate), synth_(sampleRate) {}
+    Mixer(SoundBank* bank, int sampleRate = 44100) : bank_(bank), rate_(sampleRate), synth_(std::make_unique<MidiSynth>(sampleRate)) {}
+    // Replaces the music synthesizer (built-in or FluidSynth); the running tune restarts on the new one.
+    void setBackend(std::unique_ptr<MusicBackend> backend);
+    std::string backendName() const;
     void playEffect(int id, int repeat = 0);  // repeat = extra plays; -1 loops until stopEffect
     void stopEffect(int id);                  // id < 0 stops everything (0x424B10)
     void playMusic(int id);                   // replaces the running tune
@@ -48,7 +52,7 @@ private:
     int rate_;
     mutable std::mutex mutex_;
     std::vector<Voice> voices_;
-    MidiSynth synth_;
+    std::unique_ptr<MusicBackend> synth_;
     int musicId_ = 0;
     bool muted_ = false;
 };

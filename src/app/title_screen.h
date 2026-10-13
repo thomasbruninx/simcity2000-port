@@ -9,6 +9,9 @@
 #include <string>
 #include <vector>
 
+#include <functional>
+
+#include "audio/music_backend.h"
 #include "resources/bmp.h"
 #include "resources/pe_resources.h"
 
@@ -36,10 +39,15 @@ public:
     const std::vector<ScenarioEntry>& scenarios() const { return scenarios_; }
     // scripting
     void openScenarioList() { mode_ = Mode::Scenarios; }
+    void openSettings() { mode_ = Mode::Settings; }
+    // Settings screen: `apply` activates the chosen synthesizer and returns a status text; `test` starts a tune with it
+    std::function<std::string(const AudioSettings&)> applySettings;
+    std::function<void()> testMusic;
+    AudioSettings settings;
     void select(int index) { selected_ = index; }
 
 private:
-    enum class Mode { Menu, Scenarios, Cities };
+    enum class Mode { Menu, Scenarios, Cities, Settings };
     std::string dir_;
     const PeResources& res_;
     std::array<uint32_t, 256> palette_;
@@ -50,6 +58,10 @@ private:
     std::vector<ScenarioEntry> scenarios_;
     std::vector<std::string> cities_;
     int selected_ = 0;
+    std::vector<std::string> fonts_;
+    std::string status_;
+    void drawSettings(SDL_Renderer* r, int w, int h);
+    void settingsClick(int x, int y, int w, int h);
     std::vector<SDL_Texture*> pictures_;
     std::vector<std::string> menuLabels_;
     void scan();

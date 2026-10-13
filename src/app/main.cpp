@@ -88,6 +88,17 @@ int main(int argc, char** argv) {
         std::unique_ptr<AudioDevice> audioDevice;
         int musicIndex = 0;
         ui.audio = &mixer;
+        {   // the synthesizer chosen in the settings screen (saved between runs)
+            std::string err;
+            mixer.setBackend(makeMusicBackend(titleScreen.settings, 44100, &err));
+            if (!err.empty()) std::fprintf(stderr, "music: %s (using the built-in synthesizer)\n", err.c_str());
+        }
+        titleScreen.applySettings = [&](const AudioSettings& s) {
+            std::string err;
+            mixer.setBackend(makeMusicBackend(s, 44100, &err));
+            return err.empty() ? "Music: " + mixer.backendName() : "Music: " + mixer.backendName() + " (" + err + ")";
+        };
+        titleScreen.testMusic = [&] { mixer.playMusic(10001); };
         ui.resize(width, height);
         ui.layers.underground = args.view == "underground";
         ui.layers.powerOverlay = args.view == "power";
@@ -242,6 +253,7 @@ int main(int argc, char** argv) {
                 else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2); }
                 else if (op == "find") { int id = 0; words >> id; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xbld.at(a, b) == id) { std::printf("building %d at %d %d\n", id, a, b); a = b = 128; } }
                 else if (op == "title") titleScreen.show();
+                else if (op == "settings") { titleScreen.show(); titleScreen.openSettings(); }
                 else if (op == "scenarios") { int k = 0; words >> k; titleScreen.show(); titleScreen.openScenarioList(); titleScreen.select(k); }
                 else if (op == "loadscenario") { int k = 0; words >> k; const auto& list = titleScreen.scenarios(); if (k >= 0 && static_cast<size_t>(k) < list.size()) loadGame(list[static_cast<size_t>(k)].path); }
                 else if (op == "newcity") { int e = 0, d = 0; words >> e >> d; ui.newCity(e, d); }

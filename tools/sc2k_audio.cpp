@@ -15,6 +15,12 @@ int main(int argc, char** argv) {
     if (argc < 5) { std::fprintf(stderr, "usage: sc2k-audio <SC2K dir> music|effect <id> out.wav [seconds]\n"); return 2; }
     SoundBank bank(argv[1]);
     Mixer mixer(&bank);
+    AudioSettings settings = AudioSettings::load();   // the synthesizer chosen in the game's settings; SYNTH=builtin|fluid and SOUNDFONT=path override
+    if (const char* v = std::getenv("SYNTH")) settings.synth = std::string(v) == "fluid" ? AudioSettings::Synth::FluidSynth : AudioSettings::Synth::Builtin;
+    if (const char* v = std::getenv("SOUNDFONT")) settings.soundfont = v;
+    std::string err;
+    mixer.setBackend(makeMusicBackend(settings, 44100, &err));
+    std::fprintf(stderr, "synthesizer: %s%s%s\n", mixer.backendName().c_str(), err.empty() ? "" : " (", err.empty() ? "" : (err + ")").c_str());
     const std::string kind = argv[2];
     const int id = std::atoi(argv[3]);
     double seconds = argc > 5 ? std::atof(argv[5]) : 0.0;
