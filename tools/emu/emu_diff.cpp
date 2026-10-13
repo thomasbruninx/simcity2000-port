@@ -592,6 +592,9 @@ struct ToolHooks : ZoneHooks {
 void stubTools(Emu& e) {
     e.patchRet(0x40CED0); e.patchRet(0x438E00); e.patchRet(0x43A660); e.patchRetN(0x4B1223, 12); { const uint8_t yes12[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x4B1243, yes12, 8); } e.patchRet(0x45AFD0);
     { const uint8_t shiftKey[8] = {0x0F, 0xB6, 0x05, 0x40, 0x28, 0x00, 0x7E, 0xC3}; e.write(0x42AD10, shiftKey, 8); }   // keyboard query -> test cell
+    { const uint8_t pick[6] = {0xA1, 0x60, 0x28, 0x00, 0x7E, 0xC3}; e.write(0x4445A0, pick, 6); }   // pointer -> tile lookup
+    { const uint8_t noMouse[3] = {0x31, 0xC0, 0xC3}; e.write(0x4457E0, noMouse, 3); }               // no more mouse samples: loops run once
+    e.patchRetN(0x424AD0, 8);
     e.patchRetN(0x424AF0, 4); e.patchRet(0x42B0C0); e.patchRetN(0x406CA0, 4); e.patchRetN(0x4A2347, 4);
     const uint8_t yes1[3] = {0xB0, 0x01, 0xC3}; e.write(0x42AD70, yes1, 3);                                  // confirm -> true
     const uint8_t idyes[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x408600, idyes, 8);           // message box -> IDYES
@@ -735,6 +738,20 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
                 else { static const uint32_t fn[3] = {0x44F4D0, 0x44F6E0, 0x44F8F0}; e.call(fn[op.sub], {uint32_t(op.a), uint32_t(op.b)}); origRet = -1; }   // void in the original: only the state is compared
                 break;
             }
+            case ToolOp::SprayRaise: case ToolOp::SprayLower: case ToolOp::EditLevel: {
+                e.put<uint32_t>(Emu::kRandState + 0x2860, uint32_t(op.ta) | (uint32_t(op.tb) << 8));   // the stubbed pointer-to-tile lookup (0x4445A0) returns this
+                if (op.kind == ToolOp::SprayRaise) e.call(0x443400, {uint32_t(op.a), uint32_t(op.b)});
+                else if (op.kind == ToolOp::SprayLower) { e.put<uint16_t>(0x4CB968, 3); e.call(0x4432B0, {uint32_t(op.a), uint32_t(op.b)}); }
+                else {
+                    // the level loop uses the first tile of the table as the previous position and writes a cursor into thing record 0
+                    e.put<uint16_t>(0x4CB968, 1);
+                    uint8_t keep[12]; e.read(e.get<uint32_t>(0x4C944C), keep, 12);
+                    e.call(0x4423E0, {uint32_t(op.a), uint32_t(op.b)});
+                    e.write(e.get<uint32_t>(0x4C944C), keep, 12);   // the cursor record is scratch: keep the saved value
+                }
+                origRet = -1;
+                break;
+            }
             case ToolOp::Link: origRet = int(e.call(0x441530, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF); break;
             case ToolOp::Zone: {
                 int count = 0;   // 0x447D00: tiles that would change zone
@@ -758,6 +775,7 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
         { auto& st = stat[op.name]; st.first += origRet != 0; ++st.second; }
         World ew = pw; CityState es = ps; img.store(ew, es);
         std::string d; long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
+        if (std::getenv("OPDBG") && ew.xthg != pw.xthg) { for (size_t i = 0; i < ew.xthg.size(); ++i) if (ew.xthg[i] != pw.xthg[i]) { std::printf("   xthg[%zu] (rec %zu +%zu) orig %02x port %02x\n", i, i / 12, i % 12, ew.xthg[i], pw.xthg[i]); break; } }
         const bool retSame = origRet < 0 || (origRet != 0) == (portRet != 0);
         if (std::getenv("OPDBG")) std::printf("  op %d %s -> %d/%d\n", opIndex, desc.c_str(), origRet, portRet);
         if (n || !retSame || e.crtRandState() != rng.state() || img.lfsrState() != lf.state()) {
@@ -765,6 +783,7 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
                                          e.crtRandState() == rng.state() ? "same" : "DIFF", img.lfsrState() == lf.state() ? "same" : "DIFF");
             report = buf;
             if (std::getenv("OPDBG")) {
+                for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (ew.xtxt.at(a, b) != pw.xtxt.at(a, b)) std::printf("   xtxt (%d,%d) orig %02x port %02x before %02x bld %02x/%02x ter %02x\n", a, b, ew.xtxt.at(a, b), pw.xtxt.at(a, b), prev.xtxt.at(a, b), ew.xbld.at(a, b), pw.xbld.at(a, b), pw.xter.at(a, b));
                 int shown = 0;
                 for (int a = 0; a < 128 && shown < 40; ++a) for (int b = 0; b < 128 && shown < 40; ++b)
                     if (ew.xund.at(a, b) != pw.xund.at(a, b) || ew.xter.at(a, b) != pw.xter.at(a, b) || ew.xbit.at(a, b) != pw.xbit.at(a, b) || ew.xbld.at(a, b) != pw.xbld.at(a, b)) {

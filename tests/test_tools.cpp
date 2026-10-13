@@ -58,6 +58,25 @@ TEST(tools_match_the_original_machine_code) {
     // level 2 adds landscape tools, forests, streams and emergency dispatch markers
     CHECK(replay(root, "CITIES/TOKYO.SC2", 800, &ok, 2) == 0xae9c4a1e5b0c3e00ull && ok > 300);
     CHECK(replay(root, "CITIES/PARIS.SC2", 800, &ok, 2) == 0x7621a0a0fa14d20aull);
+    // level 3 adds the terrain editor's spray raise/lower and level samples
+    CHECK(replay(root, "CITIES/TOKYO.SC2", 800, &ok, 3) == 0x7f04312fa4a7ba3full && ok > 300);
+    CHECK(replay(root, "CITIES/VENICE.SC2", 800, &ok, 3) == 0xa5e67196d9f1958full && ok > 300);
+}
+
+TEST(terrain_editor_stretch_moves_one_tile_by_pointer_distance) {
+    // The original reads an uninitialised pointer for the vertical distance, so stretch cannot be replayed against it; checked by hand.
+    GameTables t; CityState s; CrtRand rng(1); Lfsr lf(1); YesHooks hooks; TrafficStats ts;
+    World w{};
+    SimContext ctx{w, s, t, rng, lf, hooks, ts, {}};
+    ToolState tst;
+    for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) { w.altm.at(a, b) = 5; w.xter.at(a, b) = 0; }
+    int last = 5;
+    CHECK(!terrainStretch(ctx, tst, 40, 40, 5, last, 2, 1));       // 2 px at zoom 1 (6 px per level): no change
+    CHECK(terrainStretch(ctx, tst, 40, 40, 5, last, 13, 1));       // 13 / 6 = 2 levels up
+    CHECK((w.altm.at(40, 40) & 0x1F) == 7 && last == 7);
+    CHECK(!terrainStretch(ctx, tst, 40, 40, 5, last, 13, 1));      // same target again
+    CHECK(!terrainStretch(ctx, tst, 40, 40, 20, last, -6 * 11, 1));   // more than 10 levels below the starting altitude is refused
+    CHECK(!terrainStretch(ctx, tst, 40, 40, 20, last, 6 * 11, 1));    // and nothing reaches altitude 31
 }
 
 TEST(budget_amounts_match_the_january_settlement) {

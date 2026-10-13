@@ -13,7 +13,7 @@
 namespace sc2k {
 
 struct ToolOp {
-    enum Kind { Bulldoze, Network, Build, Zone, Terrain, Hydro, Tunnel, Onramp, Link, Highway, Landscape, Forest, Stream, DispatchStart, Dispatch } kind = Bulldoze;
+    enum Kind { Bulldoze, Network, Build, Zone, Terrain, Hydro, Tunnel, Onramp, Link, Highway, Landscape, Forest, Stream, DispatchStart, Dispatch, SprayRaise, SprayLower, EditLevel } kind = Bulldoze;
     int a = 0, b = 0, ta = 0, tb = 0;          // tile / drag end
     int cat = 0, sub = 0;                      // tool category + subtype (cost / id table row)
     int zone = 0, unit = 0;                    // zone type painted, cost per tile
@@ -26,11 +26,13 @@ struct ToolOp {
 class ToolScript {
 public:
     // extended = also generate terrain, hydro dam, tunnel, onramp and rail-link operations (the basic sequence is unchanged when false)
+    // level 3 adds the terrain editor's spray raise / lower and level samples
     // level 0: basic; 1: + terrain, hydro, tunnel, onramp, link, highway; 2: + landscape, forest, stream and emergency dispatch
-    explicit ToolScript(uint32_t seed, int level = 0) : s_(seed), extended_(level >= 1), landscape_(level >= 2) {}
+    explicit ToolScript(uint32_t seed, int level = 0) : s_(seed), extended_(level >= 1), landscape_(level >= 2), editor_(level >= 3) {}
 
     ToolOp next(const World& pw, const GameTables& t) {
         ToolOp op;
+        if (editor_ && range(100) < 30) return nextEditor(pw);
         if (landscape_ && range(100) < 25) return nextLandscape(pw);
         if (extended_ && range(100) < 40) return nextExtended(pw, t);
         const int kind = range(100);
@@ -77,6 +79,17 @@ public:
             op.unit = t.toolCost[static_cast<size_t>(op.cat * 12 + op.sub)];
             op.name = "zone";
         }
+        return op;
+    }
+
+    ToolOp nextEditor(const World& pw) {
+        ToolOp op;
+        const int k = range(3);
+        std::tie(op.a, op.b) = pick(pw, false);
+        op.ta = std::clamp(op.a + range(5) - 2, 0, 127); op.tb = std::clamp(op.b + range(5) - 2, 0, 127);
+        op.kind = k == 0 ? ToolOp::SprayRaise : k == 1 ? ToolOp::SprayLower : ToolOp::EditLevel;
+        op.name = k == 0 ? "spray-raise" : k == 1 ? "spray-lower" : "edit-level";
+        op.cat = pw.altm.at(op.a, op.b) & 0x1F;    // level: altitude of the tile where the drag began
         return op;
     }
 
@@ -150,6 +163,8 @@ public:
                 std::snprintf(buf, sizeof buf, "%s(%d,%d) target %d", op.name.c_str(), op.a, op.b, op.ta); break;
             case ToolOp::Landscape: case ToolOp::Forest: case ToolOp::Stream: case ToolOp::DispatchStart: case ToolOp::Dispatch:
                 std::snprintf(buf, sizeof buf, "%s(%d,%d) sub %d shift %d", op.name.c_str(), op.a, op.b, op.sub, op.ta); break;
+            case ToolOp::SprayRaise: case ToolOp::SprayLower: case ToolOp::EditLevel:
+                std::snprintf(buf, sizeof buf, "%s click (%d,%d) sample (%d,%d) alt %d", op.name.c_str(), op.a, op.b, op.ta, op.tb, op.cat); break;
             case ToolOp::Highway: std::snprintf(buf, sizeof buf, "highway(%d,%d)->(%d,%d)", op.a, op.b, op.ta, op.tb); break;
             case ToolOp::Bulldoze: std::snprintf(buf, sizeof buf, "bulldoze(%d,%d) under=%d", op.a, op.b, op.underground); break;
             case ToolOp::Network: std::snprintf(buf, sizeof buf, "%s(%d,%d)->(%d,%d)", op.name.c_str(), op.a, op.b, op.ta, op.tb); break;
@@ -161,7 +176,7 @@ public:
 
 private:
     uint32_t s_;
-    bool extended_, landscape_;
+    bool extended_, landscape_, editor_;
     template <class P>
     std::pair<int, int> pickWhere(const World&, P pred) {   // scans the interior from a random start for a tile matching `pred`
         const int start = range(120 * 120);
@@ -223,6 +238,9 @@ inline bool runToolOp(SimContext& c, ToolState& ts, const ToolOp& op) {
         case ToolOp::Stream: placeStream(c, ts, op.a, op.b); return true;
         case ToolOp::DispatchStart: startDispatch(c, ts); return true;
         case ToolOp::Dispatch: return placeDispatch(c, ts, op.sub, op.a, op.b);
+        case ToolOp::SprayRaise: return terrainSprayRaise(c, ts, op.a, op.b, op.ta, op.tb);
+        case ToolOp::SprayLower: return terrainSprayLower(c, ts, op.ta, op.tb);
+        case ToolOp::EditLevel: { const bool r = terrainLevelSample(c, ts, op.ta, op.tb, 0, 0, op.cat); terrainLevelEnd(c, op.ta, op.tb); return r; }
     }
     return false;
 }

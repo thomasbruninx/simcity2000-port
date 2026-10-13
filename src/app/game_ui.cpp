@@ -15,7 +15,7 @@ constexpr int kTopBar = 28, kGroupW = 150, kGroupH = 26, kItemW = 290, kItemH = 
 struct IconRef { int strip, cell; };
 IconRef groupIcon(const std::string& name) {
     static const std::pair<const char*, IconRef> table[] = {
-        {"Bulldozer", {1, 0}}, {"Landscape", {1, 1}}, {"Dispatch", {1, 2}}, {"Terrain", {2, 0}}, {"Zones", {1, 9}}, {"Power", {1, 3}}, {"Water", {1, 4}}, {"Roads", {1, 6}}, {"Rail", {1, 7}},
+        {"Bulldozer", {1, 0}}, {"Landscape", {1, 1}}, {"Dispatch", {1, 2}}, {"Terrain", {2, 0}}, {"Terrain editor", {2, 6}}, {"Zones", {1, 9}}, {"Power", {1, 3}}, {"Water", {1, 4}}, {"Roads", {1, 6}}, {"Rail", {1, 7}},
         {"Education", {1, 12}}, {"Safety", {1, 13}}, {"Recreation", {1, 14}}, {"Rewards", {1, 5}}, {"Sign", {1, 15}}, {"Query", {1, 16}}};
     for (const auto& e : table) if (name == e.first) return e.second;
     return {0, -1};
@@ -114,6 +114,10 @@ void GameUi::update(int dtMs) {
     const bool emergency = th.monsters > 0 || th.tornados > 0 || th.fireMessageKind >= 0;
     if (emergency && !emergency_) { startDispatch(sim_.context(), ts_); say("Emergency! The dispatch tool is available."); }
     emergency_ = emergency;
+    if (dragging_ && tool() && tool()->kind == ToolKind::TerrainEdit && tool()->sub <= 2) {   // the original's loop keeps spraying while the button is down
+        sprayMs_ += dtMs;
+        while (sprayMs_ >= 25) { sprayMs_ -= 25; editSample(lastA_, lastB_, 0); }
+    }
     if (messageMs_ > 0) { messageMs_ -= dtMs; if (messageMs_ <= 0) message_.clear(); }
 }
 
@@ -177,6 +181,11 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (!t) { queryTile(a, b); return; }
     switch (t->kind) {
         case ToolKind::Bulldoze: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
+        case ToolKind::TerrainEdit:
+            dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b;
+            editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = y; editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
+            editSample(a, b, y);
+            break;
         case ToolKind::Landscape: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; landscapeAt(a, b); break;
         case ToolKind::Dispatch: placeDispatch(sim_.context(), ts_, t->sub, a, b) ? say("Dispatched") : say("Can't dispatch there"); break;
         case ToolKind::Terrain: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; levelTarget_ = sim_.world().altm.at(a, b) & 0x1F; terrainAt(a, b); break;
@@ -205,6 +214,11 @@ void GameUi::mouseMove(int x, int y) {
     int a, b;
     if (overUi(x, y) || !renderer_.pickTile(sim_.world(), cam_, x, y, a, b)) { hoverA_ = hoverB_ = -1; return; }
     hoverA_ = a; hoverB_ = b;
+    if (dragging_ && tool() && tool()->kind == ToolKind::TerrainEdit) {
+        if (tool()->sub >= 3) editSample(a, b, y);
+        lastA_ = a; lastB_ = b;
+        return;
+    }
     if (!dragging_ || (a == lastA_ && b == lastB_)) return;
     const ToolItem* t = tool();
     if (!t) return;
@@ -216,7 +230,7 @@ void GameUi::mouseMove(int x, int y) {
         }
     }
     lastA_ = a; lastB_ = b;
-    if (t->kind != ToolKind::Bulldoze && t->kind != ToolKind::Terrain && t->kind != ToolKind::Landscape) updatePreview();
+    if (t->kind != ToolKind::Bulldoze && t->kind != ToolKind::Terrain && t->kind != ToolKind::Landscape && t->kind != ToolKind::TerrainEdit) updatePreview();
 }
 
 void GameUi::wheel(int, int, int dy) {
@@ -253,6 +267,19 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
 }
 
 // ---- tools -------------------------------------------------------------------------------------------------------------
+
+void GameUi::editSample(int pa, int pb, int pointerY) {   // one iteration of a terrain-editor mouse loop
+    const ToolItem* t = tool();
+    SimContext& c = sim_.context();
+    switch (t->sub) {
+        case 1: terrainSprayRaise(c, ts_, startA_, startB_, pa, pb); break;
+        case 2: ts_.dozerSub = 3; terrainSprayLower(c, ts_, pa, pb); break;
+        case 3: terrainStretch(c, ts_, startA_, startB_, editStartAlt_, editLastAlt_, editStartY_ - pointerY, cam_.zoom); break;
+        default:
+            if (terrainLevelSample(c, ts_, pa, pb, editPrevA_, editPrevB_, editStartAlt_)) { editPrevA_ = pa; editPrevB_ = pb; }
+            break;
+    }
+}
 
 void GameUi::landscapeAt(int a, int b) {
     const ToolItem* t = tool();
@@ -321,6 +348,10 @@ void GameUi::finishDrag() {
     SimContext& c = sim_.context();
     const int funds = sim_.state().treasury;
     bool ok = false;
+    if (t->kind == ToolKind::TerrainEdit) {
+        if (t->sub == 4) terrainLevelEnd(c, editPrevA_, editPrevB_);
+        return;
+    }
     if (t->kind == ToolKind::Highway) {
         ok = buildHighway(c, ts_, startA_, startB_, lastA_, lastB_);
         if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
@@ -492,7 +523,7 @@ void GameUi::toolMessage(int id) {
 
 bool GameUi::available(const ToolItem& t) const {
     if (t.kind == ToolKind::Unavailable) return false;
-    if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain || t.kind == ToolKind::Landscape) return true;
+    if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain || t.kind == ToolKind::TerrainEdit || t.kind == ToolKind::Landscape) return true;
     if (t.kind == ToolKind::Dispatch) return emergency_;
     if (t.kind == ToolKind::Zone && t.cat == 0) return true;   // de-zone
     return avail_.allows(t.cat, t.sub);

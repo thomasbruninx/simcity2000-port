@@ -95,6 +95,18 @@ bool placeWater(SimContext& c, ToolState& ts, int a, int b);
 void placeStream(SimContext& c, ToolState& ts, int a, int b, int length = 100);
 bool landscapeTool(SimContext& c, ToolState& ts, int sub, int a, int b);   // 0x441DF0 body for one tile: cost check, tool, payment
 
+// Terrain-editor drag tools. The originals are mouse-sample loops (0x443400, 0x4432B0, 0x4442A0, 0x4423E0); each function below is ONE iteration of such a loop.
+// Spray raise / lower: (a0,b0) is the tile where the drag began, (pa,pb) the tile under the pointer now; a random spot within +-3 tiles is raised by one step if it is a local
+// low point (0x4449A0) / lowered (0x443DF0 without payment). Four rand() calls per sample, in the original order.
+bool terrainSprayRaise(SimContext& c, ToolState& ts, int a0, int b0, int pa, int pb);
+bool terrainSprayLower(SimContext& c, ToolState& ts, int pa, int pb);
+// Stretch: the tile (a, b) follows the pointer's vertical movement. `startAlt` = its altitude when the drag began, `lastAlt` is updated, `dy` = start y - current y in
+// pixels and `zoom` the view zoom (3 / 6 / 12 pixels per altitude step). Returns true when the altitude changed.
+bool terrainStretch(SimContext& c, ToolState& ts, int a, int b, int startAlt, int& lastAlt, int dy, int zoom);
+// Level: the four tiles around the pointer tile are set to `startAlt` when the pointer enters a new tile (prevA/prevB = the previous one, or -1).
+bool terrainLevelSample(SimContext& c, ToolState& ts, int pa, int pb, int prevA, int prevB, int startAlt);
+void terrainLevelEnd(SimContext& c, int lastA, int lastB);   // clears the cursor marker the loop left on the last tile
+
 // Emergency dispatch markers (category 2): startDispatch = 0x44F290 (when a disaster begins), then one click per marker (0x44F4D0 police, 0x44F6E0 fire, 0x44F8F0 military).
 void startDispatch(SimContext& c, ToolState& ts);
 bool placeDispatch(SimContext& c, ToolState& ts, int kind, int a, int b);

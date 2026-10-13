@@ -102,7 +102,10 @@ private:
     void terrainAt(int a, int b);
     void landscapeAt(int a, int b);
     bool emergency_ = false;
-    int levelTarget_ = 0;           // altitude the level tool flattens to (that of the tile where the drag began)
+    int levelTarget_ = 0;
+    int editStartAlt_ = 0, editLastAlt_ = 0, editStartY_ = 0, editPrevA_ = -1, editPrevB_ = -1, sprayMs_ = 0;   // terrain-editor drags
+    void editSample(int pa, int pb, int pointerY);
+              // altitude the level tool flattens to (that of the tile where the drag began)
     void updatePreview();
     void finishDrag();
     void applyClick(int a, int b);

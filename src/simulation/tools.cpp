@@ -880,6 +880,68 @@ bool lowerTerrain(SimContext& c, ToolState& ts, int a0, int b0, bool pay) {   //
     return true;
 }
 
+bool terrainSprayRaise(SimContext& c, ToolState&, int a0, int b0, int pa, int pb) {   // 0x443400, one sample
+    Ctx x(c);
+    const int r1 = c.rng.next(), r2 = c.rng.next(), r3 = c.rng.next();
+    const int a = pa + ((r1 & 3) - (r2 & 3));
+    const int r4 = c.rng.next();
+    const int b = pb + ((r3 & 3) - (r4 & 3));
+    if (!inMap(a, b)) return false;
+    // 0x4449A0: a tile can rise one step when it is below 0x1F and no neighbour is lower
+    const int alt = x.alt(a, b);
+    if (alt > 0x1E) return false;
+    static const int dx[4] = {0, 1, 0, -1}, dy[4] = {-1, 0, 1, 0};
+    for (int i = 0; i < 4; ++i) {
+        const int na = a + dx[i], nb = b + dy[i];
+        if (inMap(na, nb) && x.alt(na, nb) < alt) return false;
+    }
+    c.w.altm.at(a, b) = static_cast<uint16_t>((c.w.altm.at(a, b) & 0xFFE0) | (alt + 1));
+    adjustNeighbours(x, a0, b0);   // the original passes the tile where the drag began here, not the raised one
+    shoreFix9(c, a, b);
+    return true;
+}
+
+bool terrainSprayLower(SimContext& c, ToolState& ts, int pa, int pb) {   // 0x4432B0, one sample
+    const int r1 = c.rng.next(), r2 = c.rng.next(), r3 = c.rng.next();
+    const int a = pa + ((r1 & 3) - (r2 & 3));
+    const int r4 = c.rng.next();
+    const int b = pb + ((r3 & 3) - (r4 & 3));
+    if (!inMap(a, b)) return false;
+    return lowerTerrain(c, ts, a, b, false);
+}
+
+bool terrainStretch(SimContext& c, ToolState&, int a, int b, int startAlt, int& lastAlt, int dy, int zoom) {   // 0x4442A0, one sample
+    Ctx x(c);
+    const int scale = zoom == 0 ? 3 : zoom == 1 ? 6 : 12;
+    const int neu = startAlt + static_cast<int16_t>(dy) / scale;
+    if (!(neu > 0 && neu < 0x1F && startAlt - 10 <= neu && lastAlt != neu)) return false;
+    c.w.altm.at(a, b) = static_cast<uint16_t>((c.w.altm.at(a, b) & 0xFFE0) | neu);
+    adjustNeighbours(x, a, b);
+    shoreFix9(c, a, b);
+    lastAlt = neu;
+    return true;
+}
+
+bool terrainLevelSample(SimContext& c, ToolState&, int pa, int pb, int prevA, int prevB, int startAlt) {   // 0x4423E0, one sample
+    Ctx x(c);
+    if (pa == prevA && pb == prevB) return false;
+    static const int dx[4] = {0, 1, 0, -1}, dy[4] = {-1, 0, 1, 0};   // 0x4E6878 / 0x4E6880
+    for (int i = 0; i < 4; ++i) {
+        const int na = pa + dx[i], nb = pb + dy[i];
+        if (!inMap(na, nb)) continue;
+        c.w.altm.at(na, nb) = static_cast<uint16_t>((c.w.altm.at(na, nb) & 0xFFE0) | (startAlt & 0x1F));
+        adjustNeighbours(x, na, nb);
+        shoreFix9(c, na, nb);
+    }
+    if (inMap(prevA, prevB)) c.w.xtxt.at(prevA, prevB) = 0;   // the pointer-cursor marker (0xC9) moves with the pointer and is wiped from the old tile
+    c.w.xtxt.at(pa, pb) = 0xC9;
+    return true;
+}
+
+void terrainLevelEnd(SimContext& c, int lastA, int lastB) {   // end of the 0x4423E0 loop (button released)
+    if (inMap(lastA, lastB)) c.w.xtxt.at(lastA, lastB) = 0;
+}
+
 bool levelTerrain(SimContext& c, ToolState& ts, int a, int b, int target) {   // 0x442BB0
     Ctx x(c);
     const int alt = x.alt(a, b);
