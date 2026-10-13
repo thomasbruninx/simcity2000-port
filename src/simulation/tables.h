@@ -91,7 +91,9 @@ struct GameTables {
     std::array<uint8_t, 16> zoneFootprint{};             // @0x4E6798: flat footprint sprite offset by zone type (underground view)
     // Tool tables (docs/simulation/tools.md)
     std::array<uint8_t, 0x308> connectData{};            // raw bytes 0x4E6B08..0x4E6E10: direction deltas, slope/connection tables (typed views in tools.cpp)
-    std::array<uint8_t, 0x40> bridgeData{};              // raw bytes 0x4E75A8..0x4E75E8: bridge cost per tile and direction deltas
+    std::array<uint8_t, 0x40> bridgeData{};
+    std::array<uint8_t, 0x860> highwayData{};           // raw bytes 0x4E75E8..0x4E7E48: highway tile classes, piece tables, direction deltas (highway.cpp)
+    std::array<uint8_t, 0x40> terrainData{};            // raw bytes 0x4E6848..0x4E6888+16: 8-neighbour offsets and masks of the terrain tools              // raw bytes 0x4E75A8..0x4E75E8: bridge cost per tile and direction deltas
     std::array<uint8_t, 216> toolBuildingSize{};         // @0x4DAEC8 [category*12 + subtype]: footprint size (255 = none)
     std::array<int32_t, 216> toolCost{};                 // @0x4DAFA0 [category*12 + subtype]: cost per tile / per building (-1 = n/a)
     // Finance

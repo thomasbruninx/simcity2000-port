@@ -10,11 +10,11 @@ using namespace sc2k;
 
 namespace {
 struct YesHooks : ZoneHooks {
-    bool confirm(int) override { return true; }
+    bool confirm(int, int = 0) override { return true; }
 };
 
 // Replays the first `ops` scripted operations of the emulator diff (variant 0: 4M funds) on the port alone.
-uint64_t replay(const std::string& dir, const std::string& cityFile, int ops, int* successes) {
+uint64_t replay(const std::string& dir, const std::string& cityFile, int ops, int* successes, bool extended = false) {
     CityFile c = CityFile::load(dir + "/" + cityFile);
     GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
     World w = World::fromCity(c);
@@ -24,7 +24,7 @@ uint64_t replay(const std::string& dir, const std::string& cityFile, int ops, in
     CrtRand rng(11); Lfsr lf(0xACE1); YesHooks hooks; TrafficStats ts;
     SimContext ctx{w, s, t, rng, lf, hooks, ts, {}};
     ToolState tst;
-    ToolScript script(0x1234u);
+    ToolScript script(0x1234u, extended);
     int ok = 0;
     for (int i = 0; i < ops; ++i) ok += runToolOp(ctx, tst, script.next(w, t));
     if (successes) *successes = ok;
@@ -47,4 +47,7 @@ TEST(tools_match_the_original_machine_code) {
     int ok = 0;
     CHECK(replay(root, "DEFAULT.SC2", 500, &ok) == 0x31b5b55e35e576ecull && ok > 300);
     CHECK(replay(root, "CITIES/CAPE.SC2", 500, &ok) == 0xc5319bfe274eca83ull && ok > 200);
+    // extended script: terrain, hydro dam, tunnel, onramp, rail link and highways (EXTENDED=1 OPS=800 sc2k-emu-diff tools ...)
+    CHECK(replay(root, "CITIES/CAPE.SC2", 800, &ok, true) == 0xebed3f169b8d6603ull && ok > 300);
+    CHECK(replay(root, "CITIES/TOKYO.SC2", 800, &ok, true) == 0x9cfbf4003e947df0ull && ok > 300);
 }

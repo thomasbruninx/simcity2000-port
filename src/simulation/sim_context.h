@@ -24,7 +24,7 @@ struct ZoneHooks {
     virtual void scheduledEvent(int /*index*/) {}                          // 0x469A10: a dated event fired (unlocks tools; UI only)
     virtual void milestoneReached(int /*newIndex*/) {}                     // phase 22: city class changed (0x413D80 may grant a military base; dialogs)
     virtual void gameOver(int /*kind*/) {}                                 // 0x414470: 0 lost scenario, 1 won, 2 bankrupt
-    virtual bool confirm(int /*stringId*/) { return false; }               // yes/no message box (neighbour connection fee, ...)
+    virtual bool confirm(int /*stringId*/, int /*amount*/ = 0) { return false; }               // yes/no message box (neighbour connection fee, ...)
     virtual int chooseBridge(int /*length*/, int allowedMask) { return allowedMask ? __builtin_ctz(static_cast<unsigned>(allowedMask)) : -1; }   // 0x45B140 dialog: bridge type or -1
     virtual void toolMessage(int /*id*/) {}                                // 0x45AFD0 / 0x408600 status or error text
     virtual bool scenarioGoalsMet() { return false; }                      // phase 22 scenario goal test (scenario data is not modelled yet)                       // true when the city name equals a built-in string (strcmp == 0 in 0x44D740 / 0x44DD10 for id 0xFF)                                // 0x441800 (toolbar 'rebuild' flags)

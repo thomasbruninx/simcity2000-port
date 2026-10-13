@@ -10,7 +10,7 @@ RNG state and return value compared after every operation (docs/validation/006).
 
 | cat | tool | handler(s) | cost row |
 |---|---|---|---|
-| 0 | bulldozer (sub 0), level/raise/lower (1–3), de-zone (4, via 0x448F70) | 0x442C20 (+drag 0x442760) | 0x4DAFA0[0..4] |
+| 0 | bulldozer (sub 0), level/raise/lower (1–3, ported), de-zone (4, via 0x448F70) | 0x442C20 (+drag 0x442760) | 0x4DAFA0[0..4] |
 | 2 | landscape (trees, water, terrain) | 0x44F4D0/0x44F6E0/0x44F8F0 | *not ported* |
 | 3 | power: sub 0 line, 2–10 plants, 3 → 0x440DB0 | 0x449C90 / 0x43FB20 | row 36.. |
 | 4 | water: sub 0 pipes, 1–4 pump/tower/treatment/desalination | 0x449F20 / 0x43FB20 | row 48.. |
@@ -43,10 +43,14 @@ Cost table `0x4DAFA0` (int32 per `[category*12 + subtype]`, −1 = no such butto
   (LFSR), placement by `placeSpecialBuilding` (0x440600), per-building follow-ups (budget unit counters for 0xD1/D2/D3/D6/D9, pump → pipe piece, subway station → XUND 0x23), and an immediate
   power/water rescan while the population is below 5000.
 
+## Terrain, highways, tunnels and the single-click tools (session 13)
+* **Terrain** (`raiseTerrain` 0x443610 + 0x443660/0x443B70/0x445500, `lowerTerrain` 0x443DF0, `levelTerrain` 0x442BB0): raise checks recursively (marking tiles with XBIT 8) that no military zone is touched, no altitude exceeds 30 and, unless the bulldoze subtype is 0, no water; each raised tile costs `toolCost[2]` and adjusts neighbours that would differ by more than one step; lowering walks a FIFO (the flood queue) lowering neighbours that would become too steep, then re-fits shorelines in the touched rectangle (`UnionRect` ignores empty rectangles). The shoreline fixer 0x4469C0 runs on 9 tiles around every change.
+* **Highways** (`buildHighway`, `buildHighwayBridge`, `previewHighway`; src/simulation/highway.cpp): 2x2 pieces on even coordinates with their own planner (0x461370 / 0x461460), site classifier 0x4639D0 and height 0x4638F0, piece chooser 0x4622A0 (uses the neighbour pieces' classes from 0x4635D0), piece placer 0x462860, apply 0x462060, bridges 0x45BB30. Cost 25 per tile (100 per piece). **Original quirk (VERIFIED by diff): every "classifier == 0x8000" test compares a sign-extended `short` with +0x8000 and is never true**, so unusable sites are not rejected there; the port reproduces that. The highway bridge charges nothing (no subtraction in 0x45BB30).
+* **Tunnel** 0x44B820 (starts on a hillside slope XTER 1–4, digs through a hill: length limits, no water table, no pipes/subway at depth 1, exit slope must match; the question 0x15A is `ZoneHooks::confirm(0x15A, cost)`), **onramp** 0x441160, **rail–subway link** 0x441530 (free), **hydroelectric dam** 0x440DB0 (on waterfall slopes XTER 0x2E/0x3E; plant id 0xC6 or 0xC7 by orientation; costs 400).
+* The terrain, tunnel and highway code is verified with the extended script (`EXTENDED=1`): 20 runs x 800 operations on 10 cities identical.
+
 ## Not ported yet
-Terrain tools (level/raise/lower 0x442BB0/0x443610/0x443DF0), landscape tools, highways (second planner 0x461B80 + 0x4639D0/0x460E90/0x461370/0x461460/0x462060/0x45BB30), tunnels (0x44B820),
-onramps (0x441160), the rail/subway link tile 0x441530, power sub-tool 0x440DB0, query/microsim tools, stadium sport dialog (0xD7), and the budget-window counters stored beside the
-budget records for the same buildings.
+Landscape tools (trees, water: 0x44F4D0/0x44F6E0/0x44F8F0), query / microsim editing (0x44D140, 0x44CB30, 0x471E80), the stadium sport dialog (0xD7), power-plant selection by year, and the budget-window counters stored beside the budget records for the same buildings. Bonds are not ported (strings 288–297 describe up to 50 bonds of $10,000 with rates).
 
 ## Emulator-harness notes (dev only)
 * The interactive loop 0x447F90 / 0x447910 is replaced by a 8-byte stub reading the drag target from memory (patching an immediate left stale translated blocks in Unicorn).

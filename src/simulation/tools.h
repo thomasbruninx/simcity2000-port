@@ -29,6 +29,7 @@ struct ToolState {
     int slopeTiles = 0;          // 0x4C6D70 tiles that must be levelled (extra 25 each)
     int length = 0;              // 0x4C6D9C tiles on the path
     int cost = 0;                // 0x4C6D90
+    int dozerSub = 0;            // 0x4CB968 bulldozer subtype (0 bulldoze, 1 level, 2 raise, 3 lower, 4 de-zone): selects the cost row
     bool underground = false;    // 0x4E8E38: the underground view is active (bulldozer works on pipes/subway)
 };
 
@@ -61,6 +62,24 @@ bool buildBridge(SimContext& c, ToolState& ts, int a, int b, int mask, int flag)
 bool placeBuilding(SimContext& c, ToolState& ts, int category, int sub, int a, int b);
 int toolBuildingId(int category, int sub);   // the id the (category, subtype) button places, 0 = none
 int toolCost(const SimContext& c, int category, int sub);
+
+// Terrain tools (0x443610 raise, 0x443DF0 lower, 0x442BB0 level to the altitude `target`). Return false when nothing could be done.
+bool raiseTerrain(SimContext& c, ToolState& ts, int a, int b);
+bool lowerTerrain(SimContext& c, ToolState& ts, int a, int b, bool pay);
+bool levelTerrain(SimContext& c, ToolState& ts, int a, int b, int target);
+
+// Highways (0x461B80): 2x2-tile pieces on even coordinates with their own planner; (a1, b1) is the drag end. previewHighway = 0x461200.
+bool buildHighway(SimContext& c, ToolState& ts, int a0, int b0, int a1, int b1);
+bool buildHighwayBridge(SimContext& c, ToolState& ts, int a, int b, int flag);   // 0x45BB30: flag != 0 = a click on a shore, 0 = continuing a drag
+int highwayClassify(SimContext& c, int a, int b);   // 0x4639D0 (exposed for tests)
+int highwayHeight(SimContext& c, int a, int b);     // 0x4638F0
+PathPreview previewHighway(SimContext& c, ToolState& ts, int a0, int b0, int a1, int b1);
+
+// Single-click transport / power tools: hydroelectric dam (0x440DB0), tunnel (0x44B820), road onramp (0x441160), rail-subway link (0x441530).
+bool placeHydroDam(SimContext& c, ToolState& ts, int a, int b);
+bool buildTunnel(SimContext& c, ToolState& ts, int a, int b, int roadSub);
+bool placeOnramp(SimContext& c, ToolState& ts, int a, int b, int roadSub);
+bool placeRailLink(SimContext& c, ToolState& ts, int a, int b);
 
 // Piece appliers and neighbour fixers, exposed for tests.
 void applyRoadPiece(SimContext& c, int a, int b);

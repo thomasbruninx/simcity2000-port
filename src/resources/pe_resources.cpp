@@ -25,7 +25,7 @@ PeResources::PeResources(const PeImage& pe) {
     for (const Entry& type : entries(r, root)) {
         if (!(type.offset & 0x80000000u) || (type.name & 0x80000000u)) continue;
         const int typeId = static_cast<int>(type.name);
-        if (typeId != 2 && typeId != 6) continue;
+        if (typeId != 2 && typeId != 5 && typeId != 6) continue;
         for (const Entry& name : entries(r, root + (type.offset & 0x7FFFFFFFu))) {
             if (!(name.offset & 0x80000000u) || (name.name & 0x80000000u)) continue;
             const auto langs = entries(r, root + (name.offset & 0x7FFFFFFFu));
@@ -33,7 +33,34 @@ PeResources::PeResources(const PeImage& pe) {
             const uint32_t leaf = root + langs[0].offset;
             const uint32_t dataRva = r.u32(leaf), size = r.u32(leaf + 4);
             const int id = static_cast<int>(name.name);
-            if (typeId == 2) { const auto b = pe.bytesAtRva(dataRva, size); bitmaps_[id].assign(b.begin(), b.end()); }
+            if (typeId == 5) {   // DLGTEMPLATE (classic layout)
+                const auto raw = pe.bytesAtRva(dataRva, size);
+                const uint8_t* d = raw.data();
+                size_t o = 0;
+                auto u16 = [&](size_t at) { return at + 2 <= size ? static_cast<int>(d[at] | (d[at + 1] << 8)) : 0; };
+                auto u32 = [&](size_t at) { return at + 4 <= size ? static_cast<uint32_t>(d[at] | (d[at + 1] << 8) | (d[at + 2] << 16) | (static_cast<uint32_t>(d[at + 3]) << 24)) : 0u; };
+                auto wstr = [&](size_t& at) { std::string out; while (at + 2 <= size) { const int ch = u16(at); at += 2; if (!ch) break; out.push_back(ch < 0x80 ? static_cast<char>(ch) : '?'); } return out; };
+                auto ordOrStr = [&](size_t& at, std::string& text) { if (u16(at) == 0xFFFF) { text = "#" + std::to_string(u16(at + 2)); at += 4; } else text = wstr(at); };
+                const uint32_t style = u32(0);
+                const int count = u16(8);
+                o = 18;
+                std::string menu, cls, title;
+                ordOrStr(o, menu); ordOrStr(o, cls);
+                Dialog dlg;
+                dlg.title = wstr(o);
+                if (style & 0x40) { o += 2; wstr(o); }   // DS_SETFONT: point size + face name
+                for (int k = 0; k < count && o + 18 <= size; ++k) {
+                    o = (o + 3) & ~static_cast<size_t>(3);
+                    DialogControl c{};
+                    c.x = u16(o + 8); c.y = u16(o + 10); c.w = u16(o + 12); c.h = u16(o + 14); c.id = u16(o + 16);
+                    o += 18;
+                    ordOrStr(o, c.cls);
+                    ordOrStr(o, c.text);
+                    o += 2 + static_cast<size_t>(u16(o));
+                    dlg.controls.push_back(c);
+                }
+                dialogs_[id] = dlg;
+            } else if (typeId == 2) { const auto b = pe.bytesAtRva(dataRva, size); bitmaps_[id].assign(b.begin(), b.end()); }
             else {   // string table block: 16 length-prefixed UTF-16 strings; block id N holds ids (N-1)*16 .. (N-1)*16+15
                 uint32_t p = dataRva;
                 for (int k = 0; k < 16 && p < dataRva + size; ++k) {

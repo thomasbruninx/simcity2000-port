@@ -13,7 +13,7 @@ using namespace xbit;
 // ---- typed views of the raw tool tables (copied from the user's SIMCITY.EXE) ----
 struct Tbl {
     const GameTables& t;
-    const uint8_t* at(uint32_t va) const { return va >= 0x4E75A8 ? &t.bridgeData[va - 0x4E75A8] : &t.connectData[va - 0x4E6B08]; }
+    const uint8_t* at(uint32_t va) const { return va >= 0x4E75E8 ? &t.highwayData[va - 0x4E75E8] : va >= 0x4E75A8 ? &t.bridgeData[va - 0x4E75A8] : &t.connectData[va - 0x4E6B08]; }
     int u8(uint32_t va) const { return *at(va); }
     int i16(uint32_t va) const { int16_t v; std::memcpy(&v, at(va), 2); return v; }
     int i32(uint32_t va) const { int32_t v; std::memcpy(&v, at(va), 4); return v; }
@@ -737,6 +737,298 @@ bool placeBuilding(SimContext& c, ToolState&, int category, int sub, int a, int 
     }
     if ((w.xbit.at(a, b) & kPowerable) && c.s.population10 < 50000) refreshPower(c);
     if ((w.xbit.at(a, b) & kPiped) && c.s.population10 < 50000) refreshWater(c);
+    return true;
+}
+
+// ---- terrain tools ----
+namespace {
+
+struct Terr {
+    Ctx& x;
+    ToolState& ts;
+    int dx8(int i) const { int16_t v; std::memcpy(&v, &x.c.t.terrainData[static_cast<size_t>(2 * i)], 2); return v; }        // 0x4E6848
+    int dy8(int i) const { int16_t v; std::memcpy(&v, &x.c.t.terrainData[static_cast<size_t>(0x18 + 2 * i)], 2); return v; }  // 0x4E6860
+    static int maskTable(int i) { static const int m[8] = {3, 2, 6, 4, 12, 8, 9, 1}; return m[i]; }   // 0x4E6888
+    int a4x(int i) const { static const int v[4] = {0, 1, 0, -1}; return v[i]; }     // 0x4E6908
+    int a4y(int i) const { static const int v[4] = {-1, 0, 1, 0}; return v[i]; }     // 0x4E6910
+};
+
+struct IntRect { int l = 0, t = 0, r = 0, b = 0; bool empty() const { return l >= r || t >= b; } };
+IntRect unionRect(const IntRect& p, const IntRect& q) {   // USER32 UnionRect: empty rectangles are ignored
+    if (p.empty()) return q.empty() ? IntRect{} : q;
+    if (q.empty()) return p;
+    return {std::min(p.l, q.l), std::min(p.t, q.t), std::max(p.r, q.r), std::max(p.b, q.b)};
+}
+
+void shoreFix9(SimContext& c, int a, int b) {   // 0x446E30
+    for (int i = 0; i < 9; ++i) {
+        const int dx = i < 8 ? c.t.shoreDx[static_cast<size_t>(i)] : 0, dy = i < 8 ? c.t.shoreDy[static_cast<size_t>(i)] : 0;
+        fixShore(c, a + dx, b + dy);
+    }
+}
+
+void adjustNeighbours(Ctx& x, int a, int b) {   // 0x445500: keep neighbouring building-free tiles within one step of this altitude
+    SimContext& c = x.c;
+    const int alt = x.alt(a, b);
+    static const int dx4[4] = {0, 1, 0, -1}, dy4[4] = {-1, 0, 1, 0};
+    for (int i = 0; i < 4; ++i) {
+        const int na = a + dx4[i], nb = b + dy4[i];
+        if (!inMap(na, nb) || c.w.xbld.at(na, nb) >= 0xD) continue;
+        const int diff = alt - x.alt(na, nb);
+        int target;
+        if (diff < 2) {
+            if (diff > -2) continue;
+            target = alt + 1;
+        } else target = alt - 1;
+        c.w.altm.at(na, nb) = static_cast<uint16_t>((c.w.altm.at(na, nb) & 0xFFE0) | target);
+        adjustNeighbours(x, na, nb);
+        shoreFix9(c, na, nb);
+    }
+}
+
+bool canRaise(Ctx& x, Terr& t, int a, int b) {   // 0x443660 (marks the tiles it visits with XBIT 8)
+    World& w = x.c.w;
+    if (!inMap(a, b)) return true;
+    if ((w.xzon.at(a, b) & 0xF) == 7) return false;
+    if ((w.xbit.at(a, b) & kWater) && t.ts.dozerSub == 0) return false;
+    if (w.xbit.at(a, b) & kMark) return true;
+    w.xbit.at(a, b) |= kMark;
+    const int alt = x.alt(a, b);
+    if (alt > 0x1D) return false;
+    for (int i = 0; i < 8; ++i) {
+        const int na = t.dx8(i) + a, nb = t.dy8(i) + b;
+        if (!inMap(na, nb)) continue;
+        if ((w.xzon.at(na, nb) & 0xF) == 7 || ((w.xbit.at(na, nb) & kWater) && t.ts.dozerSub == 0)) { w.xbit.at(a, b) &= static_cast<uint8_t>(~kMark); return false; }
+    }
+    auto sub = [&](int na, int nb) {
+        if (x.alt(na, nb) < alt && !canRaise(x, t, na, nb)) { w.xbit.at(a, b) &= static_cast<uint8_t>(~kMark); return false; }
+        return true;
+    };
+    if (a > 0 && !sub(a - 1, b)) return false;
+    if (b > 0 && !sub(a, b - 1)) return false;
+    if (a < 0x7F && !sub(a + 1, b)) return false;
+    if (b < 0x7F && !sub(a, b + 1)) return false;
+    return true;
+}
+
+void raiseMarked(Ctx& x, Terr& t, int a, int b) {   // 0x443B70
+    World& w = x.c.w;
+    if (!inMap(a, b) || !(w.xbit.at(a, b) & kMark)) return;
+    w.xbit.at(a, b) &= static_cast<uint8_t>(~kMark);
+    const int alt = x.alt(a, b);
+    if (alt >= 0x1E) return;
+    if (a > 0 && x.alt(a - 1, b) < alt) raiseMarked(x, t, a - 1, b);
+    if (b > 0 && x.alt(a, b - 1) < alt) raiseMarked(x, t, a, b - 1);
+    if (a < 0x7F && x.alt(a + 1, b) < alt) raiseMarked(x, t, a + 1, b);
+    if (b < 0x7F && x.alt(a, b + 1) < alt) raiseMarked(x, t, a, b + 1);
+    const int cost = x.c.t.toolCost[2];
+    if (cost <= x.c.s.treasury) {
+        x.c.s.treasury -= cost;
+        w.altm.at(a, b) = static_cast<uint16_t>((w.altm.at(a, b) & 0xFFE0) | (alt + 1));
+        w.xzon.at(a, b) &= 0xF0;
+        adjustNeighbours(x, a, b);
+        shoreFix9(x.c, a, b);
+    }
+}
+
+}  // namespace
+
+bool raiseTerrain(SimContext& c, ToolState& ts, int a, int b) {   // 0x443610
+    Ctx x(c);
+    Terr t{x, ts};
+    if (!canRaise(x, t, a, b)) return false;
+    raiseMarked(x, t, a, b);
+    return true;
+}
+
+bool lowerTerrain(SimContext& c, ToolState& ts, int a0, int b0, bool pay) {   // 0x443DF0
+    Ctx x(c);
+    Terr t{x, ts};
+    World& w = c.w;
+    IntRect rect{a0, b0, a0 + 1, b0 + 1};
+    const int cost = c.t.toolCost[static_cast<size_t>(ts.dozerSub)];
+    if (pay && c.s.treasury < cost) return false;
+    const int alt0 = x.alt(a0, b0);
+    if (alt0 == 0) return false;
+    if (inMap(a0, b0)) w.altm.at(a0, b0) = static_cast<uint16_t>((w.altm.at(a0, b0) & 0xFFE0) | (alt0 - 1));
+    if (pay) c.s.treasury -= cost;
+    c.queue.reset(a0, b0);
+    while (!c.queue.empty()) {
+        const auto q = c.queue.pop();
+        const int alt = x.alt(q.a, q.b);
+        if (inMap(q.a, q.b)) w.xzon.at(q.a, q.b) &= 0xF0;
+        rect = unionRect(rect, IntRect{std::min(a0, q.a), std::min(b0, q.b), std::max(a0, q.a), std::max(b0, q.b)});
+        int mask = 0;
+        for (int i = 0; i < 8; ++i) {
+            const int na = t.dx8(i) + q.a, nb = t.dy8(i) + q.b;
+            if (inMap(na, nb) && alt < x.alt(na, nb)) mask |= Terr::maskTable(i);
+        }
+        for (int i = 0; i < 8; ++i) {
+            const int na = t.dx8(i) + q.a, nb = t.dy8(i) + q.b;
+            if (!inMap(na, nb)) continue;
+            const int h = x.alt(na, nb);
+            if (alt + 1 < h || (alt < h && mask == 0xF)) {
+                if (pay) c.s.treasury -= cost;
+                c.queue.push(na, nb);
+                w.altm.at(na, nb) = static_cast<uint16_t>((w.altm.at(na, nb) & 0xFFE0) | (h - 1));
+            }
+        }
+    }
+    for (int a = rect.l - 1; a <= rect.r + 1; ++a)
+        for (int b = rect.t - 1; b <= rect.b + 1; ++b) shoreFix9(c, a, b);
+    if (pay && c.s.treasury < 0) c.s.treasury = 0;
+    return true;
+}
+
+bool levelTerrain(SimContext& c, ToolState& ts, int a, int b, int target) {   // 0x442BB0
+    Ctx x(c);
+    const int alt = x.alt(a, b);
+    if (alt < target) return raiseTerrain(c, ts, a, b);
+    if (target < alt) return lowerTerrain(c, ts, a, b, true);
+    return true;
+}
+
+// ---- hydroelectric dam, tunnel, onramp, rail link ----
+bool placeHydroDam(SimContext& c, ToolState&, int a, int b) {   // 0x440DB0
+    Ctx x(c);
+    World& w = c.w;
+    constexpr int kFlip[16] = {1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1};
+    if (w.xter.at(a, b) != 0x2E && w.xter.at(a, b) != 0x3E) { c.hooks.showDialog(0x6C); return false; }
+    if (w.xbld.at(a, b) != 0) return false;
+    const int cost = c.t.toolCost[static_cast<size_t>(toolcat::kPower * 12 + 3)];   // 400
+    if (c.s.treasury < cost) return false;
+    c.s.treasury -= cost;
+    const int alt = x.alt(a, b);
+    int m = 0;
+    if (b > 0 && alt < x.alt(a, b - 1)) m = 1;
+    if (a > 0 && a + 1 < 0x80 && alt < x.alt(a + 1, b)) m |= 2;
+    if (b < 0x7F && alt < x.alt(a, b + 1)) m |= 4;
+    if (a < 0x7F && a - 1 >= 0 && alt < x.alt(a - 1, b)) m |= 8;
+    int kind = kFlip[m];
+    if (c.s.rotation & 1) kind ^= 1;
+    w.xbit.at(a, b) |= kPowerable;
+    const int id = kind + 0xC6;
+    setTile(c, a, b, id);
+    w.xzon.at(a, b) = static_cast<uint8_t>((w.xzon.at(a, b) & 0xF0) | 0xF0);
+    const int overlay = allocateMicrosim(c, id);
+    if (overlay != 0) w.xtxt.at(a, b) = static_cast<uint8_t>(overlay);
+    if (c.s.population10 < 50000) refreshPower(c);
+    return true;
+}
+
+bool buildTunnel(SimContext& c, ToolState&, int a0, int b0, int roadSub) {   // 0x44B820
+    Ctx x(c);
+    World& w = c.w;
+    if (!(w.xbld.at(a0, b0) < 0xE && w.xbld.at(a0, b0) != 5 && w.xund.at(a0, b0) == 0)) return false;
+    const int ter0 = w.xter.at(a0, b0);
+    if (ter0 == 0 || ter0 > 4) { c.hooks.toolMessage(0x74); return false; }
+    const int startAlt = x.alt(a0, b0);
+    const int dir = (ter0 + 2) & 3;
+    int len = 0, a = a0, b = b0;
+    do {
+        if (a < 0 || b < 0 || a > 0x7E || b > 0x7E) { c.hooks.toolMessage(0x70); return false; }
+        if (x.depth(a, b) != 0) { c.hooks.toolMessage(0x6F); return false; }
+        const int d = x.alt(a, b) - startAlt;
+        if (d > 0x1E) { c.hooks.toolMessage(0x71); return false; }
+        if (d == 1) {
+            const int u = x.und(a, b);
+            if (pipeish2(u) || subwayish(u)) { c.hooks.toolMessage(0x73); return false; }
+        }
+        ++len;
+        a += x.tb.dx(dir); b += x.tb.dy(dir);
+        if (a < 0) { c.hooks.toolMessage(0x72); return false; }
+    } while (a < 0x80 && b >= 0 && b < 0x80 && startAlt < x.alt(a, b));
+    if (a < 0 || a > 0x7F || b < 0 || b > 0x7F || w.xter.at(a, b) - ((ter0 + 1) & 3) != 1) { c.hooks.toolMessage(0x72); return false; }
+    const int cost = c.t.toolCost[static_cast<size_t>(toolcat::kRoads * 12 + roadSub)] * (len + 1);
+    if (!c.hooks.confirm(0x15A, cost)) return false;
+    if (cost > c.s.treasury) { c.hooks.toolMessage(0x102); return false; }
+    c.s.treasury -= cost;
+    int pa = a0, pb = b0;
+    setTile(c, pa, pb, ter0 + 0x3E);
+    w.altm.at(pa, pb) = static_cast<uint16_t>((w.altm.at(pa, pb) & 0x3FF) | 0x400);
+    auto roads = [&](int ra, int rb) {
+        if (ra > 0) fixRoad(x, ra - 1, rb);
+        if (ra < 0x7F) fixRoad(x, ra + 1, rb);
+        if (rb > 0) fixRoad(x, ra, rb - 1);
+        if (rb < 0x7F) fixRoad(x, ra, rb + 1);
+    };
+    roads(pa, pb);
+    for (int i = 0; i < len; ++i) {   // `len` steps from the entrance end on the exit tile
+        pa += x.tb.dx(dir); pb += x.tb.dy(dir);
+        const uint16_t old = w.altm.at(pa, pb);
+        w.altm.at(pa, pb) = static_cast<uint16_t>((((old & 0x1F) - startAlt) + 1) * 0x400 | (old & 0x3FF));
+    }
+    setTile(c, pa, pb, ((ter0 + 1) & 3) + 0x3F);
+    w.altm.at(pa, pb) = static_cast<uint16_t>((w.altm.at(pa, pb) & 0x3FF) | 0x400);
+    roads(pa, pb);
+    return true;
+}
+
+bool placeOnramp(SimContext& c, ToolState&, int a, int b, int roadSub) {   // 0x441160
+    Ctx x(c);
+    World& w = c.w;
+    constexpr int kTable[16] = {0, 10, 5, 12, 10, 0, 9, 0, 5, 6, 0, 0, 3, 0, 0, 0};
+    if (x.bld(a, b) > 0xD || x.bld(a, b) == 5 || w.xter.at(a, b) != 0) return false;
+    int hw = 0, rd = 0;
+    auto isHw = [](int n) { return n > 0x48 && n < 0x51; };
+    auto isRd = [](int n) { return n > 0x1C && n < 0x2C; };
+    if (b > 0) { const int n = x.bld(a, b - 1); if (isHw(n)) hw = 1; if (isRd(n)) rd = 1; }
+    if (a < 0x7F) { const int n = x.bld(a + 1, b); if (isHw(n)) hw |= 2; if (isRd(n)) rd |= 2; }
+    if (b < 0x7F) { const int n = x.bld(a, b + 1); if (isHw(n)) hw |= 4; if (isRd(n)) rd |= 4; }
+    if (a > 0) { const int n = x.bld(a - 1, b); if (isHw(n)) hw |= 8; if (isRd(n)) rd |= 8; }
+    rd &= kTable[hw];
+    if (rd == 0) return false;
+    const int cost = c.t.toolCost[static_cast<size_t>(toolcat::kRoads * 12 + roadSub)];
+    if (c.s.treasury < cost) return false;
+    c.s.treasury -= cost;
+    int piece;
+    if (!(rd & 1)) {
+        if (!(rd & 2)) {
+            if (!(rd & 4)) {
+                if (!(rd & 8)) return true;
+                setTile(c, a - 1, b, 0x2B);
+                piece = (hw & 1) ? 0x5E : 0x5F;
+            } else {
+                setTile(c, a, b + 1, 0x2B);
+                w.xbit.at(a, b) |= kFlipped;
+                piece = (hw & 2) ? 0x60 : 0x5D;
+            }
+        } else {
+            setTile(c, a + 1, b, 0x2B);
+            piece = (hw & 1) ? 0x5D : 0x60;
+        }
+    } else {
+        w.xbit.at(a, b) |= kFlipped;
+        setTile(c, a, b - 1, 0x2B);
+        piece = (hw & 2) ? 0x5F : 0x5E;
+    }
+    setTile(c, a, b, piece);
+    return true;
+}
+
+bool placeRailLink(SimContext& c, ToolState&, int a, int b) {   // 0x441530
+    Ctx x(c);
+    World& w = c.w;
+    if (x.bld(a, b) > 0xC || x.bld(a, b) == 5 || w.xter.at(a, b) != 0) return false;
+    static const int dx[4] = {1, 0, -1, 0}, dy[4] = {0, 1, 0, -1};   // 0x4E6830 / 0x4E6838
+    int i = 0, na = 0, nb = 0;
+    for (; i < 4; ++i) {
+        na = dx[i] + a; nb = dy[i] + b;
+        if (inMap(na, nb) && ((x.bld(na, nb) > 0x2B && x.bld(na, nb) < 0x3F) || (x.bld(na, nb) > 0x44 && x.bld(na, nb) < 0x49) || (x.bld(na, nb) > 0x6B && x.bld(na, nb) < 0x70))) break;
+    }
+    if (i == 4) {
+        for (i = 0; i < 4; ++i) {
+            na = dx[i] + a; nb = dy[i] + b;
+            if (inMap(na, nb) && subwayish(x.und(na, nb))) { i = (i + 2) & 3; break; }
+        }
+        if (i == 4) return false;
+    }
+    applySubwayPiece(c, a, b);
+    setUnderground(c, a, b, 0x23);
+    w.xbit.at(a, b) &= static_cast<uint8_t>(~kPiped);
+    setTile(c, a, b, i + 0x6C);
+    w.xzon.at(a, b) |= 0xF0;
+    fixRail(x, na, nb);
     return true;
 }
 

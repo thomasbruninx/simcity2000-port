@@ -1,5 +1,5 @@
 // sc2k-resources: lists the string table and extracts the bitmap resources of the user's SIMCITY.EXE (development aid).
-// Usage: sc2k-resources <SIMCITY.EXE> strings | bitmaps <outdir>
+// Usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | bitmaps <outdir>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -10,13 +10,18 @@
 using namespace sc2k;
 
 int main(int argc, char** argv) {
-    if (argc < 3) { std::fprintf(stderr, "usage: sc2k-resources <SIMCITY.EXE> strings | bitmaps <outdir>\n"); return 2; }
+    if (argc < 3) { std::fprintf(stderr, "usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | bitmaps <outdir>\n"); return 2; }
     try {
         const PeImage pe = PeImage::load(argv[1]);
         const PeResources res(pe);
         const std::string cmd = argv[2];
         if (cmd == "strings") {
             for (const auto& [id, s] : res.strings()) std::printf("%d\t%s\n", id, s.c_str());
+        } else if (cmd == "dialogs") {
+            for (const auto& [id, d] : res.dialogs()) {
+                std::printf("DIALOG %d \"%s\"\n", id, d.title.c_str());
+                for (const auto& c : d.controls) std::printf("  ctl %d [%s] (%d,%d %dx%d) %s\n", c.id, c.cls.c_str(), c.x, c.y, c.w, c.h, c.text.c_str());
+            }
         } else if (cmd == "bitmaps" && argc > 3) {
             for (int id : res.bitmapIds()) {
                 const auto dib = res.bitmap(id);

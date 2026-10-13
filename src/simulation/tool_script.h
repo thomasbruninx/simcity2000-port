@@ -13,7 +13,7 @@
 namespace sc2k {
 
 struct ToolOp {
-    enum Kind { Bulldoze, Network, Build, Zone } kind = Bulldoze;
+    enum Kind { Bulldoze, Network, Build, Zone, Terrain, Hydro, Tunnel, Onramp, Link, Highway } kind = Bulldoze;
     int a = 0, b = 0, ta = 0, tb = 0;          // tile / drag end
     int cat = 0, sub = 0;                      // tool category + subtype (cost / id table row)
     int zone = 0, unit = 0;                    // zone type painted, cost per tile
@@ -25,10 +25,12 @@ struct ToolOp {
 
 class ToolScript {
 public:
-    explicit ToolScript(uint32_t seed) : s_(seed) {}
+    // extended = also generate terrain, hydro dam, tunnel, onramp and rail-link operations (the basic sequence is unchanged when false)
+    explicit ToolScript(uint32_t seed, bool extended = false) : s_(seed), extended_(extended) {}
 
     ToolOp next(const World& pw, const GameTables& t) {
         ToolOp op;
+        if (extended_ && range(100) < 40) return nextExtended(pw, t);
         const int kind = range(100);
         if (kind < 25) {
             op.kind = ToolOp::Bulldoze;
@@ -76,9 +78,61 @@ public:
         return op;
     }
 
+    ToolOp nextExtended(const World& pw, const GameTables&) {
+        ToolOp op;
+        const int k = range(8);
+        auto area = [&](int a, int b, int d) { for (int x = a - d; x <= a + d; ++x) for (int y = b - d; y <= b + d; ++y) if (!inMap(x, y)) return false; return true; };
+        (void)area;
+        if (k < 3) {
+            op.kind = ToolOp::Terrain;
+            op.sub = 1 + range(3);          // 1 level, 2 raise, 3 lower
+            std::tie(op.a, op.b) = pick(pw, false);
+            op.ta = range(14);              // target altitude of the level tool
+            op.name = op.sub == 1 ? "level" : op.sub == 2 ? "raise" : "lower";
+        } else if (k == 3) {
+            op.kind = ToolOp::Hydro; op.name = "hydro";
+            std::tie(op.a, op.b) = pickWhere(pw, [&](int a, int b) { return pw.xter.at(a, b) == 0x2E || pw.xter.at(a, b) == 0x3E; });
+        } else if (k == 4) {
+            op.kind = ToolOp::Tunnel; op.name = "tunnel"; op.sub = 2;
+            std::tie(op.a, op.b) = pickWhere(pw, [&](int a, int b) { return pw.xter.at(a, b) >= 1 && pw.xter.at(a, b) <= 4 && pw.xbld.at(a, b) < 0xE; });
+        } else if (k >= 6) {
+            op.kind = ToolOp::Highway; op.name = "highway";
+            const bool shore = range(4) == 0;
+            std::tie(op.a, op.b) = pickWhere(pw, [&](int a, int b) {
+                if ((a & 1) || (b & 1) || a > 120 || b > 120) return false;
+                bool anyWater = false, flat = true;
+                for (int x = a; x <= a + 1; ++x) for (int y = b; y <= b + 1; ++y) { anyWater |= (pw.xbit.at(x, y) & xbit::kWater) != 0; flat &= pw.xter.at(x, y) == 0 && pw.xbld.at(x, y) < 0xE; }
+                return shore ? anyWater : flat;
+            });
+            op.ta = op.a; op.tb = op.b;
+            if (range(2)) op.ta = std::clamp(op.a + 2 * range(14) - 12, 0, 127); else op.tb = std::clamp(op.b + 2 * range(14) - 12, 0, 127);
+            if (range(12) == 0) { op.a = range(2) ? 0 : 126; op.ta = op.a; op.tb = std::clamp(op.b + range(9), 0, 127); }
+        } else {
+            if (range(2)) {
+                op.kind = ToolOp::Onramp; op.name = "onramp"; op.sub = 3;
+                std::tie(op.a, op.b) = pickWhere(pw, [&](int a, int b) {
+                    if (pw.xbld.at(a, b) != 0 || pw.xter.at(a, b) != 0) return false;
+                    for (int d = 0; d < 4; ++d) { const int n = pw.xbld.at(a + (d == 1) - (d == 3), b + (d == 2) - (d == 0)); if (n > 0x48 && n < 0x51) return true; }
+                    return false;
+                });
+            } else {
+                op.kind = ToolOp::Link; op.name = "link";
+                std::tie(op.a, op.b) = pickWhere(pw, [&](int a, int b) {
+                    if (pw.xbld.at(a, b) != 0 || pw.xter.at(a, b) != 0) return false;
+                    for (int d = 0; d < 4; ++d) { const int n = pw.xbld.at(a + (d == 0) - (d == 2), b + (d == 1) - (d == 3)); if ((n > 0x2B && n < 0x3F) || (n > 0x44 && n < 0x49)) return true; }
+                    return false;
+                });
+            }
+        }
+        return op;
+    }
+
     std::string describe(const ToolOp& op) const {
         char buf[160];
         switch (op.kind) {
+            case ToolOp::Terrain: case ToolOp::Hydro: case ToolOp::Tunnel: case ToolOp::Onramp: case ToolOp::Link:
+                std::snprintf(buf, sizeof buf, "%s(%d,%d) target %d", op.name.c_str(), op.a, op.b, op.ta); break;
+            case ToolOp::Highway: std::snprintf(buf, sizeof buf, "highway(%d,%d)->(%d,%d)", op.a, op.b, op.ta, op.tb); break;
             case ToolOp::Bulldoze: std::snprintf(buf, sizeof buf, "bulldoze(%d,%d) under=%d", op.a, op.b, op.underground); break;
             case ToolOp::Network: std::snprintf(buf, sizeof buf, "%s(%d,%d)->(%d,%d)", op.name.c_str(), op.a, op.b, op.ta, op.tb); break;
             case ToolOp::Build: std::snprintf(buf, sizeof buf, "build cat %d sub %d id %#x at (%d,%d)", op.cat, op.sub, toolBuildingId(op.cat, op.sub), op.a, op.b); break;
@@ -89,6 +143,16 @@ public:
 
 private:
     uint32_t s_;
+    bool extended_;
+    template <class P>
+    std::pair<int, int> pickWhere(const World&, P pred) {   // scans the interior from a random start for a tile matching `pred`
+        const int start = range(120 * 120);
+        for (int k = 0; k < 120 * 120; ++k) {
+            const int idx = (start + k) % (120 * 120), a = 3 + idx / 120, b = 3 + idx % 120;
+            if (pred(a, b)) return {a, b};
+        }
+        return {3 + range(120), 3 + range(120)};
+    }
     uint32_t nextRaw() { s_ = s_ * 1664525u + 1013904223u; return s_ >> 8; }
     int range(int n) { return static_cast<int>(nextRaw() % static_cast<uint32_t>(n)); }
 
@@ -128,6 +192,14 @@ inline bool runToolOp(SimContext& c, ToolState& ts, const ToolOp& op) {
         case ToolOp::Network: return buildNetwork(c, ts, op.net, op.sub, op.a, op.b, op.ta, op.tb);
         case ToolOp::Build: return placeBuilding(c, ts, op.cat, op.sub, op.a, op.b);
         case ToolOp::Zone: return paintZone(c, ts, op.a, op.b, op.ta, op.tb, op.zone, op.unit);
+        case ToolOp::Terrain:
+            ts.dozerSub = op.sub;
+            return op.sub == 1 ? levelTerrain(c, ts, op.a, op.b, op.ta) : op.sub == 2 ? raiseTerrain(c, ts, op.a, op.b) : lowerTerrain(c, ts, op.a, op.b, true);
+        case ToolOp::Hydro: return placeHydroDam(c, ts, op.a, op.b);
+        case ToolOp::Tunnel: return buildTunnel(c, ts, op.a, op.b, op.sub);
+        case ToolOp::Onramp: return placeOnramp(c, ts, op.a, op.b, op.sub);
+        case ToolOp::Link: return placeRailLink(c, ts, op.a, op.b);
+        case ToolOp::Highway: return buildHighway(c, ts, op.a, op.b, op.ta, op.tb);
     }
     return false;
 }

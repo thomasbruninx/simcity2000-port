@@ -76,6 +76,33 @@ uint32_t Emu::call(uint32_t fn, std::initializer_list<uint32_t> args, uint32_t e
     return eax;
 }
 
+void Emu::dumpTrace() { std::fprintf(stderr, "trace:"); for (int i = 0; i < 48; ++i) std::fprintf(stderr, " %x", g_ring[(g_ringPos + i) % 48]); std::fprintf(stderr, "\n"); }
+
+void Emu::runNative(uint32_t addr) {
+    for (const auto& n : natives_) {
+        if (n.stub != addr) continue;
+        uint32_t esp = 0; uc_reg_read(uc_, UC_X86_REG_ESP, &esp);
+        const uint32_t ret = get<uint32_t>(esp);
+        const uint32_t eax = n.fn(*this, esp + 4);
+        esp += 4u + n.argBytes;
+        uc_reg_write(uc_, UC_X86_REG_EAX, &eax);
+        uc_reg_write(uc_, UC_X86_REG_ESP, &esp);
+        uc_reg_write(uc_, UC_X86_REG_EIP, &ret);
+        return;
+    }
+}
+
+void Emu::nativeImport(uint32_t iatSlot, uint16_t argBytes, std::function<uint32_t(Emu&, uint32_t)> fn) {
+    const uint32_t stub = kRandState + 0x3400 + 0x10 * static_cast<uint32_t>(natives_.size());
+    const uint8_t hlt = 0xF4;
+    write(stub, &hlt, 1);
+    put<uint32_t>(iatSlot, stub);
+    natives_.push_back({stub, argBytes, std::move(fn)});
+    if (!nativeHook_)
+        uc_hook_add(uc_, &nativeHook_, UC_HOOK_CODE, reinterpret_cast<void*>(+[](uc_engine*, uint64_t addr, uint32_t, void* user) { static_cast<Emu*>(user)->runNative(static_cast<uint32_t>(addr)); }),
+                    this, kRandState + 0x3400, kRandState + 0x3800);
+}
+
 void Emu::installCrtRand(uint32_t seed) {
     put<uint32_t>(kRandState, seed);
     const uint32_t st = kRandState;

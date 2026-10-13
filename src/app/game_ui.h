@@ -46,7 +46,7 @@ public:
     bool saveCity(const std::string& path);
 
     // ZoneHooks
-    bool confirm(int stringId) override;
+    bool confirm(int stringId, int amount = 0) override;
     int chooseBridge(int length, int allowedMask) override;
     void toolMessage(int id) override;
     void postMessage(int id, int arg) override;
@@ -81,6 +81,8 @@ private:
     int unitCost(const ToolItem& t) const;
     void say(const std::string& text);
     void bulldozeAt(int a, int b);
+    void terrainAt(int a, int b);
+    int levelTarget_ = 0;           // altitude the level tool flattens to (that of the tile where the drag began)
     void updatePreview();
     void finishDrag();
     void applyClick(int a, int b);

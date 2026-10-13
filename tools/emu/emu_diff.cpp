@@ -584,23 +584,31 @@ int destroyDiff(const std::string& exe, const std::string& path, long& tiles, lo
 
 // ---- building tools: bulldozer, zoning, network drags, bridges and single buildings ----
 struct ToolHooks : ZoneHooks {
-    bool confirm(int) override { return true; }
+    bool confirm(int, int = 0) override { return true; }
 };
 
 void stubTools(Emu& e) {
-    e.patchRet(0x40CED0); e.patchRet(0x438E00); e.patchRet(0x43A660); e.patchRetN(0x4B1223, 12); e.patchRetN(0x4B1243, 12); e.patchRet(0x45AFD0);
+    e.patchRet(0x40CED0); e.patchRet(0x438E00); e.patchRet(0x43A660); e.patchRetN(0x4B1223, 12); { const uint8_t yes12[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x4B1243, yes12, 8); } e.patchRet(0x45AFD0);
     e.patchRetN(0x424AF0, 4); e.patchRet(0x42B0C0); e.patchRetN(0x406CA0, 4); e.patchRetN(0x4A2347, 4);
     const uint8_t yes1[3] = {0xB0, 0x01, 0xC3}; e.write(0x42AD70, yes1, 3);                                  // confirm -> true
     const uint8_t idyes[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x408600, idyes, 8);           // message box -> IDYES
+    const uint8_t yes650[8] = {0xB8, 0x06, 0, 0, 0, 0xC2, 0x0C, 0x00}; e.write(0x408650, yes650, 8);   // yes/no box -> IDYES
     const uint8_t chooser[12] = {0x8B, 0x44, 0x24, 0x08, 0x0F, 0xBC, 0xC0, 0x75, 0x04, 0x66, 0xB8, 0xFF};    // bridge type = lowest allowed bit, else -1
     uint8_t full[14]; std::memcpy(full, chooser, 12); full[12] = 0xFF; full[13] = 0xC3; e.write(0x45B140, full, 14);
-    // SEH frame set-up through FS:[0] in the single-building routine
-    std::vector<uint8_t> code(0x1000); e.read(0x43FB20, code.data(), code.size());
-    for (size_t i = 0; i + 7 <= code.size(); ++i) {
-        const uint32_t va = 0x43FB20 + uint32_t(i);
-        if (code[i] == 0x64 && code[i + 1] == 0xA1 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t p[6] = {0x31, 0xC0, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 6); }
-        else if (code[i] == 0x64 && code[i + 1] == 0xA3 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t p[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 6); }
-        else if (code[i] == 0x64 && code[i + 1] == 0x89 && !code[i + 3] && !code[i + 4] && !code[i + 5] && !code[i + 6]) { const uint8_t p[7] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 7); }
+    {   // tunnel: skip the formatted question (CString / heap code) and continue as if the player answered Yes
+        const uint32_t from = 0x44BAA6, to = 0x44BBDE, rel = to - (from + 10);
+        const uint8_t jmp[10] = {0xB8, 0x06, 0, 0, 0, 0xE9, uint8_t(rel), uint8_t(rel >> 8), uint8_t(rel >> 16), uint8_t(rel >> 24)};
+        e.write(from, jmp, 10);
+    }
+    // SEH frame set-up through FS:[0] in the single-building and tunnel routines
+    for (const auto& range : {std::pair<uint32_t, uint32_t>{0x43FB20, 0x1000}, {0x44B820, 0x700}}) {
+        std::vector<uint8_t> code(range.second); e.read(range.first, code.data(), code.size());
+        for (size_t i = 0; i + 7 <= code.size(); ++i) {
+            const uint32_t va = range.first + uint32_t(i);
+            if (code[i] == 0x64 && code[i + 1] == 0xA1 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t p[6] = {0x31, 0xC0, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 6); }
+            else if (code[i] == 0x64 && code[i + 1] == 0xA3 && !code[i + 2] && !code[i + 3] && !code[i + 4] && !code[i + 5]) { const uint8_t p[6] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 6); }
+            else if (code[i] == 0x64 && code[i + 1] == 0x89 && !code[i + 3] && !code[i + 4] && !code[i + 5] && !code[i + 6]) { const uint8_t p[7] = {0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90}; e.write(va, p, 7); }
+        }
     }
 }
 
@@ -612,11 +620,27 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
     Emu e(exe); e.installCrtRand(seed);
     SimImage img(e);
     img.load(w, s); img.setLfsr(lfsrSeed); img.stubUi(); stubTools(e);
+    // USER32 rectangle helpers used by the terrain code
+    e.nativeImport(0x4EED94, 0x14, [](Emu& em, uint32_t args) {   // SetRect(rect, l, t, r, b)
+        const uint32_t rc = em.get<uint32_t>(args);
+        for (int i = 0; i < 4; ++i) em.put<int32_t>(rc + 4u * i, em.get<int32_t>(args + 4u + 4u * i));
+        return 1u;
+    });
+    e.nativeImport(0x4EED30, 0xC, [](Emu& em, uint32_t args) {    // UnionRect(dst, a, b): empty rectangles are ignored
+        const uint32_t d = em.get<uint32_t>(args), p = em.get<uint32_t>(args + 4), q = em.get<uint32_t>(args + 8);
+        int32_t a[4], b[4], o[4] = {0, 0, 0, 0};
+        em.read(p, a, 16); em.read(q, b, 16);
+        const bool ea = a[0] >= a[2] || a[1] >= a[3], eb = b[0] >= b[2] || b[1] >= b[3];
+        if (!ea && !eb) { o[0] = std::min(a[0], b[0]); o[1] = std::min(a[1], b[1]); o[2] = std::max(a[2], b[2]); o[3] = std::max(a[3], b[3]); }
+        else if (!ea) std::memcpy(o, a, 16); else if (!eb) std::memcpy(o, b, 16);
+        em.write(d, o, 16);
+        return ea && eb ? 0u : 1u;
+    });
     World pw = w; CityState ps = s;
     CrtRand rng(seed); Lfsr lf(lfsrSeed); ToolHooks hooks; TrafficStats ts;
     SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
     ToolState tst;
-    ToolScript script(0x1234u + 77u * uint32_t(variant));
+    ToolScript script(0x1234u + 77u * uint32_t(variant), std::getenv("EXTENDED") != nullptr);
     static const struct { uint32_t entry, subGlobal; } netEntry[5] = {{0x449530, 0x4CB974}, {0x4498D0, 0x4CB976}, {0x449C90, 0x4CB96E}, {0x44A0A0, 0x4CB976}, {0x449F20, 0x4CB970}};
     done = 0;
     std::map<std::string, std::pair<int, int>> stat;   // op kind -> (succeeded, attempted)
@@ -651,6 +675,49 @@ int toolsRun(const std::string& exe, const GameTables& t, const CityFile& city, 
             case ToolOp::Build:
                 origRet = int(e.call(0x43FB20, {uint32_t(op.a), uint32_t(op.b), uint32_t(op.cat), uint32_t(op.sub)}) & 0xFF);
                 break;
+            case ToolOp::Terrain: {
+                e.put<uint16_t>(0x4CB968, uint16_t(op.sub));
+                if (op.sub == 1) origRet = int(e.call(0x442BB0, {uint32_t(op.a), uint32_t(op.b), uint32_t(op.ta)}) & 0xFF);
+                else if (op.sub == 2) origRet = int(e.call(0x443610, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF);
+                else origRet = int(e.call(0x443DF0, {uint32_t(op.a), uint32_t(op.b), 1}) & 0xFF);
+                break;
+            }
+            case ToolOp::Hydro: e.put<uint16_t>(0x4CB96E, 3); origRet = int(e.call(0x440DB0, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF); break;
+            case ToolOp::Tunnel: e.put<uint16_t>(0x4CB974, uint16_t(op.sub)); origRet = int(e.call(0x44B820, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF); break;
+            case ToolOp::Onramp: e.put<uint16_t>(0x4CB974, uint16_t(op.sub)); origRet = int(e.call(0x441160, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF); break;
+            case ToolOp::Highway: {
+                const int ua = op.a & ~1, ub = op.b & ~1;
+                auto quadWater = [&](int a, int b) { for (int x = a; x <= a + 1; ++x) for (int y = b; y <= b + 1; ++y) if (inMap(x, y) && (pw.xbit.at(x, y) & 4)) return true; return false; };
+                uint32_t code = 0xFFFF; int cost = 0;
+                if (!quadWater(ua, ub)) {
+                    // run the original planner (pure code) to count the 2x2 steps the interactive preview would charge for
+                    e.call(0x461370, {uint32_t(ua), uint32_t(ub), uint32_t(op.ta), uint32_t(op.tb)});
+                    const uint32_t cell = Emu::kRandState + 0x2900;
+                    e.put<int16_t>(cell, int16_t(ua)); e.put<int16_t>(cell + 2, int16_t(ub));
+                    int steps = 1;
+                    std::vector<std::pair<int, int>> orig{{ua, ub}};
+                    if (std::getenv("OPDBG")) std::printf("   after begin: dir %d target (%d,%d) bounds %d..%d %d..%d classify(6,108)=%x\n", e.get<int16_t>(0x4C6D78), e.get<int16_t>(0x4C6D94), e.get<int16_t>(0x4C6D98), e.get<int32_t>(0x4C6D80), e.get<int32_t>(0x4C6D88), e.get<int32_t>(0x4C6D84), e.get<int32_t>(0x4C6D8C), unsigned(e.call(0x4639D0, {6, 108}) & 0xFFFF));
+                    while ((e.call(0x461460, {cell, cell + 2}) & 0xFF) != 0 && steps < 1000) { if (std::getenv("EMUTRACE") && steps == 1) Emu::dumpTrace(); ++steps; orig.emplace_back(e.get<int16_t>(cell), e.get<int16_t>(cell + 2)); }
+                    if (std::getenv("OPDBG")) {
+                        ToolState scratch; const PathPreview pv = previewHighway(ctx, scratch, ua, ub, op.ta, op.tb);
+                        for (const auto& q : {std::make_pair(ua, ub), std::make_pair(ua + 2, ub), std::make_pair(ua, ub + 2)})
+                            std::printf("   (%d,%d) classify orig %x port %x  height orig %d port %d\n", q.first, q.second, unsigned(e.call(0x4639D0, {uint32_t(q.first), uint32_t(q.second)}) & 0xFFFF), unsigned(highwayClassify(ctx, q.first, q.second) & 0xFFFF),
+                                        int(int16_t(e.call(0x4638F0, {uint32_t(q.first), uint32_t(q.second)}))), highwayHeight(ctx, q.first, q.second));
+                        std::printf("   orig path:"); for (auto& q : orig) std::printf(" (%d,%d)", q.first, q.second);
+                        std::printf("\n   port path:"); for (auto& q : pv.tiles) std::printf(" (%d,%d)", q.first, q.second);
+                        std::printf("\n");
+                    }
+                    cost = 100 * steps;
+                    code = uint32_t(op.ta) + uint32_t(op.tb) * 256;
+                    e.call(0x4488C0);   // reset the direction like the entry does at the end
+                }
+                e.put<int32_t>(0x4C6D90, cost);
+                e.put<uint32_t>(Emu::kRandState + 0x2800, code);
+                const uint8_t stub[8] = {0xA1, 0x00, 0x28, 0x00, 0x7E, 0xC2, 0x0C, 0x00}; e.write(0x460E90, stub, 8);
+                origRet = int(e.call(0x461B80, {uint32_t(op.a), uint32_t(op.b)}, img.fakeView) & 0xFF);
+                break;
+            }
+            case ToolOp::Link: origRet = int(e.call(0x441530, {uint32_t(op.a), uint32_t(op.b)}) & 0xFF); break;
             case ToolOp::Zone: {
                 int count = 0;   // 0x447D00: tiles that would change zone
                 for (int x = std::min(op.a, op.ta); x <= std::max(op.a, op.ta); ++x)

@@ -4,6 +4,7 @@
 #include <unicorn/unicorn.h>
 
 #include <cstdint>
+#include <functional>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -36,6 +37,9 @@ public:
     uint32_t crtRandState() const { return get<uint32_t>(kRandState); }
     void patchRet(uint32_t va) { uint8_t c3 = 0xC3; write(va, &c3, 1); }   // turn a UI/CRT routine into "ret"
     void patchRetN(uint32_t va, uint16_t n) { uint8_t c[3] = {0xC2, uint8_t(n), uint8_t(n >> 8)}; write(va, c, 3); }   // "ret n" (callee-cleaned)
+    // Implements an imported stdcall routine natively: the IAT slot is pointed at a stub; when executed `fn(emu, address of the first argument)`
+    // runs, its result becomes EAX and the call returns, popping `argBytes` of arguments.
+    void nativeImport(uint32_t iatSlot, uint16_t argBytes, std::function<uint32_t(Emu&, uint32_t)> fn);
     uint64_t instructionCount() const { return insnCount_; }
 
     static constexpr uint32_t kRandState = 0x7E000000;
@@ -45,7 +49,12 @@ private:
     uc_engine* uc_ = nullptr;
     uint32_t heapNext_ = 0x10000000, heapEnd_ = 0x10000000 + 0x04000000;
     uint64_t insnCount_ = 0;
-    uc_hook hook_ = 0;
+    uc_hook hook_ = 0, nativeHook_ = 0;
+    struct Native { uint32_t stub; uint16_t argBytes; std::function<uint32_t(Emu&, uint32_t)> fn; };
+    std::vector<Native> natives_;
+public:
+    void runNative(uint32_t addr);
+    static void dumpTrace();   // EMUTRACE=1: print the last executed addresses
 };
 
 // Layer helpers: the game stores maps as a table of row pointers (layer[a][b]).

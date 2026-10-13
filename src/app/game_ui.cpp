@@ -136,9 +136,12 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (!t) { queryTile(a, b); return; }
     switch (t->kind) {
         case ToolKind::Bulldoze: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
+        case ToolKind::Terrain: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; levelTarget_ = sim_.world().altm.at(a, b) & 0x1F; terrainAt(a, b); break;
         case ToolKind::Zone:
+        case ToolKind::Highway:
         case ToolKind::Network: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
         case ToolKind::Building:
+        case ToolKind::Special:
         case ToolKind::Query: applyClick(a, b); break;
         case ToolKind::Unavailable: break;
     }
@@ -161,15 +164,15 @@ void GameUi::mouseMove(int x, int y) {
     if (!dragging_ || (a == lastA_ && b == lastB_)) return;
     const ToolItem* t = tool();
     if (!t) return;
-    if (t->kind == ToolKind::Bulldoze) {   // every tile the cursor crosses
+    if (t->kind == ToolKind::Bulldoze || t->kind == ToolKind::Terrain) {   // every tile the cursor crosses
         int ca = lastA_, cb = lastB_;
         while (ca != a || cb != b) {
             if (std::abs(a - ca) >= std::abs(b - cb)) ca += a > ca ? 1 : -1; else cb += b > cb ? 1 : -1;
-            bulldozeAt(ca, cb);
+            if (t->kind == ToolKind::Bulldoze) bulldozeAt(ca, cb); else terrainAt(ca, cb);
         }
     }
     lastA_ = a; lastB_ = b;
-    if (t->kind != ToolKind::Bulldoze) updatePreview();
+    if (t->kind != ToolKind::Bulldoze && t->kind != ToolKind::Terrain) updatePreview();
 }
 
 void GameUi::wheel(int, int, int dy) {
@@ -201,6 +204,17 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
 
 // ---- tools -------------------------------------------------------------------------------------------------------------
 
+void GameUi::terrainAt(int a, int b) {
+    const ToolItem* t = tool();
+    ts_.dozerSub = t->sub;
+    SimContext& c = sim_.context();
+    bool ok;
+    if (t->sub == 1) ok = levelTerrain(c, ts_, a, b, levelTarget_);
+    else if (t->sub == 2) ok = raiseTerrain(c, ts_, a, b);
+    else ok = lowerTerrain(c, ts_, a, b, true);
+    if (!ok && message_.empty()) say("Can't change the terrain there");
+}
+
 void GameUi::bulldozeAt(int a, int b) {
     ts_.underground = layers.underground;
     const int before = sim_.state().treasury;
@@ -222,7 +236,16 @@ void GameUi::updatePreview() {
     previewCost_ = 0;
     if (!t || !dragging_) return;
     SimContext& c = sim_.context();
-    if (t->kind == ToolKind::Network) {
+    if (t->kind == ToolKind::Highway) {
+        ToolState scratch = ts_;
+        World& w = sim_.world();
+        const int ua = startA_ & ~1, ub = startB_ & ~1;
+        bool wet = false;
+        for (int x = ua; x <= ua + 1; ++x) for (int y = ub; y <= ub + 1; ++y) wet |= inMap(x, y) && (w.xbit.at(x, y) & xbit::kWater);
+        if (wet) return;
+        preview_ = previewHighway(c, scratch, ua, ub, lastA_, lastB_);
+        previewCost_ = preview_.cost;
+    } else if (t->kind == ToolKind::Network) {
         World& w = sim_.world();
         const bool surface = t->net != NetworkKind::Subway && t->net != NetworkKind::Pipe;
         if (surface && (w.xbit.at(startA_, startB_) & xbit::kWater) && w.xter.at(startA_, startB_) < 0x40) return;   // a click on the shore starts a bridge, no path
@@ -240,7 +263,11 @@ void GameUi::finishDrag() {
     SimContext& c = sim_.context();
     const int funds = sim_.state().treasury;
     bool ok = false;
-    if (t->kind == ToolKind::Network) {
+    if (t->kind == ToolKind::Highway) {
+        ok = buildHighway(c, ts_, startA_, startB_, lastA_, lastB_);
+        if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
+        else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build a highway there");
+    } else if (t->kind == ToolKind::Network) {
         ok = buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, lastA_, lastB_);
         if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
         else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build that here");
@@ -258,6 +285,18 @@ void GameUi::applyClick(int a, int b) {
     const ToolItem* t = tool();
     if (!t) return;
     if (t->kind == ToolKind::Query) { queryTile(a, b); return; }
+    if (t->kind == ToolKind::Special) {
+        SimContext& c = sim_.context();
+        message_.clear();
+        bool ok = false;
+        if (t->cat == 3) ok = placeHydroDam(c, ts_, a, b);
+        else if (t->cat == 6 && t->sub == 2) ok = buildTunnel(c, ts_, a, b, t->sub);
+        else if (t->cat == 6) ok = placeOnramp(c, ts_, a, b, t->sub);
+        else ok = placeRailLink(c, ts_, a, b);
+        if (ok) say(std::string(t->name) + " built");
+        else if (message_.empty()) say(std::string("Can't build: ") + t->name);
+        return;
+    }
     if (t->kind != ToolKind::Building) return;
     const int cost = unitCost(*t);
     if (sim_.state().treasury < cost) { say("Not enough funds (" + moneyText(cost) + ")"); return; }
@@ -278,9 +317,17 @@ void GameUi::dragTool(int a0, int b0, int a1, int b1) {
     const ToolItem* t = tool();
     if (!t) return;
     startA_ = lastA_ = a0; startB_ = lastB_ = b0;
-    if (t->kind == ToolKind::Building || t->kind == ToolKind::Query) { applyClick(a0, b0); return; }
+    if (t->kind == ToolKind::Building || t->kind == ToolKind::Query || t->kind == ToolKind::Special) { applyClick(a0, b0); return; }
     dragging_ = true;
-    if (t->kind == ToolKind::Bulldoze) {
+    if (t->kind == ToolKind::Terrain) {
+        levelTarget_ = sim_.world().altm.at(a0, b0) & 0x1F;
+        int ca = a0, cb = b0;
+        terrainAt(ca, cb);
+        while (ca != a1 || cb != b1) {
+            if (std::abs(a1 - ca) >= std::abs(b1 - cb)) ca += a1 > ca ? 1 : -1; else cb += b1 > cb ? 1 : -1;
+            terrainAt(ca, cb);
+        }
+    } else if (t->kind == ToolKind::Bulldoze) {
         int ca = a0, cb = b0;
         bulldozeAt(ca, cb);
         while (ca != a1 || cb != b1) {
@@ -318,12 +365,13 @@ int GameUi::runModal(Modal& m) {
     return m.result;
 }
 
-bool GameUi::confirm(int id) {
+bool GameUi::confirm(int id, int amount) {
     Modal m;
     if (id == 0x6D || id == 0x6E) {
         const int fee = id == 0x6D ? 1000 : 1500;
         m.title = res_.string(id) + " to the neighbouring city for " + moneyText(fee) + "?";
-    } else m.title = "Are you sure?";
+    } else if (id == 0x15A) m.title = "Build the tunnel for " + moneyText(amount) + "?";
+    else m.title = "Are you sure?";
     m.options = {"Yes", "No"};
     return runModal(m) == 0;
 }
@@ -358,9 +406,12 @@ void GameUi::showDialog(int id) { toolMessage(id); }
 void GameUi::overlay(Framebuffer& fb) {
     const World& w = sim_.world();
     const ToolItem* t = tool();
-    if (preview_.valid) {
+    if (preview_.valid && t && t->kind == ToolKind::Highway) {
+        for (const auto& p : preview_.tiles)
+            for (int dx = 0; dx < 2; ++dx) for (int dy = 0; dy < 2; ++dy) renderer_.highlightTile(fb, w, cam_, p.first + dx, p.second + dy, 0xFFFFFF60u, 110);
+    } else if (preview_.valid) {
         for (const auto& p : preview_.tiles) renderer_.highlightTile(fb, w, cam_, p.first, p.second, 0xFFFFFF60u, 110);
-    } else if (dragging_ && t && t->kind == ToolKind::Network) {
+    } else if (dragging_ && t && (t->kind == ToolKind::Network || t->kind == ToolKind::Highway)) {
         renderer_.highlightTile(fb, w, cam_, startA_, startB_, 0xFFFF3030u, 140);   // path not possible
     }
     if (dragging_ && t && t->kind == ToolKind::Zone) {
@@ -406,7 +457,7 @@ void GameUi::draw(SDL_Renderer* r) {
         fill(r, 0, y, kGroupW, 34, 30, 34, 44);
         text(r, 4, y + 4, t->name, 255, 255, 160);
         const int c = unitCost(*t);
-        if (c >= 0) text(r, 4, y + 18, moneyText(c) + (t->kind == ToolKind::Network || t->kind == ToolKind::Zone ? " / tile" : ""), 200, 220, 200);
+        if (c >= 0) text(r, 4, y + 18, moneyText(c) + (t->kind == ToolKind::Network || t->kind == ToolKind::Zone || t->kind == ToolKind::Terrain || t->kind == ToolKind::Bulldoze ? " / tile" : t->kind == ToolKind::Highway ? " / piece" : ""), 200, 220, 200);
     }
     if (menuOpen_ && group_ >= 0) {
         const auto& g = cat[static_cast<size_t>(group_)];
