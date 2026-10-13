@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
                         const Uint64 t = SDL_GetTicks();
                         if (t - lastWheel > 300) wheelAcc = 0;
                         lastWheel = t;
-                        wheelAcc += e.wheel.y * (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.f : 1.f);
+                        wheelAcc += e.wheel.y;
                         if (wheelAcc >= 2.f) { ui.wheel(0, 0, 1); wheelAcc = 0; }
                         else if (wheelAcc <= -2.f) { ui.wheel(0, 0, -1); wheelAcc = 0; }
                         break;
