@@ -187,7 +187,7 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (!renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b)) return;
     if (!t) { queryTile(a, b); return; }
     switch (t->kind) {
-        case ToolKind::Bulldoze: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
+        case ToolKind::Bulldoze: playSound(0x1FC, -1); dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
         case ToolKind::TerrainEdit:
             dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b;
             editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = mapPx(y); editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
@@ -195,11 +195,14 @@ void GameUi::mouseDown(int x, int y, int button) {
             if (tool()->sub <= 2) playSound(0x1FC, -1);   // 0x424AD0 loop while the spray is held (stopped by 0x424AF0)
             break;
         case ToolKind::Landscape: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; landscapeAt(a, b); break;
-        case ToolKind::Dispatch: placeDispatch(sim_.context(), ts_, t->sub, a, b) ? say("Dispatched") : say("Can't dispatch there"); break;
+        case ToolKind::Dispatch:
+            if (placeDispatch(sim_.context(), ts_, t->sub, a, b)) { say("Dispatched"); static const int snd[3] = {0x1FA, 0x1FD, 0x20D}; playSound(snd[t->sub % 3]); }   // 0x44F4D0 / 0x44F6E0 / 0x44F8F0
+            else { say("Can't dispatch there"); playSound(0x1F5); }
+            break;
         case ToolKind::Terrain: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; levelTarget_ = sim_.world().altm.at(a, b) & 0x1F; terrainAt(a, b); break;
-        case ToolKind::Zone:
         case ToolKind::Highway:
-        case ToolKind::Network: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
+        case ToolKind::Network: playSound(0x1FC, -1); [[fallthrough]];
+        case ToolKind::Zone: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
         case ToolKind::Sign: signAt(a, b); break;
         case ToolKind::Building:
         case ToolKind::Special:
@@ -360,9 +363,10 @@ void GameUi::editSample(int pa, int pb, int pointerY) {   // one iteration of a 
 void GameUi::landscapeAt(int a, int b) {
     const ToolItem* t = tool();
     SimContext& c = sim_.context();
-    if (t->sub == 2) plantForest(c, ts_, a, b);
-    else if (t->sub == 3) placeStream(c, ts_, a, b);
-    else if (!landscapeTool(c, ts_, t->sub, a, b) && message_.empty()) say(sim_.state().treasury < unitCost(*t) ? "Not enough funds" : "Can't do that here");
+    if (t->sub == 2) { plantForest(c, ts_, a, b); playSound(0x1FF); }          // 0x442040 cases 5 / 6: trees and water
+    else if (t->sub == 3) { placeStream(c, ts_, a, b); playSound(0x1FF); }
+    else if (!landscapeTool(c, ts_, t->sub, a, b)) { if (message_.empty()) say(sim_.state().treasury < unitCost(*t) ? "Not enough funds" : "Can't do that here"); }
+    else playSound(0x1F7);                                                      // cases 7 / 8
 }
 
 void GameUi::terrainAt(int a, int b) {
@@ -374,6 +378,7 @@ void GameUi::terrainAt(int a, int b) {
     else if (t->sub == 2) ok = raiseTerrain(c, ts_, a, b);
     else ok = lowerTerrain(c, ts_, a, b, true);
     if (!ok && message_.empty()) say("Can't change the terrain there");
+    if (ok) playSound(0x1F7);
 }
 
 void GameUi::bulldozeAt(int a, int b) {
@@ -421,6 +426,7 @@ void GameUi::updatePreview() {
 void GameUi::finishDrag() {
     const ToolItem* t = tool();
     if (!t) return;
+    stopSound(0x1FC);   // the drag loop of bulldozer / roads / rails / lines / pipes (0x424AD0 .. 0x424AF0)
     SimContext& c = sim_.context();
     const int funds = sim_.state().treasury;
     bool ok = false;
@@ -443,7 +449,7 @@ void GameUi::finishDrag() {
         if (ok) say("Zoned for " + moneyText(cost));
         else say(cost > funds ? "Not enough funds (" + moneyText(cost) + ")" : "Nothing to zone there");
     }
-    if (t->kind == ToolKind::Highway || t->kind == ToolKind::Network || t->kind == ToolKind::Zone) playSound(ok ? (t->kind == ToolKind::Zone ? 0x1F7 : 0x1F5) : 0x1F4);
+    if (t->kind == ToolKind::Zone) playSound(ok ? 0x1F7 : 0x1F5);   // 0x442040: zones; the other drags only ran the 0x1FC loop
     preview_ = PathPreview{};
     previewCost_ = 0;
 }
@@ -462,7 +468,7 @@ void GameUi::applyClick(int a, int b) {
         else ok = placeRailLink(c, ts_, a, b);
         if (ok) say(std::string(t->name) + " built");
         else if (message_.empty()) say(std::string("Can't build: ") + t->name);
-        playSound(ok ? 0x1F5 : 0x1F4);
+        playSound(ok ? 500 : 0x1F5);   // 0x43EBC0: 500 = built, 0x1F5 = refused
         return;
     }
     if (t->kind != ToolKind::Building) return;
@@ -472,7 +478,21 @@ void GameUi::applyClick(int a, int b) {
     const bool built = placeBuilding(sim_.context(), ts_, t->cat, t->sub, a, b);
     if (built) say(std::string(t->name) + " built for " + moneyText(cost));
     else if (message_.empty()) say(std::string("Can't build the ") + t->name + " here");
-    playSound(built ? 0x1F5 : 0x1F4);
+    if (!built) playSound(0x1F5);
+    else {   // success sound by category / subtype, 0x43EBC0 cases 3..14
+        int snd = 500;
+        switch (t->cat) {
+            case 5: snd = 0x201; break;
+            case 6: if (t->sub == 4) snd = 0x209; break;
+            case 7: if (t->sub == 2) snd = 0x20C; break;
+            case 12: snd = 0x20B; break;
+            case 13: snd = t->sub == 1 ? 0x1FD : t->sub == 3 ? 0x20A : 0x1FA; break;
+            case 14: snd = t->sub == 2 ? 0x20F : 0x201; break;
+            default: break;
+        }
+        playSound(snd);
+        if (t->cat == 14) playMusic(0x271A);   // 0x424B30: the reward fanfare
+    }
 }
 
 void GameUi::queryTile(int a, int b) {

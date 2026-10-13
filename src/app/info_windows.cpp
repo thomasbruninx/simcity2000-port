@@ -229,7 +229,7 @@ struct Painter {
         if (w > rc.r - rc.l - 4 || rc.t + px * 5 / 4 > rc.b + px / 4) return false;
         if (draw) {
             const int x = align == 1 ? rc.l + (rc.r - rc.l - w) / 2 : align == 2 ? rc.r - 2 - w : rc.l + 2;
-            font.draw(t, ox + x, oy + rc.t, px, 20, 18, 14);
+            font.draw(t, ox + x, oy + rc.t, px, 0, 0, 0);
         }
         rc.t += px * 5 / 4;
         return true;
@@ -252,7 +252,11 @@ struct Painter {
     void greek(Rc rc) {
         if (rc.t >= rc.b) return;
         const int rows = (rc.b - rc.t) / 5;
-        auto bar = [&](int l, int t, int rr) { if (rr > l) fill(r, ox + l, oy + t, rr - l, 3, 70, 66, 58); };
+        auto bar = [&](int l, int t, int rr) {   // GDI Rectangle() with the default pen and brush: a black outline around one white row
+            if (rr - l < 2) return;
+            fill(r, ox + l, oy + t, rr - l, 3, 0, 0, 0);
+            fill(r, ox + l + 1, oy + t + 1, rr - l - 2, 1, 255, 255, 255);
+        };
         int row = 0;
         while (row < rows) {
             bar(rc.l + 13, row * 5 + rc.t + 2, rc.r - 3);
@@ -318,9 +322,9 @@ void InfoWindows::drawNewspaper(SDL_Renderer* r, int x0, int y0) {
     (void)seed;
     Painter P{r, *font_, layoutRng, x0, y0 + 4};
     const int ox = x0, oy = y0 + 4;
-    fill(r, ox, oy, 640, 400, 238, 234, 220);
+    fill(r, ox, oy, 640, 400, 255, 255, 255);   // the view's default (white) background
     // the two rules of the masthead band
-    for (int y : {R[0].t - 2, R[0].b - 2}) if (y >= 0) fill(r, ox + R[0].l + 3, oy + y, R[0].r - R[0].l - 7, 1, 20, 18, 14);
+    for (int y : {R[0].t - 2, R[0].b - 2}) if (y >= 0) fill(r, ox + R[0].l + 3, oy + y, R[0].r - R[0].l - 7, 1, 0, 0, 0);
 
     const int month = s.month(), years = s.day / 300, season = ((month + 1) % 12) / 3;
     static const char* months[12] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
