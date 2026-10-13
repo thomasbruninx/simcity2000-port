@@ -38,6 +38,7 @@ private:
     NewsRoom news_;
     bool popup_ = false;
     int page_ = 0, newsOpened_ = 0;
+    int ageMode_ = 0;                 // city window chart: 0 population, 1 health, 2 education by age
     Which last_ = Which::None;
     uint32_t session_ = 1;
     int period_ = 0;                  // graphs: 0 one year, 1 ten years, 2 a hundred years

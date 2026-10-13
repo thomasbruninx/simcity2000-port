@@ -116,7 +116,7 @@ void InfoWindows::drawCity(SDL_Renderer* r, int x, int y) {
     const int month = s.month();
     static const char* months[12] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
     int line = 0;
-    auto row = [&](const std::string& a, const std::string& b) { text(r, x + 24, y + 14 + line * 18, a, 190, 200, 220); text(r, x + 260, y + 14 + line * 18, b); ++line; };
+    auto row = [&](const std::string& a, const std::string& b) { text(r, x + 24, y + 8 + line * 14, a, 190, 200, 220); text(r, x + 360, y + 8 + line * 14, b); ++line; };
     row("Date", std::string(months[month]) + " " + std::to_string(s.startYear + s.day / 300));
     row("Population", std::to_string(s.population10));
     row("Residential population", std::to_string(s.catPop[0] * 10));
@@ -129,10 +129,40 @@ void InfoWindows::drawCity(SDL_Renderer* r, int x, int y) {
     row("Unemployment", std::to_string(s.c9610) + " %");
     row("Education quotient", std::to_string(s.cb4cc));
     row("Life expectancy", std::to_string(s.ca428));
-    row("Demand: residential / commercial / industrial", std::to_string(s.demand[0]) + " / " + std::to_string(s.demand[1]) + " / " + std::to_string(s.demand[2]));
+    row("Demand R / C / I", std::to_string(s.demand[0]) + " / " + std::to_string(s.demand[1]) + " / " + std::to_string(s.demand[2]));
     row("National population", std::to_string(s.nationalPop));
     row("Federal rate level", std::to_string(s.rateLevel));
     row("City class (milestone)", std::to_string(s.milestone));
+    // the population window (dialog 128): residents by age class, their health and their education (the job-market arrays of the economy model, 20 classes of 5 years)
+    static const int tabStrings[3] = {415, 416, 417};
+    const int cy = y + 8 + line * 14 + 6;
+    for (int m = 0; m < 3; ++m) {
+        fill(r, x + 24 + m * 110, cy, 100, 16, m == ageMode_ ? 90 : 50, m == ageMode_ ? 100 : 60, m == ageMode_ ? 150 : 80);
+        text(r, x + 32 + m * 110, cy + 4, res_.string(tabStrings[m]));
+    }
+    text(r, x + 360, cy + 4, res_.string(419));   // "Resident Age"
+    uint32_t value[20];
+    const uint32_t pop = s.population10;
+    for (size_t i = 0; i < 20; ++i) {
+        const uint32_t n = s.jobsA[i];
+        uint32_t v = 0;
+        if (pop != 0) {
+            if (ageMode_ == 0) { v = n * 600u / pop; if (n != 0 && v == 0) v = 1; }
+            else if (ageMode_ == 1) v = n == 0 ? 0 : s.jobsC[i] / n;
+            else v = n == 0 ? 0 : s.jobsB[i] * 15u / (n * 25u);
+        }
+        value[i] = v;
+    }
+    uint32_t top = 1;
+    for (uint32_t v : value) top = std::max(top, v);
+    const int by = cy + 22, bh = 80, bw = 26;
+    fill(r, x + 24, by, 20 * bw + 8, bh + 16, 22, 26, 38);
+    for (int i = 0; i < 20; ++i) {
+        const int h = static_cast<int>(value[static_cast<size_t>(i)] * static_cast<uint32_t>(bh) / top);
+        fill(r, x + 28 + i * bw, by + bh - h, bw - 3, h, ageMode_ == 0 ? 80 : (ageMode_ == 1 ? 80 : 200), ageMode_ == 0 ? 160 : (ageMode_ == 1 ? 200 : 180), ageMode_ == 0 ? 220 : (ageMode_ == 1 ? 120 : 60));
+        if (i % 2 == 0) text(r, x + 28 + i * bw, by + bh + 4, std::to_string(i * 5), 150, 160, 180);
+    }
+    text(r, x + 20 * bw + 40, by + 6, "age (years)", 150, 160, 180);
 }
 
 void InfoWindows::drawAdvisors(SDL_Renderer* r, int x, int y) {
@@ -236,6 +266,9 @@ bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
         if (mx > x + kW - 70) open = Which::None;
         for (int i = 0; i < 4; ++i) if (mx >= x + 110 + i * 100 && mx < x + 202 + i * 100) open = static_cast<Which>(i + 1);
         return true;
+    }
+    if (open == Which::City) {
+        for (int m = 0; m < 3; ++m) if (mx >= x + 24 + m * 110 && mx < x + 124 + m * 110 && my >= y + 8 + 16 * 14 + 6 && my < y + 8 + 16 * 14 + 22) ageMode_ = m;
     }
     if (open == Which::Graphs) {
         const int gx = x + 16, gy = y + 34 + 8, gh = 260;
