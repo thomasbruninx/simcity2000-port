@@ -408,14 +408,23 @@ std::string InfoWindows::storyText(int k, bool article) {
     const std::string head = news_.headline(entryOf[k], rg, ctx);
     if (!article) return head;
     CrtRand ra(seed);
-    return head + " -\n" + news_.article(entryOf[k], ra, ctx);
+    std::string text = head + " -\n" + news_.article(entryOf[k], ra, ctx);
+    for (char& ch : text) {   // 0x47A5C0: the Mac-roman curly quotes become plain ones
+        const unsigned char u = static_cast<unsigned char>(ch);
+        if (u == 0xD4 || u == 0xD5) ch = '\'';
+        else if (u == 0xD2 || u == 0xD3) ch = '"';
+    }
+    return text;
 }
 
 void InfoWindows::drawArticle(SDL_Renderer* r, int x, int y) {
     if (!font_) font_ = std::make_unique<TextRenderer>(r);
     const int bw = 460, bx = x + (kW - bw) / 2;
-    // word-wrap in pixels
+    // word-wrap in pixels; the type shrinks until the box fits the paper
     std::vector<std::string> lines;
+    int px = 17;
+    for (;; px -= 2) {
+    lines.clear();
     for (size_t pos = 0; pos <= articleText_.size();) {
         size_t nl = articleText_.find('\n', pos);
         if (nl == std::string::npos) nl = articleText_.size();
@@ -424,19 +433,21 @@ void InfoWindows::drawArticle(SDL_Renderer* r, int x, int y) {
             size_t j = para.find(' ', i);
             if (j == std::string::npos) j = para.size();
             const std::string word = para.substr(i, j - i);
-            if (!cur.empty() && font_->width(cur + " " + word, 17) > bw - 40) { lines.push_back(cur); cur.clear(); }
+            if (!cur.empty() && font_->width(cur + " " + word, px) > bw - 40) { lines.push_back(cur); cur.clear(); }
             cur += (cur.empty() ? "" : " ") + word;
             i = j + 1;
         }
         lines.push_back(cur);
         pos = nl + 1;
     }
-    const int bh = 70 + static_cast<int>(lines.size()) * 21, by = y + 40 + std::max(0, (330 - bh) / 2);
+    if (px <= 11 || 70 + static_cast<int>(lines.size()) * (px + 4) <= kH - 50) break;
+    }
+    const int lh = px + 4, bh = 70 + static_cast<int>(lines.size()) * lh, by = y + 25 + std::max(0, (kH - 50 - bh) / 2);
     fill(r, bx, by, bw, bh, 244, 240, 226);
     frame(r, bx, by, bw, bh, 20, 18, 14);
     frame(r, bx + 3, by + 3, bw - 6, bh - 6, 20, 18, 14);
     int ty = by + 14;
-    for (const std::string& l : lines) { font_->draw(l, bx + 20, ty, 17, 20, 18, 14); ty += 21; }
+    for (const std::string& l : lines) { font_->draw(l, bx + 20, ty, px, 20, 18, 14); ty += lh; }
     fill(r, bx + bw / 2 - 30, by + bh - 34, 60, 22, 214, 208, 188);
     frame(r, bx + bw / 2 - 30, by + bh - 34, 60, 22, 20, 18, 14);
     font_->draw("OK", bx + bw / 2 - font_->width("OK", 15) / 2, by + bh - 31, 15, 20, 18, 14);
@@ -447,9 +458,9 @@ bool InfoWindows::closeArticle() { const bool was = articleOpen_; articleOpen_ =
 
 bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
     if (open == Which::None) return false;
+    if (articleOpen_) { articleOpen_ = false; return true; }   // the message box: any click is its OK (also outside the paper)
     const int x = ox(sw), y = oy(sh);
     if (mx < x || my < y || mx >= x + kW || my >= y + kH) return true;
-    if (articleOpen_) { articleOpen_ = false; return true; }   // the message box: any click is its OK
     if (my < y + 26) {
         if (mx > x + kW - 70) open = Which::None;
         for (int i = 0; i < 4; ++i) if (mx >= x + 110 + i * 100 && mx < x + 202 + i * 100) open = static_cast<Which>(i + 1);

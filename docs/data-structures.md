@@ -19,7 +19,7 @@ Map is 128×128 tiles (VERIFIED: 16384-byte layers, `ALTM` = 2 bytes/tile).
 |---|---|---|
 | XMIC microsim | 150 × 8 | `u8 tileId; u8 stat0; u16 stat1; u16 stat2; u16 stat3` (packed) — 8-byte total matches the 1200-byte chunk |
 | XTHG things | 40 × 12 | `u8 type, dir, state, x, y, z, px, py, dx, dy, label, goal` — 12-byte total matches the 480-byte chunk |
-| XLAB labels | 256 × 25 | `char[24] text; u8 pad` (Pascal-length convention to be verified) — matches 6400 |
+| XLAB labels | 256 × 25 | files: Pascal strings (length byte, ≤24 chars); in memory (and in `World::xlab`) C strings, converted in `World::fromCity` / `writeBack` (0x44D140 treats them as C strings) |
 
 ## Integer-width caution (Phase 4 requirement)
 Do not "modernise" counters until their widths are proven. sc2kfix function signatures show `__int16` returns/params for the RNG and tile coordinates, `WORD` for microsim stats and `BYTE` for most map data. These are the first places where overflow/wrap behaviour must be examined (Phase 11, 16).
