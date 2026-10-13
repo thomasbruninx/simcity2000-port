@@ -75,6 +75,8 @@ int main(int argc, char** argv) {
         GameUi ui(*sim, renderer, cam, clock, resources, city);
         sim->setHooks(ui);
         ui.defaultMapPath = args.dir + "/DEFAULT.SC2";
+        ui.initNews(args.dir);
+        ui.setCityName(city.name());
         SoundBank bank(args.dir);
         Mixer mixer(&bank);
         std::unique_ptr<AudioDevice> audioDevice;

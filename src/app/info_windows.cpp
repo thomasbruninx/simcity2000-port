@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdio>
 
+#include <cstring>
+
 #include "app/ui_draw.h"
 
 namespace sc2k {
@@ -10,7 +12,7 @@ using namespace ui;
 
 namespace {
 constexpr uint32_t kSeriesColor[16] = {0xFFFFFF, 0x80FF80, 0x80C0FF, 0xFFE060, 0xFF8080, 0xA0A0A0, 0xC080FF, 0xFF4040, 0xFFC000, 0x40C0FF, 0x60FF60, 0xFFA0FF, 0xFF8040, 0xB0B040, 0x40E0B0, 0xE0E0E0};
-const char* kAdvisorNames[8] = {"Finance", "Police", "Fire", "Health", "Education", "Transit", "Environment", "Planning"};   // port labels
+const char* kAdvisorNames[8] = {"Economist", "City Council", "Treasurer", "Police Chief", "Fire Chief", "Health Minister", "Education Chief", "Transportation"};   // port labels (the exe has the portraits, not the titles)
 }  // namespace
 
 InfoWindows::InfoWindows(Simulation& sim, const PeResources& res) : sim_(sim), res_(res) {
@@ -23,52 +25,35 @@ InfoWindows::InfoWindows(Simulation& sim, const PeResources& res) : sim_(sim), r
     for (size_t i = 0; i < 16; ++i) if (seriesNames_[i].empty()) seriesNames_[i] = fallback[i];
 }
 
-// ---- advisor messages ----
-int InfoWindows::adviceString(int id) {
-    switch (id) {
-        case 0x10: return 301;   // crime too high
-        case 0x3D: return 299;   // crime low
-        case 0x11: return 325;   // traffic too high
-        case 0x3E: return 326;   // traffic very low
-        case 0x12: return 308;   // pollution
-        case 0x13: return 322;   // education poor
-        case 0x40: return 321;   // education fine
-        case 0x14: return 316;   // health poor
-        case 0x41: return 315;   // health fine
-        default: return 0;
-    }
-}
-int InfoWindows::advisorOf(int id) {
-    switch (id) {
-        case 0x10: case 0x3D: return 1;
-        case 0x11: case 0x3E: return 5;
-        case 0x12: return 6;
-        case 0x13: case 0x40: return 4;
-        case 0x14: case 0x41: return 3;
-        default: return 7;
-    }
+// ---- news queue ----
+void InfoWindows::initNews(const std::string& gameDir) {
+    newsData_ = NewsData::load(gameDir, sim_.tables().newsDigraph);
+    news_.setData(&newsData_);
+    session_ = static_cast<uint32_t>(SDL_GetTicks()) & 0xFFFF;   // the original seeds the page layout with GetTickCount (DAT_004E9140)
+    CrtRand r(session_);
+    news_.reset(r);
 }
 
 void InfoWindows::postMessage(int id, int arg) {
-    if (!adviceString(id)) return;
-    const int prio = id;   // the original orders by a per-message priority table (0x4CC634); the order of ids is used here
-    for (auto it = queue_.begin(); it != queue_.end(); ++it) if (it->id == id) { queue_.erase(it); break; }   // a repeated message only refreshes its entry
-    AdvisorMessage m{id, arg, prio};
-    auto it = queue_.begin();
-    while (it != queue_.end() && it->priority >= prio) ++it;
-    queue_.insert(it, m);
-    if (queue_.size() > 6) queue_.pop_back();   // the queue holds 6 entries
+    news_.post(id, arg);
+    if (id == 3 || id == 4 || id == 5 || id == 0x24) popup_ = true;   // 0x47BA90 opens the news dialog for these
 }
 
 // ---- drawing ----
 void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
-    if (open == Which::None) return;
+    if (open == Which::None) { last_ = Which::None; return; }
     if (!portraitsTried_) {
         portraitsTried_ = true;
         try {
             for (int id = 197; id <= 204; ++id) portraits_.push_back(std::make_unique<IconStrip>(r, Bmp8::fromDib(res_.bitmap(id)), 64, false));
         } catch (const std::exception&) { portraits_.clear(); }
     }
+    if (open == Which::Newspaper && last_ != Which::Newspaper) {   // opening the paper runs the opinion poll (it draws from the shared rand like the original)
+        runOpinionPoll(sim_.context());
+        ++newsOpened_;
+        page_ = newsOpened_ - 1;
+    }
+    last_ = open;
     const int x = ox(sw), y = oy(sh);
     fill(r, 0, 0, sw, sh, 0, 0, 0, 100);
     fill(r, x, y, kW, kH, 30, 34, 46);
@@ -151,55 +136,96 @@ void InfoWindows::drawCity(SDL_Renderer* r, int x, int y) {
 }
 
 void InfoWindows::drawAdvisors(SDL_Renderer* r, int x, int y) {
-    text(r, x + 20, y + 6, "The advisors speak up when the simulation notices a problem (queue of 6, most urgent first).", 170, 180, 200);
-    int row = 0;
-    for (const AdvisorMessage& m : queue_) {
-        const int by = y + 30 + row * 62;
-        const int adv = advisorOf(m.id);
-        fill(r, x + 14, by, kW - 28, 58, 40, 46, 62);
-        if (static_cast<size_t>(adv) < portraits_.size()) portraits_[static_cast<size_t>(adv)]->drawSized(r, 0, x + 20, by + 2, 44, 54);
-        text(r, x + 80, by + 8, kAdvisorNames[adv], 255, 255, 190);
-        std::string t = res_.string(adviceString(m.id));
-        if (t.size() > 66) { text(r, x + 80, by + 26, t.substr(0, 66)); text(r, x + 80, by + 40, t.substr(66, 66)); }
-        else text(r, x + 80, by + 30, t);
-        ++row;
+    text(r, x + 20, y + 6, "Your advisors (advice selection of the original, FUN_00419E10)", 170, 180, 200);
+    SimContext& c = sim_.context();
+    const uint32_t keep = c.rng.state();   // the health advisor draws a rand(); the window must not disturb the simulation
+    for (int adv = 0; adv < kAdvisorCount; ++adv) {
+        const int by = y + 22 + adv * 46;
+        fill(r, x + 14, by, kW - 28, 43, 40, 46, 62);
+        if (static_cast<size_t>(adv) < portraits_.size()) portraits_[static_cast<size_t>(adv)]->drawSized(r, 0, x + 20, by + 1, 38, 41);
+        text(r, x + 72, by + 6, kAdvisorNames[adv], 255, 255, 190);
+        const std::string t = res_.string(adviceString(advisorAdvice(c, adv)));
+        if (t.size() > 66) { text(r, x + 72, by + 20, t.substr(0, 66)); text(r, x + 72, by + 32, t.substr(66, 66)); }
+        else text(r, x + 72, by + 24, t);
     }
-    if (queue_.empty()) text(r, x + 30, y + 40, res_.string(294));   // "I have no advice at this time."
+    c.rng.seed(keep);
 }
 
-void InfoWindows::drawNewspaper(SDL_Renderer* r, int x, int y) {
-    const CityState& s = sim_.state();
-    const int paper = (s.startYear + s.day / 300 + static_cast<int>(s.population10 % 7)) % 6;
-    const std::string name = res_.string(360 + paper);
-    fill(r, x + 20, y + 4, kW - 40, 340, 236, 232, 214);
-    frame(r, x + 20, y + 4, kW - 40, 340, 70, 60, 40);
-    text(r, x + kW / 2 - static_cast<int>(name.size()) * 12 / 2, y + 16, "THE " + name, 20, 16, 10);
-    static const char* months[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    text(r, x + 36, y + 34, std::string(months[s.month()]) + " " + std::to_string(s.startYear + s.day / 300), 60, 50, 30);
-    text(r, x + 36, y + 60, "City population: " + std::to_string(s.population10) + "    Funds: " + money(s.treasury), 20, 16, 10);
-    // opinion survey (the exe's survey lines); the percentages are the port's own scaling of the history indicators
-    const CityState& st = s;
-    auto pct = [](long long v, long long full) { return static_cast<int>(std::clamp<long long>(v * 100 / full, 0, 100)); };
-    const int traffic = pct(st.graph[4 * 52], 128), pollute = pct(st.graph[5 * 52], 128), crime = pct(st.graph[7 * 52], 128), unemp = pct(st.c9610, 64);
-    const int taxes = pct((st.budget[kRes].fundingPercent + st.budget[kCom].fundingPercent + st.budget[kInd].fundingPercent) / 3, 20);
-    const int educate = 100 - pct(st.cb4cc, 100), health = 100 - pct(st.ca428, 100);
-    const int ids[7] = {367, 368, 369, 370, 371, 372, 373};
-    const int vals[7] = {traffic, pollute, crime, taxes, unemp, educate, health};
-    text(r, x + 36, y + 96, res_.string(357), 20, 16, 10);   // "Opinion Poll"
-    for (int i = 0; i < 7; ++i) {
-        std::string t = res_.string(ids[i]);
-        const size_t p = t.find("%d");
-        if (p != std::string::npos) t.replace(p, 2, std::to_string(vals[i]));
-        for (size_t q; (q = t.find("%%")) != std::string::npos;) t.erase(q, 1);   // wsprintf escape
-        text(r, x + 36, y + 116 + i * 16, t, 40, 30, 20);
+namespace {
+std::vector<std::string> wrap(const std::string& s, size_t width) {
+    std::vector<std::string> lines;
+    std::string cur;
+    size_t i = 0;
+    while (i < s.size()) {
+        if (s[i] == '\n') { lines.push_back(cur); cur.clear(); ++i; while (i < s.size() && s[i] == ' ') ++i; continue; }
+        size_t j = i;
+        while (j < s.size() && s[j] != ' ' && s[j] != '\n') ++j;
+        const std::string word = s.substr(i, j - i);
+        if (!cur.empty() && cur.size() + 1 + word.size() > width) { lines.push_back(cur); cur.clear(); }
+        if (!cur.empty()) cur += ' ';
+        cur += word;
+        i = j;
+        while (i < s.size() && s[i] == ' ') ++i;
     }
-    const int approval = 100 - (traffic + pollute + crime + taxes + unemp + educate + health) / 7;
-    std::string mayor = res_.string(353);
-    const size_t p = mayor.find("%d");
-    if (p != std::string::npos) mayor.replace(p, 2, std::to_string(approval));
-    for (size_t q; (q = mayor.find("%%")) != std::string::npos;) mayor.erase(q, 1);
-    text(r, x + 36, y + 240, mayor, 20, 16, 10);
-    if (!queue_.empty()) text(r, x + 36, y + 270, "Advisors: " + res_.string(adviceString(queue_.front().id)).substr(0, 60), 60, 40, 30);
+    if (!cur.empty()) lines.push_back(cur);
+    return lines;
+}
+}  // namespace
+
+void InfoWindows::drawNewspaper(SDL_Renderer* r, int x, int y) {
+    SimContext& c = sim_.context();
+    CityState& s = c.s;
+    const std::array<uint8_t, 30>& pages = news_.pages();
+    const int pg = page_ % 6;
+    const std::string name = res_.string(0x168 + pages[static_cast<size_t>(pg) * 5]);
+    fill(r, x + 20, y + 4, kW - 40, 420, 236, 232, 214);
+    frame(r, x + 20, y + 4, kW - 40, 420, 70, 60, 40);
+    text(r, x + kW / 2 - static_cast<int>(name.size() + 4) * 12 / 2, y + 12, "THE " + name, 20, 16, 10);
+    static const char* months[12] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+    text(r, x + 36, y + 30, std::string(months[s.month()]) + " " + std::to_string(s.startYear + s.day / 300) + "    " + res_.string(377 + (pages[static_cast<size_t>(pg) * 5 + 2] % 4)), 60, 50, 30);
+    NewsRoom::Context ctx;
+    ctx.cityName = sim_.state().scenario ? std::string("the city") : std::string("the city");
+    ctx.label = [&](int idx) { const char* p = reinterpret_cast<const char*>(&sim_.world().xlab[static_cast<size_t>(idx & 0xFF) * 25]); return std::string(p, strnlen(p, 24)); };
+    // the city's name: the first label of the file is not it; CNAM is shown by the file loader, the port keeps "the city" unless the game gives one
+    if (!cityName.empty()) ctx.cityName = cityName;
+    const uint32_t seed = session_ + static_cast<uint32_t>(pg) * 500u + static_cast<uint32_t>(s.day / 25);
+    if (newsData_.loaded) {
+        CrtRand rg(seed + 0x1c);
+        const std::string head = news_.headline(0, rg, ctx);
+        text(r, x + 36, y + 52, head, 10, 8, 4);
+        CrtRand ra(seed + 0x1c);
+        news_.headline(0, ra, ctx);   // same rule choice and word cache as the headline
+        CrtRand rb(seed + 0x1c);
+        const std::string body = news_.article(0, rb, ctx);
+        int ty = y + 76;
+        for (const std::string& line : wrap(body, 56)) { if (ty > y + 190) break; text(r, x + 36, ty, line, 40, 30, 20); ty += 12; }
+        for (int k = 1; k <= 4; ++k) {
+            CrtRand rs(static_cast<uint32_t>(k + 6) * 7u + seed);
+            const std::string h = news_.headline(k, rs, ctx);
+            const int col = (k - 1) % 2, row = (k - 1) / 2;
+            text(r, x + 36 + col * 290, y + 200 + row * 14, "* " + h.substr(0, 40), 30, 24, 16);
+        }
+    } else {
+        text(r, x + 36, y + 60, "(DATA/DATA_USA.DAT not found: no stories)", 120, 60, 40);
+    }
+    // the opinion poll of the day (0x4729F0): the four most common complaints and the mayor's approval
+    text(r, x + 36, y + 240, res_.string(357), 20, 16, 10);   // "Opinion Poll"
+    int line = 0;
+    for (int i = 0; i < 4 && s.pollCount[static_cast<size_t>(i)] != 0; ++i, ++line) {
+        std::string t = res_.string(0x16F + s.pollOrder[static_cast<size_t>(i)]);
+        const size_t p = t.find("%d");
+        if (p != std::string::npos) t.replace(p, 2, std::to_string(s.pollCount[static_cast<size_t>(i)]));
+        for (size_t q; (q = t.find("%%")) != std::string::npos;) t.erase(q, 1);
+        text(r, x + 36, y + 260 + line * 16, t, 40, 30, 20);
+    }
+    if (s.approval != 0) {
+        std::string mayor = res_.string(353);
+        const size_t p = mayor.find("%d");
+        if (p != std::string::npos) mayor.replace(p, 2, std::to_string(s.approval));
+        for (size_t q; (q = mayor.find("%%")) != std::string::npos;) mayor.erase(q, 1);
+        text(r, x + 36, y + 330, mayor, 20, 16, 10);
+    }
+    text(r, x + 36, y + 360, "City population: " + std::to_string(s.population10) + "    Funds: " + money(s.treasury), 20, 16, 10);
 }
 
 bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {

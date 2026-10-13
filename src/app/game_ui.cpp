@@ -110,6 +110,7 @@ bool GameUi::overUi(int x, int y) const {
 }
 
 void GameUi::update(int dtMs) {
+    if (info_.popupDue() && !headless && info_.open == InfoWindows::Which::None && !modal_) info_.open = InfoWindows::Which::Newspaper;   // milestone / new tool stories pop the paper up
     const ThingState& th = sim_.context().things;
     const bool emergency = th.monsters > 0 || th.tornados > 0 || th.fireMessageKind >= 0;
     if (emergency && !emergency_) { startDispatch(sim_.context(), ts_); say("Emergency! The dispatch tool is available."); }

@@ -72,7 +72,7 @@ void SimImage::load(const World& w, const CityState& s) {
     e.put<int32_t>(0x4C9E1C, s.day);
     e.put<int16_t>(0x4C9610, int16_t(s.c9610)); e.put<int16_t>(0x4C9448, int16_t(s.c9448));
     e.put<int32_t>(0x4C84DC, s.extraPop); e.put<int16_t>(0x4CA41C, int16_t(s.econIndex)); e.put<int32_t>(0x4C9608, s.popHistorySum);
-    e.put<int32_t>(0x4C91AC, s.ratioMemory); e.put<int32_t>(0x4C9D44, s.budgetYearFlag);
+    e.put<int32_t>(0x4C94E8, s.cityValue); e.put<int32_t>(0x4C91AC, s.ratioMemory); e.put<int32_t>(0x4C9D44, s.budgetYearFlag);
     e.put<int32_t>(0x4CA470, s.centerA2); e.put<int32_t>(0x4CA474, s.centerB2); e.put<int16_t>(0x4CA034, int16_t(s.month()));
 }
 

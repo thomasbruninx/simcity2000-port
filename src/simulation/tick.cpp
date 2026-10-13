@@ -42,7 +42,8 @@ void runEvents(SimContext& c) {
         const int id2 = w.xbld.at(a, b);
         if (!water(a, b) && id2 < 0xC && id2 != 5) setTile(c, a, b, id2 < 6 ? 6 : id2 + 1);
     }
-    // 0x479F40: age the advisor queue (message queue is UI state), then post the monthly topic
+    // 0x479F40: age the news queue (UI state), then post the monthly topic
+    c.hooks.newsAge();
     msg(1, 0);
     switch (rmod(6)) {
         case 0: {

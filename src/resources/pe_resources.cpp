@@ -23,7 +23,21 @@ PeResources::PeResources(const PeImage& pe) {
     if (!root) return;
     Rd r{pe};
     for (const Entry& type : entries(r, root)) {
-        if (!(type.offset & 0x80000000u) || (type.name & 0x80000000u)) continue;
+        if (!(type.offset & 0x80000000u)) continue;
+        if (type.name & 0x80000000u) {   // custom resource type by name, e.g. "DATA": the newspaper's text tables (ids 1000..1005)
+            const uint32_t at = root + (type.name & 0x7FFFFFFFu);
+            std::string typeName;
+            for (int j = 0, len = r.u16(at); j < len; ++j) typeName.push_back(static_cast<char>(r.u16(at + 2 + 2u * static_cast<uint32_t>(j))));
+            for (const Entry& name : entries(r, root + (type.offset & 0x7FFFFFFFu))) {
+                if ((name.name & 0x80000000u) || !(name.offset & 0x80000000u)) continue;
+                const auto langs = entries(r, root + (name.offset & 0x7FFFFFFFu));
+                if (langs.empty() || (langs[0].offset & 0x80000000u)) continue;
+                const uint32_t leaf = root + langs[0].offset;
+                const auto b = pe.bytesAtRva(r.u32(leaf), r.u32(leaf + 4));
+                custom_[typeName][static_cast<int>(name.name)].assign(b.begin(), b.end());
+            }
+            continue;
+        }
         const int typeId = static_cast<int>(type.name);
         if (typeId != 2 && typeId != 5 && typeId != 6) continue;
         for (const Entry& name : entries(r, root + (type.offset & 0x7FFFFFFFu))) {

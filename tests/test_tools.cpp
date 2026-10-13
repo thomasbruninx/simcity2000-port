@@ -5,6 +5,7 @@
 #include "simulation/bonds.h"
 #include "simulation/new_city.h"
 #include "simulation/scenario.h"
+#include "simulation/news.h"
 #include "simulation/query.h"
 #include "resources/pe_resources.h"
 #include "simulation/simulation.h"
@@ -229,4 +230,30 @@ TEST(microsim_dialog_lines_follow_the_building_class) {
     MicrosimInfo m; m.b1 = 12; m.w2 = 3; m.w4 = 2; m.w6 = 1990;
     CHECK(formatMicrosimLine(m, "Built in : #3, grade #G, #W", str) == "Built in : 1990, grade A+, 12-28");
     CHECK(formatMicrosimLine(m, "Design Capacity : #1000", str) == "Design Capacity : 3000");
+}
+
+TEST(newspaper_text_grammar_generates_stories) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    const NewsData data = NewsData::load(dir, t.newsDigraph);
+    CHECK(data.loaded && data.count[1] == 8 && data.start[1] == 93 && data.priority[2] == 1000 && data.decay[2] == 500);
+    NewsRoom room(&data);
+    CrtRand rng(7);
+    room.reset(rng);
+    CHECK(room.entries()[0].id == 11 && room.entries()[8].id == 19);
+    room.post(22, 0);            // priority 1000: goes to the top
+    room.post(7, 0);             // priority 200: below
+    CHECK(room.entries()[0].id == 22 && room.entries()[1].id == 7);
+    room.age();
+    CHECK(room.entries()[0].id == 22);
+    NewsRoom::Context ctx; ctx.cityName = "Testville"; ctx.label = [](int) { return std::string("Label"); };
+    CrtRand a(5), b(5);
+    const std::string h1 = room.headline(0, a, ctx), h2 = room.headline(0, b, ctx);
+    CHECK(!h1.empty() && h1 == h2);                       // deterministic for the same seed
+    CrtRand c1(5), c2(5);
+    const std::string art = room.article(0, c1, ctx);
+    CHECK(art.size() > 40 && art.find("Testville") != std::string::npos);
+    std::printf("  headline: %s\n  article: %.160s\n", h1.c_str(), art.c_str());
 }

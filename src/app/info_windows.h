@@ -10,6 +10,8 @@
 
 #include "app/icons.h"
 #include "resources/pe_resources.h"
+#include "simulation/advisors.h"
+#include "simulation/news.h"
 #include "simulation/simulation.h"
 
 namespace sc2k {
@@ -20,19 +22,24 @@ public:
     InfoWindows(Simulation& sim, const PeResources& res);
 
     Which open = Which::None;
+    std::string cityName;             // shown by the newspaper stories ('=' token)
     void draw(SDL_Renderer* r, int screenW, int screenH);
     bool mouseDown(int x, int y, int screenW, int screenH);   // true when consumed (a window is open: clicks outside close nothing but are swallowed)
-    void postMessage(int id, int arg);                        // from ZoneHooks::postMessage: feeds the advisor queue
-
-    struct AdvisorMessage { int id = 0, arg = 0; int priority = 0; };
-    const std::vector<AdvisorMessage>& queue() const { return queue_; }
-    static int adviceString(int messageId);                   // exe string id of the advice for a message id (0 = none known)
-    static int advisorOf(int messageId);                      // 0..7 advisor that voices it
+    void postMessage(int id, int arg);                        // from ZoneHooks::postMessage: the news queue (0x47BA90)
+    void age() { news_.age(); }                               // from ZoneHooks::newsAge (0x479F4B)
+    void initNews(const std::string& gameDir);                // loads DATA/DATA_USA.* (the newspaper's text grammar)
+    bool popupDue() { const bool d = popup_; popup_ = false; return d; }   // a milestone / new-tool story arrived: the newspaper pops up
+    const NewsRoom& news() const { return news_; }
 
 private:
     Simulation& sim_;
     const PeResources& res_;
-    std::vector<AdvisorMessage> queue_;
+    NewsData newsData_;
+    NewsRoom news_;
+    bool popup_ = false;
+    int page_ = 0, newsOpened_ = 0;
+    Which last_ = Which::None;
+    uint32_t session_ = 1;
     int period_ = 0;                  // graphs: 0 one year, 1 ten years, 2 a hundred years
     uint32_t shown_ = 0x1FF;          // graphs: bit per series
     std::vector<std::string> seriesNames_;

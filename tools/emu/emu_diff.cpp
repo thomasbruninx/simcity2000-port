@@ -22,6 +22,7 @@
 #include "simulation/water.h"
 #include "simulation/tool_script.h"
 #include "simulation/availability.h"
+#include "simulation/advisors.h"
 #include "simulation/bonds.h"
 
 using namespace sc2k;
@@ -958,6 +959,69 @@ int disasterDiff(const std::string& exe, const std::string& path, long& tiles, l
     }
     return failures;
 }
+
+// ---- advisors: FUN_00419e10 (advice selection) on randomised city indicators ----
+int advisorDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+    Emu e(exe); e.installCrtRand(99);
+    SimImage img(e);
+    img.load(w, s); img.setLfsr(0x1234); img.stubUi();
+    const uint32_t cell = Emu::kRandState + 0x3100, fake = img.fakeView;
+    { auto zero = [](Emu&, uint32_t) { return 0u; }; e.nativeImport(0x4EEDD4, 4, zero); }
+    { const uint8_t zeroEax[3] = {0x31, 0xC0, 0xC3}; e.write(0x48AFFE, zeroEax, 3); }
+    e.patchRetN(0x401636, 8); e.patchRet(0x401424); e.patchRet(0x4A62E3); e.patchRetN(0x4A2AD3, 4); e.patchRetN(0x401B90, 4); e.patchRetN(0x424AA0, 4);
+    { const uint8_t st[10] = {0x8B, 0x44, 0x24, 0x04, 0xA3, uint8_t(cell), uint8_t(cell >> 8), uint8_t(cell >> 16), uint8_t(cell >> 24), 0xC2}; e.write(0x41A620, st, 10); const uint8_t tail[2] = {0x04, 0x00}; e.write(0x41A62A, tail, 2); }
+    CrtRand rng(99); Lfsr lf(0x1234); ZoneHooks hooks; TrafficStats ts;
+    World pw = w; CityState ps = s;
+    SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+    uint32_t r32 = 0xA5A5A5A5u; auto rn = [&](uint32_t n) { r32 ^= r32 << 13; r32 ^= r32 >> 17; r32 ^= r32 << 5; return r32 % n; };
+    long checked = 0; std::map<int, long> seen; int failures = 0;
+    for (int trial = 0; trial < 400; ++trial) {
+        ps.treasury = int(rn(400000)) - 40000; ps.population10 = rn(1500000); ps.debt = int(rn(20)); ps.rateLevel = 1 + int(rn(8)); ps.cityValue = int(rn(4000000));
+        for (int i = 0; i < 3; ++i) ps.demand[size_t(i)] = int16_t(int(rn(3000)) - 1500);
+        ps.ordinances = rn(1u << 20); ps.powerPct = int(rn(130)); ps.graph[5 * 52] = int(rn(60)); ps.graph[7 * 52] = int(rn(60));
+        ps.budgetYearFlag = int(rn(2)); ps.day = int(rn(300 * 3)) * 1;
+        for (int id : {0xD1, 0xD3, 0xD6, 0xD9}) ps.census[size_t(id)] = int16_t(rn(80));
+        for (int i = 0; i < 20; ++i) ps.jobsA[size_t(i)] = rn(40000);
+        for (size_t i = 0; i < 16; ++i) { ps.budget[i].currentCosts = int(rn(3000)); ps.budget[i].fundingPercent = int(rn(110)); ps.budget[i].yearToDate = int(rn(100000)); }
+        img.load(pw, ps);
+        for (size_t i = 0; i < 16; ++i) {   // the budget window's projections (+0x6c of each record)
+            const BudgetRecord& r = ps.budget[i]; const int32_t rate = r.currentCosts * r.fundingPercent;
+            e.put<int32_t>(img.budget + 0x70u * uint32_t(i) + 0x6C, ps.budgetYearFlag == 0 ? (11 - ps.month()) * rate + r.yearToDate : rate * 12);
+        }
+        e.put<uint32_t>(cell, 0xFFFF);
+        for (int adv = 0; adv < 8; ++adv) {
+            e.put<uint32_t>(fake + 0x48, uint32_t(adv));
+            e.call(0x419E10, {}, fake);
+            const int orig = int(e.get<uint32_t>(cell));
+            const int port = advisorAdvice(ctx, adv);
+            ++checked; ++seen[adv * 100 + port];
+            if (orig != port || e.crtRandState() != rng.state()) {
+                std::printf("%-30s trial %d advisor %d: original %d port %d rand %s\n", path.c_str(), trial, adv, orig, port, e.crtRandState() == rng.state() ? "same" : "DIFF");
+                ++failures; ++bad; ++tiles; return 1;
+            }
+        }
+    }
+    // the opinion poll 0x4729F0
+    e.patchRet(0x42B0C0);
+    for (int trial = 0; trial < 300; ++trial) {
+        ps.population10 = rn(3) == 0 ? rn(150) : rn(900000); ps.cb4cc = rn(130); ps.ca428 = rn(100); ps.c9610 = int(rn(70)); ps.approval = int(rn(100));
+        for (int k : {4, 5, 6, 7}) ps.graph[size_t(k) * 52] = int(rn(120));
+        ps.budget[kRes].fundingPercent = int(rn(25));
+        img.load(pw, ps); e.put<int16_t>(0x4E88F4, int16_t(ps.approval));
+        e.call(0x4729F0);
+        const bool crossed = runOpinionPoll(ctx);
+        (void)crossed;
+        bool same = e.crtRandState() == rng.state() && e.get<int16_t>(0x4E88F4) == int16_t(ps.approval);
+        for (int i = 0; i < 7; ++i) same = same && e.get<int16_t>(0x4C8428 + 2u * i) == ps.pollOrder[size_t(i)] && e.get<int16_t>(0x4C8418 + 2u * i) == ps.pollCount[size_t(i)];
+        if (!same) { std::printf("%-30s poll trial %d differs (approval %d/%d)\n", path.c_str(), trial, int(e.get<int16_t>(0x4E88F4)), int(ps.approval)); ++tiles; ++bad; return 1; }
+    }
+    ++tiles;
+    std::printf("%-34s %ld advice choices and 300 opinion polls identical (%zu distinct advisor/advice pairs)\n", path.c_str(), checked, seen.size());
+    return failures;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -978,6 +1042,7 @@ int main(int argc, char** argv) {
             else if (mode == "avail") failures += availDiff(exe, argv[i], tiles, bad);
             else if (mode == "tools") failures += toolsDiff(exe, argv[i], tiles, bad);
             else if (mode == "disaster") failures += disasterDiff(exe, argv[i], tiles, bad);
+            else if (mode == "advisor") failures += advisorDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);

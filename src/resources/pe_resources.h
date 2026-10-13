@@ -19,6 +19,8 @@ public:
     // Bitmaps stored under a name instead of a number (the toolbar buttons: e.g. "BULLDOZERU"); names upper-cased as stored.
     std::vector<uint8_t> namedBitmap(const std::string& name) const { const auto it = namedBitmaps_.find(name); return it == namedBitmaps_.end() ? std::vector<uint8_t>() : it->second; }
     const std::map<std::string, std::vector<uint8_t>>& namedBitmaps() const { return namedBitmaps_; }
+    // Raw bytes of a custom resource (type given by name, e.g. "DATA"), empty when missing.
+    std::vector<uint8_t> custom(const std::string& type, int id) const { const auto t = custom_.find(type); if (t == custom_.end()) return {}; const auto i = t->second.find(id); return i == t->second.end() ? std::vector<uint8_t>() : i->second; }
     const std::map<int, std::string>& strings() const { return strings_; }
     // Controls of a dialog template (RT_DIALOG): id and caption text of every control, in template order.
     struct DialogControl { int id; int x, y, w, h; std::string cls; std::string text; };
@@ -30,6 +32,7 @@ private:
     std::map<int, std::vector<uint8_t>> bitmaps_;
     std::map<std::string, std::vector<uint8_t>> namedBitmaps_;
     std::map<int, std::string> strings_;
+    std::map<std::string, std::map<int, std::vector<uint8_t>>> custom_;
     std::map<int, Dialog> dialogs_;
 };
 

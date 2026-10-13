@@ -65,6 +65,8 @@ struct CityState {
     int32_t developedTiles = 0;                          // @0x4C83CC (runtime, set by the environment scan)
     std::optional<ScenarioInfo> scenario;               // goals of a loaded .SCN file (not part of the save format of cities)
     int32_t scenarioMonthsLeft = 0;                     // @0x4CB934: counts down once a month while the goals are not met
+    int32_t approval = 0;                               // @0x4E88F4: share of 100 polled citizens with no complaint = the mayor's approval rating (runtime)
+    std::array<int16_t, 7> pollOrder{0, 1, 2, 3, 4, 5, 6}, pollCount{};   // @0x4C8428 / 0x4C8418: concerns (traffic, pollution, crime, taxes, unemployment, education, health) by popularity and their counts
     int32_t disasterKind = 0, disasterActive = 0;       // MISC 1041 @0x4C9954 (kind of the running / last disaster) / MISC 1042 @0x4C8F00 (a disaster is in progress)
     int32_t c9448 = 0;                                   // MISC 1038 @0x4C9448 (int16): police capacity total of the last yearly update
     int32_t policeBase = 0;                              // MISC 1039 @0x4C91F4

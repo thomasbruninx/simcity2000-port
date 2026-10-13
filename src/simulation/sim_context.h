@@ -15,6 +15,7 @@ namespace sc2k {
 struct ZoneHooks {
     virtual ~ZoneHooks() = default;
     virtual void scrollTo(int /*a*/, int /*b*/) {}                       // 0x440C90 (UI)
+    virtual void newsAge() {}                                            // 0x479F40: the news queue ages (called once a month from the event phase)
     virtual void postMessage(int /*id*/, int /*arg*/) {}                 // 0x47BA90 (advisor/news queue)
     virtual void uiFlag(int /*which*/) {}
     // 25-byte building-name template (game text, loaded from the data files) for a building id; nullptr = all zeros.

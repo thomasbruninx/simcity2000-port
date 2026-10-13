@@ -60,13 +60,16 @@ public:
     bool saveCity(const std::string& path);
     void newCity(int era, int difficulty);             // start a new city on the default map (scripting)
     void newCityDialog();                              // asks for the starting year and the difficulty (the original dialog 101)
-    std::string defaultMapPath;                        // DEFAULT.SC2 of the game directory
+    std::string defaultMapPath;
+    void setCityName(const std::string& n) { info_.cityName = n; }
+    void initNews(const std::string& dir) { info_.initNews(dir); }                        // DEFAULT.SC2 of the game directory
 
     // ZoneHooks
     bool confirm(int stringId, int amount = 0) override;
     int chooseBridge(int length, int allowedMask) override;
     void toolMessage(int id) override;
     void postMessage(int id, int arg) override;
+    void newsAge() override { info_.age(); }
     void showDialog(int stringId) override;
     const uint8_t* labelTemplate(int id, bool custom) override;   // default building names (strings 831..888) for new microsim buildings
     int chooseStadiumSport() override;

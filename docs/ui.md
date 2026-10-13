@@ -12,11 +12,7 @@ headlessly (`sc2k-app <dir> city.sc2 --screenshot out.png --do "..."`).
 * graphs: the ported history (0x413910): 16 series x 52 samples = 12 monthly, 20 half-yearly, 20 five-yearly; scales per series group.
 
 ## The port's own (documented approximations)
-* **Advisors**: the exe's advisor sentences (strings 294–326) and portraits (bitmaps 197–204) are used, and the simulation's advisor messages (ported `msg()` calls, queue of 6 as in 0x47BA90)
-  fill the window, but the assignment message id -> sentence / advisor (e.g. 0x10 crime -> 301) and the advisor labels are the port's reading; the original's per-advisor advice
-  functions live inside large MFC dialog handlers and were not recovered.
-* **Newspaper**: paper name from strings 360–365, poll lines from strings 353 / 367–373 with percentages scaled from the history indicators; the original's token-based article
-  generator (TEXT_USA.DAT, "VERB the ADJECTIVE NOUN") and the real approval rating are not ported.
+* **Advisors** and the **newspaper** follow the original's code (docs/simulation/newspaper.md): advice selection and opinion poll are emulator-verified, the stories come from the original's text grammar in DATA/DATA_USA.DAT. Only the page layout (one layout instead of six), fonts, photographs and the advisors' titles are the port's own.
 * **City window** lists statistics; the original's population / health / education age graphs need the age model, which is not ported.
 * Query: building-specific microsimulation dialogs (strings 910–982, e.g. "Employees : #1") and building names are implemented (docs/simulation/tools.md); N renames the queried building. The sign tool (0x44D140) is ported too. Ctrl+N starts a new city (docs/simulation/new-city.md), M toggles the sound (docs/audio.md).
 * Bonds window shows each bond's rate and yearly cost, not the issue month.
