@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
         auto sim = std::make_unique<Simulation>(city, GameTables::fromExe(dir + "/SIMCITY.EXE"), 1);
         SpriteSet sprites = SpriteSet::load(dir);
         Bmp8 pal = Bmp8::load(dir + "/BITMAPS/PAL_MSTR.BMP");
-        MapRenderer renderer(sim->tables(), sprites, pal.palette);
+        PaletteCycler cycler(pal.palette, sim->tables());
+        MapRenderer renderer(sim->tables(), sprites, cycler.palette());
         Camera cam;
         cam.rotation = sim->state().rotation & 3;
         int width = 1280, height = 800;
@@ -91,6 +92,7 @@ int main(int argc, char** argv) {
             const Uint64 now = SDL_GetTicks();
             const int dt = static_cast<int>(now - last);
             last = now;
+            cycler.update(dt);
             const int steps = clock.advance(dt);
             for (int i = 0; i < steps; ++i) sim->tick();
             thingAcc += static_cast<Uint64>(dt);

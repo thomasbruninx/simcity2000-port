@@ -44,5 +44,5 @@ TEST(render_sprites_and_map_match_the_recorded_output) {
     size_t drawn = 0;
     for (uint32_t p : fb.pixels) drawn += p != 0xFF101820u;
     CHECK(drawn > 100000);                           // the city fills the view
-    CHECK(fnv(fb) == 0x3d1c4a5d40384a9dull);        // regression fingerprint of THIS renderer (visually checked, not recorded from the original)
+    CHECK(fnv(fb) == 0xbed38dc544d5f580ull);        // regression fingerprint of THIS renderer (visually checked, not recorded from the original)
 }

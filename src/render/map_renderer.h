@@ -22,16 +22,32 @@ struct Camera {
 };
 
 struct RenderLayers {
-    bool terrain = true, buildings = true, zones = true, things = true;
+    bool terrain = true, buildings = true, zones = true, things = true, traffic = true;
+};
+
+// Palette animation of the original (0x456A60 / 0x456B70): 49 entries from index 0xAB rotate (water shimmer) and 16 entries from 0xE0
+// swap in pairs (blinking lights). Keeps a working copy of the palette that the renderer reads.
+class PaletteCycler {
+public:
+    PaletteCycler(const std::array<uint32_t, 256>& base, const GameTables& t) : base_(base), work_(base), t_(t) {}
+    void update(int elapsedMs);
+    const std::array<uint32_t, 256>& palette() const { return work_; }
+private:
+    std::array<uint32_t, 256> base_, work_;
+    const GameTables& t_;
+    int waterMs_ = 0, blinkMs_ = 0;
 };
 
 class MapRenderer {
 public:
+    // `palette` is read on every draw: pass PaletteCycler::palette() to animate the water.
     MapRenderer(const GameTables& tables, const SpriteSet& sprites, const std::array<uint32_t, 256>& palette) : t_(tables), sprites_(sprites), pal_(palette) {}
     void draw(Framebuffer& fb, const World& w, const CityState& s, const Camera& cam, const RenderLayers& layers = {}) const;
 
 private:
-    void blit(Framebuffer& fb, int spriteId, int x, int yTop, bool flip) const;
+    void blit(Framebuffer& fb, int spriteId, int x, int yTop, bool flip, bool shadow = false) const;
+    void drawThing(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, int da, int db, int slot) const;
+    void drawMonster(Framebuffer& fb, const World& w, const Camera& cam, int a, int b, int slot) const;
     const GameTables& t_;
     const SpriteSet& sprites_;
     const std::array<uint32_t, 256>& pal_;

@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
         cam.rotation = argc > 9 ? std::atoi(argv[9]) : s.rotation;
         const int ca = argc > 8 ? std::atoi(argv[7]) : s.centerA2 / 2, cb = argc > 8 ? std::atoi(argv[8]) : s.centerB2 / 2;
         cam.centerOn(ca, cb, W / 2, H / 2);
+        for (int i = 1; i < 0x28; ++i) { const uint8_t* r = &w.xthg[static_cast<size_t>(i) * 12]; if (r[0]) std::printf("thing %d: type %d heading %d state %d at %d,%d\n", i, r[0], r[1], r[2], r[3], r[4]); }
         Framebuffer fb(W, H, 0xFF101820u);
         MapRenderer(t, sprites, pal.palette).draw(fb, w, s, cam);
         if (!writePng(argv[3], fb)) { std::fprintf(stderr, "cannot write %s\n", argv[3]); return 1; }

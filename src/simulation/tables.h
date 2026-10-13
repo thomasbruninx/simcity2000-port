@@ -69,6 +69,24 @@ struct GameTables {
     int16_t milestoneCycle = 0;                          // @0x4E88F4
     std::array<int32_t, 16> plantCost{};                 // @0x4DB030: replacement cost of a power plant that reached the end of its life
     std::array<int16_t, 256> terrainSprite{};            // @0x4E6608: sprite (zoom-0 numbering) for each XTER value; +500 per zoom level
+    // Drawing tables (renderer): things, traffic cars, palette cycling, see docs/rendering/
+    std::array<int16_t, 49> waterCycle{};                // @0x4E74A8: palette entries 0xAB.. rotate by this permutation
+    std::array<int16_t, 16> blinkCycle{};                // @0x4E7510: palette entries 0xE0..0xEF swap by this permutation
+    std::array<uint8_t, 128> carVariant{};               // @0x4E670B: car sprite variant on the road piece with this XBLD id (0 = none)
+    std::array<uint8_t, 16> heavyCar{};                  // @0x4E6778: variant used under heavy traffic
+    std::array<int16_t, 24> thingSprite{};               // @0x4E7070: base sprite by thing type
+    std::array<int16_t, 24> thingMinZoom{};              // @0x4E7098: smallest zoom at which the thing type is drawn
+    std::array<uint8_t, 8> aircraftFrame{};              // @0x4E7108: frame offset by heading (types 1..3)
+    std::array<uint32_t, 8> aircraftFlip{};              // @0x4E7110
+    std::array<uint8_t, 8> boatFrame{};                  // @0x4E7130
+    std::array<uint32_t, 8> boatFlip{};                  // @0x4E7138
+    std::array<uint8_t, 4> subDivX{}, subDivY{};         // @0x4E7148 / 0x4E714C: sub-tile position divisor by zoom
+    std::array<uint8_t, 32> railSprite{};                // @0x4E7150
+    std::array<uint8_t, 8> railTurn{};                   // @0x4E7170
+    std::array<uint8_t, 24> railBase{}, railFlip{}, railDx{};   // @0x4E7178 / 0x4E7190 / 0x4E71A8
+    std::array<int16_t, 24> railDy{};                    // @0x4E71C0
+    int16_t tornadoSprite = 0;                           // @0x4E708E
+    std::array<int16_t, 16> monsterPart{};               // @0x4E7248.. (-15,-3 | -24,14 | 6,52 | 43,33 | -15,2 | -20,18 | 6,32 | 49,46)
     // Finance
     std::array<int16_t, 16> budgetDivisor{};   // @0x4E8EA0: yearly treasury = yearToDate / (divisor * 12)
 
