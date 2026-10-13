@@ -30,7 +30,7 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, U
 }  // namespace
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
-    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)) {}
+    : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources) {}
 
 std::string GameUi::moneyText(int v) const {
     char buf[32];
@@ -77,7 +77,7 @@ GameUi::Rect GameUi::groupRect(int i) const { return {0, kTopBar + i * kGroupH, 
 GameUi::Rect GameUi::itemRect(int i) const { return {kGroupW + 2, kTopBar + std::max(0, group_) * kGroupH + i * kItemH, kItemW, kItemH}; }
 
 bool GameUi::overUi(int x, int y) const {
-    if (modal_) return true;
+    if (modal_ || budget_.open) return true;
     if (y < kTopBar || y >= height_ - kBottomBar) return true;
     const int groups = static_cast<int>(toolCatalog().size());
     if (x < kGroupW && y < kTopBar + groups * kGroupH) return true;
@@ -103,7 +103,9 @@ void GameUi::mouseDown(int x, int y, int button) {
             if (Rect{bx + 20, by + 50 + 22 * i, 480, 20}.contains(x, y)) modal_->result = i;
         return;
     }
+    if (budget_.mouseDown(x, y, button, width_, height_)) return;
     if (button != 1) { scrolling_ = true; return; }
+    if (y < kTopBar && x >= 470 && x < 540) { budget_.open = true; return; }
     if (overUi(x, y)) {
         const auto& cat = toolCatalog();
         for (size_t g = 0; g < cat.size(); ++g)
@@ -187,6 +189,8 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         return true;
     }
     if (ctrl && k == SDLK_S) { say(saveCity("sc2k-city.sc2") ? "Saved sc2k-city.sc2" : "Could not save"); return true; }
+    if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
+    if (k == SDLK_B) { budget_.open = true; return true; }
     if (k == SDLK_ESCAPE) {
         if (menuOpen_) menuOpen_ = false;
         else if (group_ >= 0) { group_ = item_ = -1; dragging_ = false; }
@@ -441,7 +445,8 @@ void GameUi::draw(SDL_Renderer* r) {
     text(r, 6, 6, top);
     std::string right = message_;
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
-    if (!right.empty()) text(r, std::max(420, width_ - static_cast<int>(right.size()) * 8 - 8), 6, right, 255, 220, 120);
+    text(r, 474, 6, "[Budget]", 200, 230, 255);
+    if (!right.empty()) text(r, std::max(550, width_ - static_cast<int>(right.size()) * 8 - 8), 6, right, 255, 220, 120);
 
     // tool groups
     const auto& cat = toolCatalog();
@@ -486,7 +491,8 @@ void GameUi::draw(SDL_Renderer* r) {
     button(4, 92, layers.underground ? "Underground" : "Surface", layers.underground);
     button(104, 72, "Power", layers.powerOverlay);
     button(184, 72, "Water", layers.waterOverlay);
-    text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  Ctrl+S save  Esc", 150, 160, 180);
+    text(r, 270, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O views  right-drag scroll  B budget  Ctrl+S save  Esc", 150, 160, 180);
+    budget_.draw(r, width_, height_);
     if (modal_) drawModal(r);
 }
 

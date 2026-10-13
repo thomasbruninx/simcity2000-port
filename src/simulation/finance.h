@@ -22,6 +22,11 @@ struct FinanceOutcome {
     int ordinanceBit = -1;
 };
 
+// Budget-window arithmetic (the yearly settlement divides yearToDate by divisor*12, so these are consistent with it):
+long long budgetAnnual(const CityState& s, const GameTables& t, int category);    // yearly amount at the current rate (income > 0, expense < 0)
+long long budgetToDate(const CityState& s, const GameTables& t, int category);    // what the January settlement would pay out for this category now
+long long budgetYearEnd(const CityState& s, const GameTables& t, int category);   // to date + the remaining months at the current rate (port estimate)
+
 // One execution of the whole routine at the start of a month. `month` is derived from s.day like the original.
 // `yearlyUpdate` runs in the January settlement right after the treasury was credited (original: call to 0x44DD10).
 FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng, const std::function<void()>& yearlyUpdate = {});

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/budget_window.h"
 #include "app/tool_catalog.h"
 #include "render/map_renderer.h"
 #include "resources/pe_resources.h"
@@ -40,7 +41,8 @@ public:
 
     // scripting / tests
     bool selectTool(const std::string& name);
-    bool openMenu(const std::string& groupName);       // shows the item list of a group (screenshots)
+    bool openMenu(const std::string& groupName);
+    void openBudgetDetail(int row) { budget_.openDetail(row); }       // shows the item list of a group (screenshots)
     void dragTool(int a0, int b0, int a1, int b1);     // press on (a0,b0), release on (a1,b1) with the selected tool
     const std::string& message() const { return message_; }
     bool saveCity(const std::string& path);
@@ -76,6 +78,7 @@ private:
     std::string message_;
     int messageMs_ = 0;
     Modal* modal_ = nullptr;
+    BudgetWindow budget_;
 
     const ToolItem* tool() const;
     int unitCost(const ToolItem& t) const;

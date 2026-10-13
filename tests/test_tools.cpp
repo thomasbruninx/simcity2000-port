@@ -1,6 +1,7 @@
 #include "test.h"
 #include "save/city.h"
 #include "simulation/tool_script.h"
+#include "simulation/finance.h"
 #include "world/world_hash.h"
 
 #include <cstdlib>
@@ -50,4 +51,22 @@ TEST(tools_match_the_original_machine_code) {
     // extended script: terrain, hydro dam, tunnel, onramp, rail link and highways (EXTENDED=1 OPS=800 sc2k-emu-diff tools ...)
     CHECK(replay(root, "CITIES/CAPE.SC2", 800, &ok, true) == 0xebed3f169b8d6603ull && ok > 300);
     CHECK(replay(root, "CITIES/TOKYO.SC2", 800, &ok, true) == 0x9cfbf4003e947df0ull && ok > 300);
+}
+
+TEST(budget_amounts_match_the_january_settlement) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    CityFile c = CityFile::load(dir + "/CITIES/PARIS.SC2");
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    CityState s = CityState::fromCity(c);
+    long long expected = 0;
+    for (int i = 0; i < 16; ++i) expected += budgetToDate(s, t, i);
+    s.day = 25 * 12 * 3;            // a January
+    s.budgetYearFlag = 1;
+    const int before = s.treasury;
+    CrtRand rng(1);
+    runMonthlyFinance(s, t, rng);
+    CHECK(s.treasury - before == expected);
+    CHECK(budgetAnnual(s, t, kPolice) == static_cast<long long>(s.budget[kPolice].currentCosts) * s.budget[kPolice].fundingPercent / t.budgetDivisor[kPolice]);
 }

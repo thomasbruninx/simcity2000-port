@@ -59,6 +59,16 @@ void updateMaintenanceCosts(CityState& s) {
     b[kOrdinance].currentCosts = ord;
 }
 
+long long budgetAnnual(const CityState& s, const GameTables& t, int i) {
+    const long long div = t.budgetDivisor[static_cast<size_t>(i)];
+    return div == 0 ? 0 : static_cast<long long>(s.budget[static_cast<size_t>(i)].currentCosts) * s.budget[static_cast<size_t>(i)].fundingPercent / div;
+}
+long long budgetToDate(const CityState& s, const GameTables& t, int i) {
+    const long long div = static_cast<long long>(t.budgetDivisor[static_cast<size_t>(i)]) * 12;
+    return div == 0 ? 0 : static_cast<long long>(s.budget[static_cast<size_t>(i)].yearToDate) / div;
+}
+long long budgetYearEnd(const CityState& s, const GameTables& t, int i) { return budgetToDate(s, t, i) + budgetAnnual(s, t, i) * (11 - s.month()) / 12; }
+
 FinanceOutcome runMonthlyFinance(CityState& s, const GameTables& t, CrtRand& rng, const std::function<void()>& yearlyUpdate) {
     FinanceOutcome out;
     const int month = s.month();

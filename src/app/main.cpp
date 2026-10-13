@@ -185,6 +185,7 @@ int main(int argc, char** argv) {
                 else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; cam.centerOn(sim->state().centerA2 / 2, sim->state().centerB2 / 2, width / 2, height / 2); }
                 else if (op == "funds") { int f; words >> f; sim->state().treasury = f; }
                 else if (op == "key") { std::string k; words >> k; ui.keyDown(keyByName(k), false); }
+                else if (op == "budget") { std::string d; words >> d; ui.keyDown(SDLK_B, false); if (!d.empty()) ui.openBudgetDetail(std::atoi(d.c_str())); }
                 else if (op == "menu") { std::string n; std::getline(words >> std::ws, n); ui.openMenu(n); }
                 else if (!op.empty()) std::fprintf(stderr, "unknown command '%s'\n", op.c_str());
             }
