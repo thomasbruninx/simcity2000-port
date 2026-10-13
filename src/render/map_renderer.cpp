@@ -419,7 +419,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
             // ground
             if (layers.terrain) {
                 int ground = t_.terrainSprite[static_cast<size_t>(xter)] + zoomBase;
-                if (id == 0 && xter == 0 && zone != 0 && layers.zones) ground = (0x50A + zone - 1000) + zoomBase;   // coloured zone tile on empty land
+                if (id < 0x1D && xter == 0 && zone != 0 && layers.zones) ground = (0x50A + zone - 1000) + zoomBase;   // coloured zone tile under empty land and under the small objects (rubble, trees, power lines: ids below 0x1D, 0x43C0DB)
                 if (ground > 0) blit(fb, ground, x, bottom - height(ground), false);
             }
             if (id != 0 && layers.buildings) {
