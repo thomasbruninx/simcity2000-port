@@ -4,6 +4,7 @@
 #pragma once
 #include <SDL3/SDL.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -11,6 +12,7 @@
 
 #include "app/ft_text.h"
 #include "app/icons.h"
+#include "resources/bmp.h"
 #include "resources/pe_resources.h"
 #include "simulation/advisors.h"
 #include "simulation/news.h"
@@ -20,7 +22,7 @@ namespace sc2k {
 
 class InfoWindows {
 public:
-    enum class Which { None, Graphs, City, Advisors, Newspaper };
+    enum class Which { None, Graphs, City, Advisors, Newspaper, Industry, Neighbors, Map };
     InfoWindows(Simulation& sim, const PeResources& res);
 
     Which open = Which::None;
@@ -33,6 +35,8 @@ public:
     void initNews(const std::string& gameDir);                // loads DATA/DATA_USA.* (the newspaper's text grammar)
     bool popupDue() { const bool d = popup_; popup_ = false; return d; }   // a milestone / new-tool story arrived: the newspaper pops up
     bool closeArticle();                                      // Escape: closes the open story first (true if one was open)
+    std::function<void(int, int)> onMapClick;                // City Map window: centre the main view on file tile (a, b)
+    std::function<bool(int&, int&)> viewCenter;              // file tile in the middle of the main view (for the map's marker)
     const NewsRoom& news() const { return news_; }
 
 private:
@@ -61,9 +65,19 @@ private:
     void drawCity(SDL_Renderer* r, int x, int y);
     void drawAdvisors(SDL_Renderer* r, int x, int y);
     void drawNewspaper(SDL_Renderer* r, int x, int y);
+    void drawIndustry(SDL_Renderer* r, int x, int y);   // dialog 160 "City Industry" (city_windows.cpp)
+    void drawNeighbors(SDL_Renderer* r, int x, int y);  // dialog 157 "SimNation"
+    void drawMap(SDL_Renderer* r, int x, int y);        // dialog 246 "City Map"
+    bool windowClick(int mx, int my, int x, int y);     // clicks inside the three windows
     void drawArticle(SDL_Renderer* r, int x, int y);
     std::string storyText(int k, bool article);
     bool articleOpen_ = false;
+    int industryMode_ = 0;            // 0 ratios, 1 tax rates, 2 demand
+    int mapLayer_ = 0;                // City Map: layer 0..17 (strings 327..344)
+    bool mapShowView_ = true;
+    std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> mapTex_{nullptr, &SDL_DestroyTexture}, nbTex_{nullptr, &SDL_DestroyTexture};
+    Bmp8 nbBmp_;
+    bool nbTried_ = false;
     std::string articleText_;
 };
 

@@ -46,11 +46,11 @@ void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, U
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
     : sim_(sim), renderer_(renderer), cam_(cam), clock_(clock), res_(resources), base_(std::move(base)), budget_(sim.state(), sim.tables(), resources), info_(sim, resources), avail_(ToolAvailability::fromState(sim.state(), sim.tables())) {
-    if (const auto it = res_.menus().find("#3"); it != res_.menus().end()) {
-        menu_.load(it->second);
-        menu_.checked = [this](int id) { return menuChecked(id); };
-        menu_.enabled = [this](int id) { return menuEnabled(id); };
-    }
+    info_.onMapClick = [this](int a, int b) { centerView(a, b); };
+    info_.viewCenter = [this](int& a, int& b) { return renderer_.pickTile(sim_.world(), cam_, mapW() / 2, mapH() / 2, a, b); };
+    menu_.checked = [this](int id) { return menuChecked(id); };
+    menu_.enabled = [this](int id) { return menuEnabled(id); };
+    buildMenu();
     budget_.onBond = [this](int what) {
         message_.clear();
         const bool ok = what == 0 ? issueBond(sim_.context()) : repayOldestBond(sim_.context());
@@ -289,7 +289,19 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (queryOpen_ && micro_.valid && k == SDLK_N) { renameQueried(); return true; }
     if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
     if (ctrl && k == SDLK_O && onTitle) { onTitle(); return true; }
+    if (ctrl && ts_.shift && k == SDLK_D) { enableDebugMenu(); return true; }
+    if (k >= SDLK_A && k <= SDLK_Z && !ctrl && !modal_) {   // the cheat word of the original: "priscilla" attaches the Debug menu
+        static const std::string word = "priscilla";
+        const std::string next = cheatTyped_ + static_cast<char>('a' + (k - SDLK_A));
+        if (next.size() >= 2 && word.compare(0, next.size(), next) == 0) {   // swallowed, so the word does not rotate the view and so on
+            cheatTyped_ = next;
+            if (next == word) { cheatTyped_.clear(); layers.powerOverlay = !layers.powerOverlay; enableDebugMenu(); }   // the first letter 'p' had toggled the power overlay
+            return true;
+        }
+        cheatTyped_ = next == "p" ? next : std::string();
+    }
     if (ctrl && k == SDLK_S) { saveDialog(); return true; }
+    if (ctrl && !modal_ && (k == SDLK_I || k == SDLK_H || k == SDLK_M)) { menuCommand(k == SDLK_I ? 32787 : k == SDLK_H ? 32789 : 32783); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE && !info_.closeArticle()) info_.open = InfoWindows::Which::None; return true; }
     if (k == SDLK_M && audio) { audio->setMuted(!audio->muted()); say(audio->muted() ? "Sound off" : "Sound on"); return true; }
@@ -795,13 +807,27 @@ void GameUi::draw(SDL_Renderer* r) {
     // top bar
     fill(r, 0, 0, width_, kTopBar, 20, 24, 32);
     char top[200];
-    std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s   R%d C%d I%d   [%s]", kMonths[s.month()], s.startYear + s.day / 300, s.population10, moneyText(s.treasury).c_str(),
-                  s.demand[0], s.demand[1], s.demand[2], kSpeedNames[static_cast<int>(clock_.speed)]);
+    std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s", kMonths[s.month()], s.startYear + s.day / 300, s.population10, moneyText(s.treasury).c_str());
+    const int demandX = 6 + static_cast<int>(std::strlen(top)) * 8 + 24;   // the residential / commercial / industrial demand bars (green, blue, yellow) follow the numbers
+    char speed[40];
+    std::snprintf(speed, sizeof speed, "[%s]", kSpeedNames[static_cast<int>(clock_.speed)]);
     const int buttonsClip = width_ - kTopButtonCount * kTopButtonStep - 4;
     {   // narrow windows (large UI scales): the status line stops where the buttons start
         const SDL_Rect clip{0, kMenuBar, std::max(0, buttonsClip - 4), kTopBar - kMenuBar};
         SDL_SetRenderClipRect(r, &clip);
         text(r, 6, 10 + kMenuBar, top);
+        static const Uint8 col[3][3] = {{0, 200, 0}, {60, 120, 255}, {240, 220, 0}};
+        static const char* letters[3] = {"R", "C", "I"};
+        const int mid = kMenuBar + 14;
+        for (int i = 0; i < 3; ++i) {
+            const int bx = demandX + i * 40;
+            text(r, bx, mid - 4, letters[i], 200, 205, 220);
+            fill(r, bx + 12, mid, 16, 1, 120, 125, 140);                                    // zero line
+            const int h = std::clamp(s.demand[static_cast<size_t>(i)] * 13 / 2000, -13, 13);   // demand runs from -2000 to +2000
+            if (h > 0) fill(r, bx + 12, mid - h, 16, h, col[i][0], col[i][1], col[i][2]);
+            else if (h < 0) fill(r, bx + 12, mid + 1, 16, -h, col[i][0] / 2, col[i][1] / 2, col[i][2] / 2);
+        }
+        text(r, demandX + 124, 10 + kMenuBar, speed);
         SDL_SetRenderClipRect(r, nullptr);
     }
     std::string right = message_;
@@ -963,6 +989,52 @@ void GameUi::drawModal(SDL_Renderer* r) {
 
 // ---- menu bar -----------------------------------------------------------------------------------------------------------
 
+void GameUi::buildMenu() {
+    const auto it = res_.menus().find("#3");
+    if (it == res_.menus().end()) return;
+    PeResources::MenuItem root = it->second;
+    if (debugMenu_) if (const auto dbg = res_.menus().find("#223"); dbg != res_.menus().end() && !dbg->second.items.empty()) {
+        PeResources::MenuItem d = dbg->second.items.front();
+        d.text = "De&bug";
+        root.items.insert(root.items.end() - 1, d);   // before Help, like the original's menu position 6
+    }
+    menu_.load(root);
+}
+
+void GameUi::enableDebugMenu() {
+    if (debugMenu_) return;
+    debugMenu_ = true;
+    buildMenu();
+    say("Debug menu enabled");
+}
+
+void GameUi::debugCommand(int id) {   // resource 223; the handlers are at 0x4026CB .. 0x402635
+    SimContext& c = sim_.context();
+    CityState& s = sim_.state();
+    const int ca = s.centerA2 / 2, cb = s.centerB2 / 2;
+    auto rnd = [&](int m) { return static_cast<int>(static_cast<unsigned>(c.rng.next() & 0x7FFF) % static_cast<unsigned>(m)); };
+    auto unlockAll = [&] {   // every dated event counts as fired: all power plants, airport, highways, subway, treatment plants and the arcologies
+        s.eventYears.fill(0);
+        avail_ = ToolAvailability::fromState(s, sim_.tables());
+        playSound(0x201);
+    };
+    switch (id) {
+        case 32908: say("SimCity 2000 port " __DATE__); break;                   // Show Version Info (the original shows _version.inf)
+        case 32909: s.treasury += 500000; break;                                  // More Money
+        case 32910: unlockAll(); s.treasury += 500000; break;                     // Add All Gifts (all events + the council's $500,000)
+        case 32911: unlockAll(); break;                                           // Add All Inventions
+        case 32926: requestDisaster(9, 0, 0); break;                              // Melt Down
+        case 32927: requestDisaster(10, 0, 0); break;                             // Microwave
+        case 32923: { const int y = rnd(0x7E) + 1; const int x = rnd(0x7E) + 1; requestDisaster(0xB, x, y); break; }   // Volcano
+        case 32925: requestDisaster(0xC, ca, cb); break;                          // Fire Storm
+        case 32922: requestDisaster(0xD, ca, cb); break;                          // Mass Riots
+        case 32928: { const int y = rnd(0x7E) + 1; const int x = rnd(0x7E) + 1; requestDisaster(0xE, x, y); break; }   // Major Flood
+        case 32924: requestDisaster(4, ca, cb); break;                            // Toxic Spill
+        case 32931: info_.open = InfoWindows::Which::Graphs; break;               // Graph Kludge (rescales the graphs and opens them)
+        default: break;
+    }
+}
+
 bool GameUi::menuChecked(int id) const {
     switch (id) {
         case 32768: return clock_.speed == GameSpeed::Paused;
@@ -1025,10 +1097,13 @@ void GameUi::menuCommand(int id) {   // the original's WM_COMMAND handlers (mess
         case 32785: budget_.open = true; budget_.openDetail(1); break;           // Ordinances
         case 32786: info_.open = InfoWindows::Which::City; break;                // Population
         case 32788: info_.open = InfoWindows::Which::Graphs; break;
-        case 32787: case 32789: case 32783: say("That window is not available yet"); break;   // Industry, Neighbors, Map
+        case 32787: info_.open = InfoWindows::Which::Industry; break;
+        case 32789: info_.open = InfoWindows::Which::Neighbors; break;
+        case 32783: info_.open = InfoWindows::Which::Map; break;
         case 32791: info_.subscription = !info_.subscription; break;
         case 32792: info_.extraEditions = !info_.extraEditions; break;
         case 57666: case 32893: case 57667: say("The help file is not available in this port"); break;
+        case 32908: case 32909: case 32910: case 32911: case 32922: case 32923: case 32924: case 32925: case 32926: case 32927: case 32928: case 32931: debugCommand(id); break;
         case 57664: { Modal m; m.title = "SimCity 2000 (port) - an independent re-implementation; it needs your own copy of the game."; m.options = {"OK"}; runModal(m); break; }
         default: break;
     }

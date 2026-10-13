@@ -36,6 +36,10 @@ TextRenderer::TextRenderer(SDL_Renderer* r) : r_(r) {
         FT_Face f = nullptr;
         if (FT_New_Face(lib, c.c_str(), 0, &f) == 0) { face_ = f; break; }
     }
+    for (const char* p : {"/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf", "/Library/Fonts/Times New Roman Bold.ttf", "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman_Bold.ttf", "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"}) {
+        FT_Face f = nullptr;
+        if (FT_New_Face(lib, p, 0, &f) == 0) { faceBold_ = f; break; }
+    }
 #endif
 }
 
@@ -43,17 +47,18 @@ TextRenderer::~TextRenderer() {
     for (auto& [k, e] : cache_) if (e.tex) SDL_DestroyTexture(e.tex);
 #ifdef SC2K_HAVE_FREETYPE
     if (face_) FT_Done_Face(static_cast<FT_Face>(face_));
+    if (faceBold_) FT_Done_Face(static_cast<FT_Face>(faceBold_));
     if (lib_) FT_Done_FreeType(static_cast<FT_Library>(lib_));
 #endif
 }
 
-int TextRenderer::width(const std::string& text, int px) {
-    const std::string key = std::to_string(px) + ":" + text;
+int TextRenderer::width(const std::string& text, int px, bool bold) {
+    const std::string key = std::to_string(px) + (bold ? "b:" : ":") + text;
     if (auto it = widths_.find(key); it != widths_.end()) return it->second;
     int w = 0;
 #ifdef SC2K_HAVE_FREETYPE
     if (face_) {
-        FT_Face f = static_cast<FT_Face>(face_);
+        FT_Face f = static_cast<FT_Face>(faceFor(bold));
         FT_Set_Pixel_Sizes(f, 0, static_cast<FT_UInt>(std::max(1, px)));
         FT_UInt prev = 0;
         long pen = 0;
@@ -73,17 +78,17 @@ int TextRenderer::width(const std::string& text, int px) {
     return w;
 }
 
-TextRenderer::Entry& TextRenderer::render(const std::string& text, int px) {
-    const std::string key = std::to_string(px) + ":" + text;
+TextRenderer::Entry& TextRenderer::render(const std::string& text, int px, bool bold) {
+    const std::string key = std::to_string(px) + (bold ? "b:" : ":") + text;
     if (auto it = cache_.find(key); it != cache_.end()) return it->second;
     if (cache_.size() > 600) { for (auto& [k, e] : cache_) if (e.tex) SDL_DestroyTexture(e.tex); cache_.clear(); }
     Entry e;
 #ifdef SC2K_HAVE_FREETYPE
     if (face_ && !text.empty()) {
-        FT_Face f = static_cast<FT_Face>(face_);
+        FT_Face f = static_cast<FT_Face>(faceFor(bold));
         FT_Set_Pixel_Sizes(f, 0, static_cast<FT_UInt>(std::max(1, px)));
         const int asc = static_cast<int>((f->size->metrics.ascender + 63) >> 6), desc = static_cast<int>((-f->size->metrics.descender + 63) >> 6);
-        const int w = width(text, px) + 2, h = asc + desc + 1;
+        const int w = width(text, px, bold) + 2, h = asc + desc + 1;
         std::vector<uint8_t> a(static_cast<size_t>(w) * h, 0);
         FT_UInt prev = 0;
         long pen = 0;
@@ -120,9 +125,9 @@ TextRenderer::Entry& TextRenderer::render(const std::string& text, int px) {
     return cache_[key] = e;
 }
 
-void TextRenderer::draw(const std::string& text, int x, int y, int px, Uint8 cr, Uint8 cg, Uint8 cb) {
+void TextRenderer::draw(const std::string& text, int x, int y, int px, Uint8 cr, Uint8 cg, Uint8 cb, bool bold) {
     if (text.empty()) return;
-    Entry& e = render(text, px);
+    Entry& e = render(text, px, bold);
     if (e.tex) {
         SDL_SetTextureColorMod(e.tex, cr, cg, cb);
         const SDL_FRect d{static_cast<float>(x), static_cast<float>(y), static_cast<float>(e.w), static_cast<float>(e.h)};

@@ -127,6 +127,11 @@ private:
     MenuBar menu_;
     bool autoBudget_ = false, autoGoto_ = true, soundOn_ = true, musicOn_ = true;   // Options menu (the original keeps them in the profile; defaults = the menu's check marks)
     int lastMonth_ = -1;
+    bool debugMenu_ = false;           // the hidden Debug menu (resource 223), enabled by typing the cheat word
+    std::string cheatTyped_;
+    void buildMenu();
+    void enableDebugMenu();
+    void debugCommand(int id);
     void menuCommand(int id);
     bool menuChecked(int id) const;
     bool menuEnabled(int id) const;

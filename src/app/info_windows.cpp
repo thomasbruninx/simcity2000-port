@@ -61,20 +61,21 @@ void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
     fill(r, 0, 0, sw, sh, 0, 0, 0, 100);
     fill(r, x, y, kW, kH, 30, 34, 46);
     frame(r, x, y, kW, kH, 200, 200, 220);
-    const char* title = open == Which::Graphs ? "Graphs" : open == Which::City ? "City" : open == Which::Advisors ? "Advisors" : "Newspaper";
-    text(r, x + 12, y + 10, title, 255, 255, 190);
+    static const char* tabs[7] = {"Graphs", "City", "Advisors", "Newspaper", "Industry", "Neighbors", "Map"};
     text(r, x + kW - 60, y + 10, "[Close]", 255, 255, 190);
-    const char* tabs[4] = {"Graphs", "City", "Advisors", "Newspaper"};
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 7; ++i) {
         const bool on = static_cast<int>(open) == i + 1;
-        fill(r, x + 110 + i * 100, y + 6, 92, 18, on ? 70 : 40, on ? 90 : 46, on ? 120 : 56);
-        text(r, x + 118 + i * 100, y + 11, tabs[i]);
+        fill(r, x + 8 + i * 78, y + 6, 74, 18, on ? 70 : 40, on ? 90 : 46, on ? 120 : 56);
+        text(r, x + 12 + i * 78, y + 11, tabs[i], on ? 255 : 220, on ? 255 : 220, on ? 190 : 230);
     }
     switch (open) {
         case Which::Graphs: drawGraphs(r, x, y + 34); break;
         case Which::City: drawCity(r, x, y + 34); break;
         case Which::Advisors: drawAdvisors(r, x, y + 34); break;
         case Which::Newspaper: drawNewspaper(r, x, y + 34); if (articleOpen_) drawArticle(r, x, y); break;
+        case Which::Industry: drawIndustry(r, x, y + 34); break;
+        case Which::Neighbors: drawNeighbors(r, x, y + 34); break;
+        case Which::Map: drawMap(r, x, y + 34); break;
         default: break;
     }
 }
@@ -467,7 +468,7 @@ bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
     if (mx < x || my < y || mx >= x + kW || my >= y + kH) return true;
     if (my < y + 26) {
         if (mx > x + kW - 70) open = Which::None;
-        for (int i = 0; i < 4; ++i) if (mx >= x + 110 + i * 100 && mx < x + 202 + i * 100) open = static_cast<Which>(i + 1);
+        for (int i = 0; i < 7; ++i) if (mx >= x + 8 + i * 78 && mx < x + 82 + i * 78) open = static_cast<Which>(i + 1);
         return true;
     }
     if (open == Which::Newspaper && my >= y + 38) {   // clicking a story (rects 4..10 of the page) opens its text (0x477FF0 -> 0x47A050)
@@ -478,6 +479,7 @@ bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
             if (mx - x >= q.l && mx - x < q.r && my - (y + 38) >= q.t && my - (y + 38) < q.b) { articleText_ = storyText(k, true); articleOpen_ = true; break; }
         }
     }
+    if (windowClick(mx, my, x, y + 34)) return true;
     if (open == Which::City) {
         for (int m = 0; m < 3; ++m) if (mx >= x + 24 + m * 110 && mx < x + 124 + m * 110 && my >= y + 8 + 16 * 14 + 6 && my < y + 8 + 16 * 14 + 22) ageMode_ = m;
     }

@@ -54,7 +54,7 @@ target_link_libraries(sc2k-verify PRIVATE sc2k_sim)
 # Interactive application (SDL3, from Homebrew `sdl3`)
 find_package(SDL3 QUIET CONFIG)
 if(SDL3_FOUND)
-  add_executable(sc2k-app src/app/main.cpp src/app/game_ui.cpp src/app/tool_catalog.cpp src/app/budget_window.cpp src/app/icons.cpp src/app/info_windows.cpp src/app/title_screen.cpp src/app/menu_bar.cpp src/app/ft_text.cpp src/audio/audio_device.cpp)
+  add_executable(sc2k-app src/app/main.cpp src/app/game_ui.cpp src/app/tool_catalog.cpp src/app/budget_window.cpp src/app/icons.cpp src/app/info_windows.cpp src/app/city_windows.cpp src/app/title_screen.cpp src/app/menu_bar.cpp src/app/ft_text.cpp src/audio/audio_device.cpp)
   target_include_directories(sc2k-app PRIVATE src)
   target_link_libraries(sc2k-app PRIVATE sc2k_render sc2k_audio SDL3::SDL3)
   # FreeType (brew install freetype): the newspaper draws Times New Roman from the system's fonts
