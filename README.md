@@ -2,7 +2,7 @@
 
 A clean-room-style reimplementation of SimCity 2000 (Windows 95, 1995 CD Collection build .022) for macOS/Apple Silicon, loading **your own legally obtained game files**. No game assets or binaries are included or distributed.
 
-**Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (all zone types incl. military/airport/seaport), traffic router, tile primitives and destroy effects**. **thing system (ships, trains, aircraft, monsters, tornado)** and microsim allocation. **economy model, random events, history graphs, the complete 25-phase tick and a headless driver (`sc2k-sim`) — verified day by day against the original code in an emulator (183 runs × 75 days identical)**. Pending: disaster handlers, scenario goals, UI/rendering/audio. Start with:
+**Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (all zone types incl. military/airport/seaport), traffic router, tile primitives and destroy effects**. **thing system (ships, trains, aircraft, monsters, tornado)** and microsim allocation. **economy model, random events, history graphs, the complete 25-phase tick and a headless driver (`sc2k-sim`) — verified day by day against the original code in an emulator (183 runs × 75 days identical)**. The playable app (`sc2k-app`) now has the original's map renderer, tools, menus, windows, newspaper, audio and the map editor. Start with:
 - [docs/roadmap.md](docs/roadmap.md) — plan based on findings
 - [docs/original-file-inventory.md](docs/original-file-inventory.md)
 - [docs/executable-analysis.md](docs/executable-analysis.md), [docs/windows-api-usage.md](docs/windows-api-usage.md)
@@ -11,6 +11,26 @@ A clean-room-style reimplementation of SimCity 2000 (Windows 95, 1995 CD Collect
 - [docs/reverse-engineering/journal.md](docs/reverse-engineering/journal.md)
 
 Confidence labels used everywhere: **VERIFIED**, **STRONG INFERENCE**, **HYPOTHESIS**, **UNKNOWN**.
+
+## Dependencies
+Everything is built with CMake from source; on macOS the libraries come from [Homebrew](https://brew.sh).
+
+| Dependency | Needed for | Required? | Install |
+|---|---|---|---|
+| C++20 compiler (Apple Clang / Xcode command line tools), CMake >= 3.20 | everything | **required** | `xcode-select --install`, `brew install cmake` |
+| Ninja | faster builds (`-G Ninja`) | optional | `brew install ninja` |
+| pkg-config | finds FluidSynth and FreeType | recommended | `brew install pkgconf` |
+| [SDL3](https://libsdl.org) (zlib licence) | the game window, input, audio output (`sc2k-app`) | **required for `sc2k-app`** (the libraries, tests and command-line tools build without it) | `brew install sdl3` |
+| [FreeType](https://freetype.org) (FTL / GPLv2) | the newspaper's Times New Roman text; without it the 8x8 debug font is used | optional | `brew install freetype` |
+| [FluidSynth](https://www.fluidsynth.org) (LGPL-2.1), linked dynamically | music with a SoundFont (Settings > FluidSynth); without it only the built-in synthesizer is available | optional | `brew install fluid-synth` |
+| A General MIDI SoundFont | FluidSynth music; `resources/GeneralUser-GS.sf2` ([GeneralUser GS](https://schristiancollins.com/generaluser.php), its own free licence) is picked up automatically, any other `.sf2` in `resources/` works too | optional | included |
+| [Unicorn](https://www.unicorn-engine.org) (GPL-2.0) | `sc2k-emu-diff`, the differential tests against the original machine code; **dev-only, never linked into the game** | optional (`-DSC2K_BUILD_EMU=OFF` to skip) | `brew install unicorn` |
+| Python 3 (standard library only) | the scripts in `tools/` | optional | `brew install python` |
+| [Ghidra](https://ghidra-sre.org) | reproducing the decompilations in `reverse/` (not committed) | optional, dev-only | `brew install ghidra` |
+
+**Runtime data** (never included): a legally owned SimCity 2000 for Windows 95 installation (build .022). Pass its folder to `sc2k-app` or set `SC2K_DATA_PATH`. At run time the app also reads **Times New Roman** from the system fonts (`/System/Library/Fonts/Supplemental/`; override the file with `SC2K_FONT`).
+
+Quick start (macOS): `brew install cmake ninja pkgconf sdl3 freetype fluid-synth` then `cmake -S . -B build -G Ninja && cmake --build build && build/sc2k-app /path/to/SC2K`.
 
 ## Tools (`tools/`, Python 3, stdlib only; run with `python3 -I`)
 | Tool | Purpose |
