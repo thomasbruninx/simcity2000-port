@@ -145,6 +145,7 @@ void GameUi::update(int dtMs) {
 
 void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
+    if (browser_.active()) { if (button == 1) browser_.mouseDown(x, y, width_, height_); return; }
     if (pauseOpen_ && !modal_) {
         for (int i = 0; i < 5; ++i) if (Rect{width_ / 2 - 130, height_ / 2 - 130 + i * 48, 260, 38}.contains(x, y)) { pauseClick(i); return; }
         return;
@@ -277,11 +278,13 @@ void GameUi::mouseMove(int x, int y) {
 }
 
 void GameUi::wheel(int, int, int dy) {
+    if (browser_.active()) { browser_.wheel(dy); return; }
     if (dy > 0) setZoomLevel(zoomLevel_ + 1);
     else if (dy < 0) setZoomLevel(zoomLevel_ - 1);
 }
 
 bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
+    if (browser_.active()) { browser_.key(k); return true; }
     if (pauseOpen_ && !modal_) {
         if (k == SDLK_ESCAPE) pauseOpen_ = false;
         else if (k == SDLK_S) pauseClick(1);
@@ -340,6 +343,7 @@ void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
     CityFile map = CityFile::load(defaultMapPath);
     sim_.startNewCity(map, era, difficulty, terrain);
     base_ = map;
+    savePath_.clear();
     info_.cityName = map.name();
     avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
     cam_.rotation = 0;
@@ -351,6 +355,7 @@ void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
 
 void GameUi::loadCity(const CityFile& f) {
     base_ = f;
+    savePath_.clear();
     avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
     info_.cityName = f.name();
     queryOpen_ = false; dragging_ = false; group_ = item_ = -1; menuOpen_ = false;
@@ -689,6 +694,7 @@ bool GameUi::askText(const std::string& title, std::string& text) {
 }
 
 void GameUi::textInput(const std::string& utf8) {
+    if (browser_.active()) { browser_.textInput(utf8); return; }
     if (modal_ && modal_->textInput) for (char ch : utf8) if (ch >= 32 && ch < 127 && modal_->text.size() < 24) modal_->text.push_back(ch);
 }
 
@@ -729,11 +735,25 @@ std::string GameUi::savesDir() {
 }
 
 void GameUi::saveDialog() {
+    if (!savePath_.empty()) { say(saveCity(savePath_) ? "Saved " + savePath_ : "Could not save " + savePath_); return; }
+    saveAs();
+}
+
+void GameUi::saveAs() {
     std::string name = info_.cityName.empty() ? "city" : info_.cityName;
-    for (char& c : name) if (c == ' ' || c == '/' || c == '\\') c = '_';
-    if (!askText("Save game as (file name)", name)) return;
-    if (name.empty()) return;
-    const std::string path = savesDir() + "/" + name + ".sc2";
+    for (char& c : name) if (c == ' ' || c == '/' || c == '\\' || c == ':') c = '_';
+    std::string dir = savePath_.empty() ? savesDir() : savePath_.substr(0, savePath_.rfind('/'));
+    if (headless || !pump) {
+        const std::string path = dir + "/" + name + ".sc2";
+        say(saveCity(path) ? "Saved " + path : "Could not save " + path);
+        return;
+    }
+    browser_.open("Save City As", dir, name);
+    SDL_StartTextInput(SDL_GetKeyboardFocus());
+    while (browser_.result() == -2) if (!pump()) { browser_.close(); break; }
+    SDL_StopTextInput(SDL_GetKeyboardFocus());
+    if (browser_.result() != 0) return;
+    const std::string path = browser_.path();
     say(saveCity(path) ? "Saved " + path : "Could not save " + path);
 }
 
@@ -766,6 +786,7 @@ bool GameUi::saveCity(const std::string& path) {
         if (!f) return false;
         const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
         std::fclose(f);
+        if (ok) savePath_ = path;
         return ok;
     } catch (const std::exception&) { return false; }
 }
@@ -1015,6 +1036,7 @@ void GameUi::draw(SDL_Renderer* r) {
     menu_.draw(r, width_);
     if (queryOpen_) drawQuery(r);
     if (modal_) drawModal(r);
+    if (browser_.active()) browser_.draw(r, width_, height_);
 }
 
 void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
@@ -1114,6 +1136,10 @@ void GameUi::buildMenu() {
     const auto it = res_.menus().find("#3");
     if (it == res_.menus().end()) return;
     PeResources::MenuItem root = it->second;
+    if (!root.items.empty() && root.items[0].items.size() >= 2) {   // File: "Rename City..." before the separator and Exit
+        PeResources::MenuItem rename; rename.id = 60001; rename.text = "&Rename City...";
+        root.items[0].items.insert(root.items[0].items.end() - 2, rename);
+    }
     if (debugMenu_) if (const auto dbg = res_.menus().find("#223"); dbg != res_.menus().end() && !dbg->second.items.empty()) {
         PeResources::MenuItem d = dbg->second.items.front();
         d.text = "De&bug";
@@ -1194,7 +1220,9 @@ void GameUi::menuCommand(int id) {   // the original's WM_COMMAND handlers (mess
         case 32803: newCityDialog(true); break;                                   // Edit New Map
         case 32804: if (onPauseAction) onPauseAction(4); break;                  // Load Scenario
         case 32917: say("Tile sets are not supported by this port"); break;
-        case 32805: case 32806: saveDialog(); break;                              // Save City / As
+        case 32805: saveDialog(); break;                                          // Save City
+        case 32806: saveAs(); break;                                              // Save City As
+        case 60001: { std::string name = info_.cityName; if (askText("City name", name) && !name.empty()) setCityNameAll(name); break; }   // Rename City (not in the original)
         case 57665: if (onPauseAction) onPauseAction(3); break;                  // Exit
         case 32768: clock_.speed = clock_.speed == GameSpeed::Paused ? GameSpeed::Llama : GameSpeed::Paused; break;
         case 32769: clock_.speed = GameSpeed::Turtle; break;

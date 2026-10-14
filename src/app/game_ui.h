@@ -14,6 +14,7 @@
 
 #include "app/budget_window.h"
 #include "app/icons.h"
+#include "app/file_browser.h"
 #include "app/info_windows.h"
 #include "app/menu_bar.h"
 #include "app/tool_catalog.h"
@@ -75,6 +76,7 @@ public:
     void newCity(int era, int difficulty, const TerrainParams* terrain = nullptr);             // start a new city on the default map (scripting)
     void newCityDialog(bool randomMap = false);
     void enterMapEditor();                              // File > Edit New Map: the terrain generator panel (Hills / Water / Trees, Coast, River, MAKE, DONE) and the terrain tools
+    void showBrowser() { browser_.open("Save City As", savesDir(), "city"); }   // screenshots
     bool mapEditing() const { return mapEdit_; }
     void loadCity(const CityFile& f);                  // a city / scenario was loaded into the simulation                              // asks for the starting year and the difficulty (the original dialog 101)
     std::string defaultMapPath;
@@ -178,7 +180,10 @@ private:
     bool pauseOpen_ = false;
     void pauseClick(int i);
     void drawPause(SDL_Renderer* r);
-    void saveDialog();
+    void saveDialog();                                   // Save City: straight to the current file once there is one
+    void saveAs();                                       // Save City As: the folder / file browser
+    FileBrowser browser_;
+    std::string savePath_;
     bool askText(const std::string& title, std::string& text);   // modal single-line text entry; false = cancelled
     bool queryOpen_ = false;
     QueryInfo query_;
