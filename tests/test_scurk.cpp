@@ -1,7 +1,9 @@
 #include <cstdlib>
 #include <string>
 
+#include "resources/pe_resources.h"
 #include "scurk/mif.h"
+#include "scurk/object_set.h"
 #include "test.h"
 
 using namespace sc2k;
@@ -49,4 +51,26 @@ TEST(mif_files_of_the_installation_round_trip) {
     const std::vector<uint8_t> before = m.serialize();
     for (auto& s : m.shapes) if (!s.placeholder()) { Sprite sp = s.decode(); if (!sp.index.empty()) { sp.index[0] ^= 1; sp.opaque[0] = 1; } s.setSprite(sp); break; }
     CHECK(m.serialize() != before);
+}
+
+TEST(scurk_catalog_names_and_groups) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const PeImage exe = PeImage::load(std::string(root) + "/WINSCURK.EXE");
+    const PeResources res(exe);
+    const MifFile original = MifFile::load(std::string(root) + "/SCURKART/ORIGINAL.MIF");
+    const ObjectCatalog cat = ObjectCatalog::build(original, res);
+    CHECK(cat.objects().size() == 186);
+    const ObjectInfo* first = cat.find(174);
+    CHECK(first && first->name == "Large Apartments 1" && first->group == ObjectGroup::Residential);
+    CHECK(cat.inGroup(ObjectGroup::Residential).size() == 24);
+    CHECK(cat.inGroup(ObjectGroup::All).size() == 186);
+    bool power = false;
+    for (const ObjectInfo* o : cat.inGroup(ObjectGroup::Power)) power = power || o->name == "Coal Power Plant";
+    CHECK(power);
+    ObjectSet set(original);
+    CHECK(set.customized(174, 2) && set.customized(174, 0));
+    ObjectSet other = ObjectSet::load(std::string(root) + "/SCURKART/PARIS.MIF");
+    set.copyObject(other, 174);
+    CHECK(set.dirty);
 }

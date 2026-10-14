@@ -37,7 +37,7 @@ endif()
 add_executable(sc2k-audio tools/sc2k_audio.cpp)
 target_link_libraries(sc2k-audio PRIVATE sc2k_audio)
 
-add_library(sc2k_render src/scurk/mif.cpp src/render/map_renderer.cpp src/render/png.cpp src/resources/sprite_archive.cpp src/resources/bmp.cpp)
+add_library(sc2k_render src/scurk/mif.cpp src/scurk/object_set.cpp src/render/map_renderer.cpp src/render/png.cpp src/resources/sprite_archive.cpp src/resources/bmp.cpp)
 target_link_libraries(sc2k_render PUBLIC sc2k_sim)
 target_compile_options(sc2k_render PRIVATE -Wall -Wextra -Wpedantic)
 

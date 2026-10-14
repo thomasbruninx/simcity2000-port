@@ -40,7 +40,12 @@ class SpriteSet {
 public:
     static SpriteSet load(const std::string& gameDir);    // gameDir contains DATA/
     const Sprite* get(int id) const;
+    // Replacement graphics (SCURK's working object set): an override wins over the archive; clearing restores the original.
+    void setOverride(int id, Sprite sprite) { overrides_[id] = std::move(sprite); }
+    void clearOverrides() { overrides_.clear(); }
+    bool hasOverride(int id) const { return overrides_.count(id) != 0; }
 private:
+    std::unordered_map<int, Sprite> overrides_;
     SpriteArchive small_, large_, special_;
     SpriteSet(SpriteArchive s, SpriteArchive l, SpriteArchive p) : small_(std::move(s)), large_(std::move(l)), special_(std::move(p)) {}
 };

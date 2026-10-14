@@ -100,6 +100,7 @@ SpriteSet SpriteSet::load(const std::string& gameDir) {
 }
 
 const Sprite* SpriteSet::get(int id) const {
+    if (!overrides_.empty()) { const auto it = overrides_.find(id); if (it != overrides_.end()) return &it->second; }
     if (id >= 1000) return large_.find(id);
     if (const Sprite* s = small_.find(id)) return s;
     return special_.find(id);
