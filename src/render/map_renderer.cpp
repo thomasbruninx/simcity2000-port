@@ -334,6 +334,12 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
     (void)s;
     auto height = [&](int id) { const Sprite* sp = sprites_.get(id); return sp ? sp->height : 0; };
     auto widthOf = [&](int id) { const Sprite* sp = sprites_.get(id); return sp ? sp->width : 0; };
+    // 0x43C0DB: a powerable tile without power (XBIT & 0xC0 == 0x80) gets the lightning-bolt icon (sprite 0x56A) 16 px above the tile's base, centred on the sprite
+    auto bolt = [&](int a, int b, int x, int tileBottom, int spriteWidth) {
+        if ((w.xbit.at(a, b) & 0xC0) != 0x80) return;
+        const int bid = 0x56A - 1000 + zoomBase, off = 16 >> (2 - z);
+        blit(fb, bid, x + (spriteWidth >> 1) - off, tileBottom - off, false);
+    };
     const int margin = 260 << (z > 0 ? z - 1 : 0) >> 1;
 
     // ground sprite of a file tile drawn at (x, yBase); yBase is the tile's bottom vertex (before altitude)
@@ -390,6 +396,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
                     // big buildings are drawn once, from the corner tile that is leftmost on screen for the current rotation
                     const int sid = id + 1000 + (z - 2) * 500;
                     blit(fb, sid, x, bottom + (widthOf(sid) >> 2) - th - height(sid), flip);
+                    bolt(a, b, x, bottom, widthOf(sid));
                 }
                 overlay();
                 drawThings();
@@ -432,6 +439,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
                 if (id == 0x58 && drawbridgeUp(w, a, b)) sid = 0x59 + zoomBase;   // the drawbridge opens for a ship within 8 tiles (Manhattan distance)
                 top = bottom - height(sid) - (xter == 0xD && id < 0x1D ? 12 : 0);
                 blit(fb, sid, x, top, flip);
+                bolt(a, b, x, bottom, widthOf(sid));
                 if (layers.traffic && id >= 0x1D) {
                     const int density = w.xtrf.at(a >> 1, b >> 1);
                     const bool highwayPiece = id >= 0x49 && id <= 0x50;
