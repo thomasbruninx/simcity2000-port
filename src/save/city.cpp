@@ -156,8 +156,23 @@ void CityFile::setMiscWord(size_t i, uint32_t v) {
 
 std::string CityFile::name() const {
     if (!cnam) return {};
+    // Pascal-style, but the length byte is unreliable (DEFAULT.SC2 has 0x1F in front of "New City\0" and 0xFD filler): stop at the length, a NUL or any non-text byte
     const size_t n = std::min<size_t>((*cnam)[0], 31);
-    return std::string(reinterpret_cast<const char*>(cnam->data() + 1), n);
+    std::string out;
+    for (size_t i = 0; i < n; ++i) {
+        const uint8_t ch = (*cnam)[1 + i];
+        if (ch < 0x20 || ch >= 0x7F) break;
+        out.push_back(static_cast<char>(ch));
+    }
+    return out;
+}
+
+void CityFile::setName(const std::string& name) {
+    std::array<uint8_t, 32> a{};
+    const size_t n = std::min<size_t>(name.size(), 31);
+    a[0] = static_cast<uint8_t>(n);
+    for (size_t i = 0; i < n; ++i) a[1 + i] = static_cast<uint8_t>(name[i]);
+    cnam = a;
 }
 
 }  // namespace sc2k

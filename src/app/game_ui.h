@@ -144,6 +144,7 @@ private:
     bool debugMenu_ = false;           // the hidden Debug menu (resource 223), enabled by typing the cheat word
     std::string cheatTyped_;
     void buildMenu();
+    void setCityNameAll(const std::string& name);
     void enableDebugMenu();
     void debugCommand(int id);
     void menuCommand(int id);

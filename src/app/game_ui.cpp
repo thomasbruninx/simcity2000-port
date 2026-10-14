@@ -340,6 +340,7 @@ void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
     CityFile map = CityFile::load(defaultMapPath);
     sim_.startNewCity(map, era, difficulty, terrain);
     base_ = map;
+    info_.cityName = map.name();
     avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
     cam_.rotation = 0;
     if (terrain) cam_.centerOn(0x40, 0x40, mapW() / 2, mapH() / 2);   // 0x412050(view, 0x40, 0x40) at the end of the generator
@@ -354,6 +355,11 @@ void GameUi::loadCity(const CityFile& f) {
     info_.cityName = f.name();
     queryOpen_ = false; dragging_ = false; group_ = item_ = -1; menuOpen_ = false;
     message_.clear();
+}
+
+void GameUi::setCityNameAll(const std::string& name) {   // the paper's '=' token, the saved CNAM and the default file name
+    info_.cityName = name;
+    base_.setName(name);
 }
 
 void GameUi::terrainProgress(int stage) {
@@ -387,6 +393,8 @@ void GameUi::finishMapEditor() {   // DONE: the edited landscape becomes the new
     Modal diff; diff.title = "Difficulty"; diff.options = {"Easy ($20,000)", "Medium ($10,000)", "Hard ($10K bond)"};
     const int d = runModal(diff);
     if (d < 0) return;
+    std::string name = "New City";
+    if (!askText("Name your city", name) || name.empty()) name = "New City";
     CityFile edited = sim_.toCity(base_);
     mapEdit_ = false;
     sim_.startNewCity(edited, era, d, nullptr);
@@ -395,6 +403,7 @@ void GameUi::finishMapEditor() {   // DONE: the edited landscape becomes the new
     cam_.rotation = 0;
     cam_.centerOn(0x40, 0x40, mapW() / 2, mapH() / 2);
     group_ = item_ = -1; dragging_ = false; queryOpen_ = false;
+    setCityNameAll(name);
     say("New city started");
 }
 
@@ -475,7 +484,10 @@ void GameUi::newCityDialog(bool randomMap) {
     Modal diff; diff.title = "Difficulty"; diff.options = {"Easy ($20,000)", "Medium ($10,000)", "Hard ($10K bond)"};
     const int d = runModal(diff);
     if (d < 0) return;
+    std::string name = "New City";
+    if (!askText("Name your city", name) || name.empty()) name = "New City";   // the start dialog 101 has a name field
     newCity(era, d, m == 1 ? &tp : nullptr);
+    setCityNameAll(name);
 }
 
 // ---- tools -------------------------------------------------------------------------------------------------------------
