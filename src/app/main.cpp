@@ -417,6 +417,7 @@ int main(int argc, char** argv) {
                     titleScreen.active = false;
                     editors->open(kW[n % 3]);
                 }
+                else if (op == "bridges") { int n = 0; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) { const int id = sim->world().xbld.at(a, b); if ((id == 0x49 || id == 0x4A) && (sim->world().xbit.at(a, b) & 0x1) == 0 && sim->world().xter.at(a, b) >= 0x30) ++n; } std::printf("bridge tiles over water: %d\n", n); }
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();

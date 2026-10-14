@@ -937,7 +937,7 @@ int GameUi::chooseBridge(int length, int allowedMask) {
     Modal m;
     m.title = "Choose the crossing (" + std::to_string(length) + " tiles)";
     std::vector<int> types;
-    for (int type = 0; type < 5; ++type) {
+    for (int type = 0; type < 7; ++type) {   // 0..4 road / rail bridges, 5 and 6 the highway bridges
         if (!(allowedMask & (1 << type))) continue;
         int32_t perTile;
         std::memcpy(&perTile, &sim_.tables().bridgeData[static_cast<size_t>(4 * type)], 4);
