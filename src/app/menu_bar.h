@@ -22,11 +22,11 @@ public:
     bool mouseDown(int x, int y, int& command);
     void mouseMove(int x, int y);
     bool isOpen() const { return open_ >= 0; }
-    void close() { open_ = -1; }
+    void close() { open_ = -1; sub_ = -1; }
 
 private:
     PeResources::MenuItem root_;
-    int open_ = -1, hover_ = -1;
+    int open_ = -1, hover_ = -1, sub_ = -1, subHover_ = -1;   // sub_: the item of the open drop-down whose submenu is shown (File > Load >)
     static std::string clean(const std::string& s, std::string* shortcut = nullptr);
     int titleX(int i) const;
     int dropWidth(const PeResources::MenuItem& m) const;

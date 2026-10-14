@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
         bool running = true;
         bool ctrl = false;
 
-        std::function<void()> setupCityBridge;
+        std::function<void()> setupCityBridge, blankCity;
         auto renderFrame = [&] {
             int pw = width, ph = height;   // physical pixels of the window
             if (window) SDL_GetWindowSizeInPixels(window, &pw, &ph);
@@ -241,9 +241,12 @@ int main(int argc, char** argv) {
             sprites.clearOverrides();
             editors->env().working.applyTo(sprites);
         };
+        blankCity = [&] {   // File > New City / opening Place & Print: a blank terrain
+            try { loadGame(args.dir + "/DEFAULT.SC2"); ui.resetCityPath(); ui.setCityName("Untitled"); } catch (const std::exception&) {}
+        };
         setupCityBridge = [&] {
             scurk::CityBridge& b = editors->city;
-            b.enter = [&, applyWorking] { ui.setCityEdit(true); applyWorking(); };
+            b.enter = [&, applyWorking] { blankCity(); ui.setCityEdit(true); applyWorking(); };
             b.reserve = [&](ui::Rect rc) { ui.setReserved(rc); };
             b.selectObject = [&](int id) { ui.setPlaceObject(id); };
             b.selectedObject = [&] { return ui.placeObject(); };
@@ -263,7 +266,7 @@ int main(int argc, char** argv) {
                 try { loadGame(p); titleScreen.active = false; ui.setCityEdit(true); return true; } catch (const std::exception&) { return false; }
             };
             b.saveCity = [&](const std::string& p) { return ui.saveCity(p); };
-            b.newCity = [&] { loadGame(args.dir + "/CITIES/DEFAULT.SC2"); ui.resetCityPath(); ui.setCityEdit(true); };
+            b.newCity = [&] { blankCity(); ui.setCityEdit(true); };
             b.cityPath = [&] { return ui.cityPath(); };
             b.cityName = [&] { return ui.cityName(); };
             b.applyTileSet = [applyWorking](const std::string&) { applyWorking(); };
