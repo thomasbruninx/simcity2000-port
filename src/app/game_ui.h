@@ -15,6 +15,8 @@
 #include "app/budget_window.h"
 #include "app/icons.h"
 #include "app/file_browser.h"
+#include "ui/geometry.h"
+#include "ui/widgets.h"
 #include "app/info_windows.h"
 #include "app/menu_bar.h"
 #include "app/tool_catalog.h"
@@ -76,6 +78,7 @@ public:
     void newCity(int era, int difficulty, const TerrainParams* terrain = nullptr);             // start a new city on the default map (scripting)
     void newCityDialog(bool randomMap = false);
     void enterMapEditor();                              // File > Edit New Map: the terrain generator panel (Hills / Water / Trees, Coast, River, MAKE, DONE) and the terrain tools
+    void showTestModal(const std::string& title, bool field) { testModal_ = Modal{}; testModal_.title = title; testModal_.textInput = field; testModal_.text = "A long city name"; testModal_.options = {"Yes", "No"}; modal_ = &testModal_; }   // screenshots
     void showBrowser() { browser_.open("Save City As", savesDir(), "city"); }   // screenshots
     bool inputCaptured() const { return browser_.active() || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
     bool mapEditing() const { return mapEdit_; }
@@ -105,7 +108,7 @@ public:
     void scheduledEvent(int index) override;                 // a dated event fired: unlock tools
 
 private:
-    struct Rect { int x, y, w, h; bool contains(int px, int py) const { return px >= x && py >= y && px < x + w && py < y + h; } };
+    using Rect = ui::Rect;   // src/ui/geometry.h
     struct Modal { std::string title; std::vector<std::string> options; int result = -2; bool textInput = false; std::string text; };
 
     Simulation& sim_;
@@ -128,6 +131,7 @@ private:
     std::string message_;
     int messageMs_ = 0;
     Modal* modal_ = nullptr;
+    Modal testModal_;
     BudgetWindow budget_;
     InfoWindows info_;
     MenuBar menu_;
@@ -137,8 +141,14 @@ private:
     TerrainParams editParams_;
     int sliderDrag_ = -1;
     std::string progressText_;
-    Rect editPanel() const { return {width_ - 236, kTopBarPx + 8, 228, 252}; }
+    Rect editPanel() const { return {width_ - 236, kTopBarPx + 8, 228, 276}; }
     static constexpr int kTopBarPx = 46;
+    // dialogs laid out from the widget toolkit (src/ui): the same functions give the rectangles for drawing and for hit testing
+    struct ModalLayout { Rect panel, title, field; std::vector<ui::Button> buttons; };
+    ModalLayout modalLayout() const;
+    std::vector<ui::Button> pauseButtons() const;
+    struct EditorWidgets { Rect panel; ui::Slider slider[3]; ui::Checkbox coast, river; ui::Button make, done; };
+    EditorWidgets editorWidgets() const;
     void drawMapEditor(SDL_Renderer* r);
     bool mapEditorMouse(int x, int y, bool press);
     void makeTerrain();

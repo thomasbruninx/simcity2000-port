@@ -42,6 +42,14 @@ void InfoWindows::postMessage(int id, int arg) {
 }
 
 // ---- drawing ----
+std::vector<ui::Button> InfoWindows::tabButtons(int x, int y) const {   // the window's tab strip; the open window's tab is lit
+    static const char* names[7] = {"Graphs", "City", "Advisors", "Newspaper", "Industry", "Neighbors", "Map"};
+    std::vector<Button> out;
+    auto cols = ui::columns(Rect{x + 8, y + 6, 572, 18}, 7, 2);
+    for (int i = 0; i < 7; ++i) { Button b; b.r = cols[static_cast<size_t>(i)]; b.label = names[i]; b.toggled = static_cast<int>(open) == i + 1; out.push_back(b); }
+    return out;
+}
+
 void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
     if (open == Which::None) { last_ = Which::None; return; }
     if (!portraitsTried_) {
@@ -61,13 +69,8 @@ void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
     fill(r, 0, 0, sw, sh, 0, 0, 0, 100);
     fill(r, x, y, kW, kH, 30, 34, 46);
     frame(r, x, y, kW, kH, 200, 200, 220);
-    static const char* tabs[7] = {"Graphs", "City", "Advisors", "Newspaper", "Industry", "Neighbors", "Map"};
-    text(r, x + kW - 60, y + 10, "[Close]", 255, 255, 190);
-    for (int i = 0; i < 7; ++i) {
-        const bool on = static_cast<int>(open) == i + 1;
-        fill(r, x + 8 + i * 78, y + 6, 74, 18, on ? 70 : 40, on ? 90 : 46, on ? 120 : 56);
-        text(r, x + 12 + i * 78, y + 11, tabs[i], on ? 255 : 220, on ? 255 : 220, on ? 190 : 230);
-    }
+    text(r, x + kW - 66, y + 10, "[Close]", 255, 255, 190);
+    for (const Button& b : tabButtons(x, y)) drawButton(r, b, Color{40, 46, 56});
     switch (open) {
         case Which::Graphs: drawGraphs(r, x, y + 34); break;
         case Which::City: drawCity(r, x, y + 34); break;
@@ -170,7 +173,7 @@ void InfoWindows::drawCity(SDL_Renderer* r, int x, int y) {
 }
 
 void InfoWindows::drawAdvisors(SDL_Renderer* r, int x, int y) {
-    text(r, x + 20, y + 6, "Your advisors (advice selection of the original, FUN_00419E10)", 170, 180, 200);
+    clippedText(r, x + 20, y + 6, kW - 40, "Your advisors (advice selection of the original, FUN_00419E10)", Color{170, 180, 200});
     SimContext& c = sim_.context();
     const uint32_t keep = c.rng.state();   // the health advisor draws a rand(); the window must not disturb the simulation
     for (int adv = 0; adv < kAdvisorCount; ++adv) {
@@ -179,31 +182,12 @@ void InfoWindows::drawAdvisors(SDL_Renderer* r, int x, int y) {
         if (static_cast<size_t>(adv) < portraits_.size()) portraits_[static_cast<size_t>(adv)]->drawSized(r, 0, x + 20, by + 1, 38, 41);
         text(r, x + 72, by + 6, kAdvisorNames[adv], 255, 255, 190);
         const std::string t = res_.string(adviceString(advisorAdvice(c, adv)));
-        if (t.size() > 66) { text(r, x + 72, by + 20, t.substr(0, 66)); text(r, x + 72, by + 32, t.substr(66, 66)); }
-        else text(r, x + 72, by + 24, t);
+        wrappedText(r, Rect{x + 72, by + 20, kW - 28 - 66, 22}, t, Color{235, 235, 235}, 3);   // long advice wraps inside its box
     }
     c.rng.seed(keep);
 }
 
 namespace {
-std::vector<std::string> wrap(const std::string& s, size_t width) {
-    std::vector<std::string> lines;
-    std::string cur;
-    size_t i = 0;
-    while (i < s.size()) {
-        if (s[i] == '\n') { lines.push_back(cur); cur.clear(); ++i; while (i < s.size() && s[i] == ' ') ++i; continue; }
-        size_t j = i;
-        while (j < s.size() && s[j] != ' ' && s[j] != '\n') ++j;
-        const std::string word = s.substr(i, j - i);
-        if (!cur.empty() && cur.size() + 1 + word.size() > width) { lines.push_back(cur); cur.clear(); }
-        if (!cur.empty()) cur += ' ';
-        cur += word;
-        i = j;
-        while (i < s.size() && s[i] == ' ') ++i;
-    }
-    if (!cur.empty()) lines.push_back(cur);
-    return lines;
-}
 }  // namespace
 
 namespace {
@@ -468,7 +452,8 @@ bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
     if (mx < x || my < y || mx >= x + kW || my >= y + kH) return true;
     if (my < y + 26) {
         if (mx > x + kW - 70) open = Which::None;
-        for (int i = 0; i < 7; ++i) if (mx >= x + 8 + i * 78 && mx < x + 82 + i * 78) open = static_cast<Which>(i + 1);
+        const auto tabs = tabButtons(x, y);
+        for (int i = 0; i < 7; ++i) if (tabs[static_cast<size_t>(i)].hit(mx, my)) open = static_cast<Which>(i + 1);
         return true;
     }
     if (open == Which::Newspaper && my >= y + 38) {   // clicking a story (rects 4..10 of the page) opens its text (0x477FF0 -> 0x47A050)

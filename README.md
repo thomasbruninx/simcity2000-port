@@ -4,6 +4,7 @@ A clean-room-style reimplementation of SimCity 2000 (Windows 95, 1995 CD Collect
 
 **Status:** reverse-engineering with a growing, *verified* simulation core. Ported and bit-verified against the original machine code (differential tests in an emulator, see [docs/validation/006](docs/validation/006-differential-testing-against-original-code.md)): RNGs, clock/calendar, save format (`libsc2`), power, water, environment (pollution/land value/crime/density/coverage), demand valves, monthly finance, **zone growth pass (all zone types incl. military/airport/seaport), traffic router, tile primitives and destroy effects**. **thing system (ships, trains, aircraft, monsters, tornado)** and microsim allocation. **economy model, random events, history graphs, the complete 25-phase tick and a headless driver (`sc2k-sim`) — verified day by day against the original code in an emulator (183 runs × 75 days identical)**. The playable app (`sc2k-app`) now has the original's map renderer, tools, menus, windows, newspaper, audio and the map editor. Start with:
 - [docs/roadmap.md](docs/roadmap.md) — plan based on findings
+- [docs/ui-architecture.md](docs/ui-architecture.md) — the interface toolkit (widgets, text layout, input routing) and how to extend it
 - [docs/original-file-inventory.md](docs/original-file-inventory.md)
 - [docs/executable-analysis.md](docs/executable-analysis.md), [docs/windows-api-usage.md](docs/windows-api-usage.md)
 - [docs/formats/](docs/formats/) — file formats (save format: verified container + RLE)

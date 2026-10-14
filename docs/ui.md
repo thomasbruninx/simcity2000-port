@@ -1,3 +1,5 @@
+> Architecture, the widget toolkit and how to add windows: see [ui-architecture.md](ui-architecture.md). This page records what each window shows and where its behaviour comes from.
+
 # The port's user interface (src/app)
 
 `GameUi` (toolbar, tool state machine, modal questions), `BudgetWindow`, `InfoWindows`, `IconStrip`, `tool_catalog`. All text comes from the player's SIMCITY.EXE at runtime

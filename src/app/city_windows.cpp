@@ -30,16 +30,21 @@ void InfoWindows::drawIndustry(SDL_Renderer* r, int x, int y) {
         if (industryMode_ == 1) text(r, cx + cw + 6, ry + 8, std::to_string(v[k]) + "%", 20, 20, 30);
     }
     fill(r, cx - 2, cy, 1, 11 * rowH, 60, 60, 70);
+    for (const Button& b : industryButtons(x, y)) drawButton(r, b);
+}
+
+std::vector<ui::Button> InfoWindows::industryButtons(int x, int y) const {   // the three mode buttons under the chart (labels from dialog 160)
     static const char* names[3] = {"Ratios", "Tax Rates", "Demand"};
     const auto* dlg = res_.dialog(160);
+    std::vector<ui::Button> out;
+    auto cols = ui::columns(Rect{x + 24, y + 11 * 24 + 36, 3 * 130 - 10, 22}, 3, 10);
     for (int i = 0; i < 3; ++i) {
         std::string label = names[i];
         if (dlg) for (const auto& c : dlg->controls) if (c.id == 291 + i && !c.text.empty()) label = c.text;
-        const bool on = industryMode_ == i;
-        fill(r, x + 24 + i * 130, y + 11 * rowH + 36, 120, 22, on ? 70 : 40, on ? 100 : 46, on ? 150 : 56);
-        frame(r, x + 24 + i * 130, y + 11 * rowH + 36, 120, 22, 190, 200, 230);
-        text(r, x + 24 + i * 130 + 60 - static_cast<int>(label.size()) * 4, y + 11 * rowH + 43, label, 255, 255, 220);
+        Button b; b.r = cols[static_cast<size_t>(i)]; b.label = label; b.toggled = industryMode_ == i;
+        out.push_back(b);
     }
+    return out;
 }
 
 // ---- Neighbors (0x46BED2): the city and its four neighbours as blobs on the original's brown map, with names and populations --------------------------------
@@ -185,7 +190,8 @@ void InfoWindows::drawMap(SDL_Renderer* r, int x, int y) {
 
 bool InfoWindows::windowClick(int mx, int my, int x, int y) {   // (x, y) = top-left of the content area
     if (open == Which::Industry) {
-        for (int i = 0; i < 3; ++i) if (mx >= x + 24 + i * 130 && mx < x + 144 + i * 130 && my >= y + 11 * 24 + 36 && my < y + 11 * 24 + 58) industryMode_ = i;
+        const auto btns = industryButtons(x, y);
+        for (int i = 0; i < 3; ++i) if (btns[static_cast<size_t>(i)].hit(mx, my)) industryMode_ = i;
         return true;
     }
     if (open == Which::Map) {

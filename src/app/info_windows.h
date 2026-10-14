@@ -12,6 +12,7 @@
 
 #include "app/ft_text.h"
 #include "app/icons.h"
+#include "ui/widgets.h"
 #include "resources/bmp.h"
 #include "resources/pe_resources.h"
 #include "simulation/advisors.h"
@@ -68,6 +69,8 @@ private:
     void drawIndustry(SDL_Renderer* r, int x, int y);   // dialog 160 "City Industry" (city_windows.cpp)
     void drawNeighbors(SDL_Renderer* r, int x, int y);  // dialog 157 "SimNation"
     void drawMap(SDL_Renderer* r, int x, int y);        // dialog 246 "City Map"
+    std::vector<ui::Button> industryButtons(int x, int y) const;
+    std::vector<ui::Button> tabButtons(int x, int y) const;
     bool windowClick(int mx, int my, int x, int y);     // clicks inside the three windows
     void drawArticle(SDL_Renderer* r, int x, int y);
     std::string storyText(int k, bool article);

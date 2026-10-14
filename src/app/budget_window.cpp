@@ -131,7 +131,7 @@ void BudgetWindow::draw(SDL_Renderer* r, int sw, int sh) const {
                 const int col = static_cast<int>(k) / 10, row = static_cast<int>(k) % 10;
                 const int x = ox + 14 + col * 305, y = dy + 18 + row * 14;
                 const bool on = (s_.ordinances >> ordinances_[k].second) & 1u;
-                text(r, x, y, std::string(on ? "[x] " : "[ ] ") + ordinances_[k].first + "  " + money(static_cast<long long>(ordinanceCost(s_, ordinances_[k].second)) * s_.budget[kOrdinance].fundingPercent / std::max(1, static_cast<int>(t_.budgetDivisor[kOrdinance]))) + "/yr", on ? 190 : 150, on ? 255 : 160, on ? 190 : 170);
+                clippedText(r, x, y, 296, std::string(on ? "[x] " : "[ ] ") + ordinances_[k].first + "  " + money(static_cast<long long>(ordinanceCost(s_, ordinances_[k].second)) * s_.budget[kOrdinance].fundingPercent / std::max(1, static_cast<int>(t_.budgetDivisor[kOrdinance]))) + "/yr", Color{static_cast<uint8_t>(on ? 190 : 150), static_cast<uint8_t>(on ? 255 : 160), static_cast<uint8_t>(on ? 190 : 170)});
             }
         } else {
             text(r, ox + 14, dy + 2, rows_[static_cast<size_t>(detail_)].label + " detail", 255, 255, 190);

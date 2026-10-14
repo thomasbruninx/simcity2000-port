@@ -143,3 +143,6 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 * Tool sounds from the dispatcher 0x43EBC0: **500 is "built", 0x1F5 "refused"** (the port had them swapped); per-category success sounds; the 0x1FC loop while dragging bulldozer / roads / rails / lines / pipes; 0x453FB0 = Query tool poking a helicopter marker.
 * Menu bar: RT_MENU 3 parsed and its command handlers ported (Options, Disasters, Speed, Newspaper flags).
 * High DPI mode (logical presentation, x1.5/x2/x4) and seven map zoom levels.
+
+## 2026-10-14 — Session 20: UI toolkit
+* New `src/ui` toolkit (geometry, text wrapping / ellipsizing, theme, Button / Checkbox / Slider / ListBox / TextField) with unit tests; the modal questions, pause menu, map editor panel, file browser, tab strip and industry buttons are built from it; long texts (confirmations, query popup, advisor advice, status lines, paths) now wrap or ellipsize instead of running out of their boxes. See docs/ui-architecture.md.

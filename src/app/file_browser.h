@@ -1,9 +1,12 @@
-// A small folder / file browser for "Save City As": lists the folders and the .sc2 / .scn files of a directory, a file name field, Save / Cancel.
+// A folder / file browser for "Save City As" built from the widget toolkit (src/ui): a path line, a list of the folders and the .sc2 / .scn files of a
+// directory, a file name field and Save / Cancel buttons.
 #pragma once
 #include <SDL3/SDL.h>
 
 #include <string>
 #include <vector>
+
+#include "ui/widgets.h"
 
 namespace sc2k {
 
@@ -11,7 +14,7 @@ class FileBrowser {
 public:
     void open(const std::string& title, const std::string& dir, const std::string& name);
     bool active() const { return active_; }
-    int result() const { return result_; }              // -2 open, 0 saved (see path()), -1 cancelled
+    int result() const { return result_; }              // -2 open, 0 accepted (see path()), -1 cancelled
     std::string path() const;                           // directory + file name with the .sc2 extension
     void draw(SDL_Renderer* r, int w, int h);
     void mouseDown(int x, int y, int w, int h);
@@ -22,12 +25,14 @@ public:
 
 private:
     struct Entry { std::string name; bool dir; };
+    struct Widgets { ui::Rect panel, pathLine; ui::ListBox list; ui::TextField name; ui::Button save, cancel; };
+    Widgets layout(int w, int h) const;
     bool active_ = false;
     int result_ = -2;
-    std::string title_, dir_, name_;
+    std::string title_, dir_;
     std::vector<Entry> entries_;
-    int scroll_ = 0;
-    static constexpr int kRows = 14, kRowH = 18;
+    ui::ListBox list_;          // items mirror entries_ (folders shown in brackets); only scroll / selection live here
+    ui::TextField name_;
     void refresh();
     void accept();
 };

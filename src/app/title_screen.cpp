@@ -32,19 +32,6 @@ std::vector<std::string> listFiles(const std::string& dir, const std::string& ex
     std::sort(out.begin(), out.end());
     return out;
 }
-std::vector<std::string> wrapText(const std::string& s, size_t width) {
-    std::vector<std::string> lines;
-    std::string cur, word;
-    auto flush = [&] { if (!word.empty()) { if (!cur.empty() && cur.size() + 1 + word.size() > width) { lines.push_back(cur); cur.clear(); } if (!cur.empty()) cur += ' '; cur += word; word.clear(); } };
-    for (char ch : s) {
-        if (ch == ' ') flush();
-        else if (ch == '\n') { flush(); lines.push_back(cur); cur.clear(); }
-        else word.push_back(ch);
-    }
-    flush();
-    if (!cur.empty()) lines.push_back(cur);
-    return lines;
-}
 }  // namespace
 
 TitleScreen::TitleScreen(const std::string& gameDir, const PeResources& res, const std::array<uint32_t, 256>& gamePalette) : dir_(gameDir), res_(res), palette_(gamePalette) {
@@ -144,7 +131,7 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
         const int y = 110 + static_cast<int>(i) * 20;
         const bool sel = static_cast<int>(i) == selected_;
         fill(r, 60, y, 300, 18, sel ? 70 : 20, sel ? 90 : 28, sel ? 140 : 44);
-        text(r, 68, y + 5, scen ? scenarios_[i].name : cities_[i], 235, 235, 235);
+        clippedText(r, 68, y + 5, 284, scen ? scenarios_[i].name : cities_[i], theme::kText);
     }
     if (scen && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) {
         const ScenarioEntry& e = scenarios_[static_cast<size_t>(selected_)];
@@ -154,9 +141,9 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
         }
         text(r, 620, 110, e.name, 255, 255, 190);
         int y = 134;
-        for (const std::string& l : wrapText(e.shortText, 70)) { text(r, 620, y, l, 220, 220, 230); y += 12; }
+        for (const std::string& l : wrapText(e.shortText, 70 * kDebugCharW)) { text(r, 620, y, l, 220, 220, 230); y += 12; }
         y += 10;
-        for (const std::string& l : wrapText(e.longText, 70)) { text(r, 620, y, l, 160, 170, 190); y += 12; }
+        for (const std::string& l : wrapText(e.longText, 70 * kDebugCharW)) { text(r, 620, y, l, 160, 170, 190); y += 12; }
     }
     const Rect ok = button(0, w, h), cancel = button(1, w, h);
     fill(r, ok.x, ok.y, ok.w, ok.h, 40, 80, 56); frame(r, ok.x, ok.y, ok.w, ok.h, 190, 230, 200);
@@ -188,11 +175,11 @@ void TitleScreen::drawSettings(SDL_Renderer* r, int w, int h) {
     fill(r, 340, 120, 260, 30, fluid ? 70 : 28, fluid ? 100 : 36, fluid ? 150 : 56); frame(r, 340, 120, 260, 30, haveFluid ? 190 : 90, haveFluid ? 200 : 90, haveFluid ? 230 : 100);
     text(r, 356, 131, haveFluid ? "FluidSynth + SoundFont" : "FluidSynth (not in this build)", haveFluid ? 255 : 130, haveFluid ? 255 : 130, haveFluid ? 220 : 140);
     text(r, 60, 180, "SoundFont (.sf2) for FluidSynth", 200, 210, 230);
-    if (fonts_.empty()) text(r, 60, 204, "none found - put a .sf2 into the resources folder next to the game", 230, 150, 120);
+    if (fonts_.empty()) wrappedText(r, ui::Rect{60, 204, std::max(200, w - 120), 30}, "none found - put a .sf2 into the resources folder next to the game", Color{230, 150, 120});
     for (size_t i = 0; i < fonts_.size() && i < 8; ++i) {
         const bool sel = settings.soundfont == fonts_[i] || (settings.soundfont.empty() && i == 0);
         fill(r, 60, 200 + static_cast<int>(i) * 22, 1100, 20, sel ? 70 : 20, sel ? 100 : 28, sel ? 150 : 44);
-        text(r, 68, 206 + static_cast<int>(i) * 22, baseName(fonts_[i]) + "   (" + fonts_[i] + ")", 235, 235, 235);
+        clippedText(r, 68, 206 + static_cast<int>(i) * 22, 1084, baseName(fonts_[i]) + "   (" + fonts_[i] + ")", theme::kText);
     }
     text(r, 60, 400, "Music volume", 200, 210, 230);
     fill(r, 60, 420, 40, 26, 40, 56, 96); frame(r, 60, 420, 40, 26, 190, 200, 230); text(r, 76, 429, "-");
@@ -200,9 +187,8 @@ void TitleScreen::drawSettings(SDL_Renderer* r, int w, int h) {
     fill(r, 236, 420, 40, 26, 40, 56, 96); frame(r, 236, 420, 40, 26, 190, 200, 230); text(r, 252, 429, "+");
     fill(r, 60, 470, 160, 34, 40, 80, 56); frame(r, 60, 470, 160, 34, 190, 230, 200); text(r, 84, 483, "Play test tune", 255, 255, 220);
     fill(r, 240, 470, 160, 34, 80, 40, 40); frame(r, 240, 470, 160, 34, 230, 190, 190); text(r, 292, 483, "Back", 255, 255, 220);
-    if (!status_.empty()) text(r, 60, 530, status_, 200, 220, 160);
-    text(r, 60, h - 30, "Settings are saved to " + AudioSettings::settingsPath(), 130, 140, 160);
-    (void)w;
+    if (!status_.empty()) wrappedText(r, ui::Rect{60, 530, std::max(200, w - 120), 40}, status_, Color{200, 220, 160});
+    clippedText(r, 60, h - 30, std::max(100, w - 120), "Settings are saved to " + ellipsizeStart(AudioSettings::settingsPath(), std::max(100, w - 120) - 22 * kDebugCharW), Color{130, 140, 160});
 }
 
 void TitleScreen::settingsClick(int x, int y, int w, int h) {

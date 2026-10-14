@@ -14,6 +14,11 @@ target_compile_options(sc2k_sim PRIVATE -ffp-contract=off)
 target_include_directories(sc2k_sim PUBLIC src)
 target_compile_options(sc2k_sim PRIVATE -Wall -Wextra -Wpedantic)
 
+# Interface toolkit: geometry, text wrapping and widget logic without any SDL (src/ui, docs/ui-architecture.md)
+add_library(sc2k_ui src/ui/text_layout.cpp src/ui/widgets.cpp)
+target_include_directories(sc2k_ui PUBLIC src)
+target_compile_options(sc2k_ui PRIVATE -Wall -Wextra -Wpedantic)
+
 add_library(sc2k_audio src/audio/midi.cpp src/audio/audio.cpp src/audio/music_backend.cpp)
 target_include_directories(sc2k_audio PUBLIC src)
 # optional FluidSynth backend (LGPL, linked dynamically): brew install fluid-synth
@@ -56,7 +61,7 @@ find_package(SDL3 QUIET CONFIG)
 if(SDL3_FOUND)
   add_executable(sc2k-app src/app/main.cpp src/app/game_ui.cpp src/app/tool_catalog.cpp src/app/budget_window.cpp src/app/icons.cpp src/app/info_windows.cpp src/app/file_browser.cpp src/app/city_windows.cpp src/app/title_screen.cpp src/app/menu_bar.cpp src/app/ft_text.cpp src/audio/audio_device.cpp)
   target_include_directories(sc2k-app PRIVATE src)
-  target_link_libraries(sc2k-app PRIVATE sc2k_render sc2k_audio SDL3::SDL3)
+  target_link_libraries(sc2k-app PRIVATE sc2k_render sc2k_audio sc2k_ui SDL3::SDL3)
   # FreeType (brew install freetype): the newspaper draws Times New Roman from the system's fonts
   if(PkgConfig_FOUND)
     pkg_check_modules(FREETYPE2 QUIET IMPORTED_TARGET freetype2)
@@ -72,8 +77,8 @@ else()
 endif()
 
 enable_testing()
-add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.cpp tests/test_power.cpp tests/test_environment.cpp tests/test_economy.cpp tests/test_zone.cpp tests/test_things.cpp tests/test_tick.cpp tests/test_render.cpp tests/test_tools.cpp tests/test_audio.cpp tests/test_main.cpp)
-target_link_libraries(test_sim PRIVATE sc2k_render sc2k_sim sc2k_save sc2k_audio)
+add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.cpp tests/test_power.cpp tests/test_environment.cpp tests/test_economy.cpp tests/test_zone.cpp tests/test_things.cpp tests/test_tick.cpp tests/test_render.cpp tests/test_tools.cpp tests/test_audio.cpp tests/test_ui.cpp tests/test_main.cpp)
+target_link_libraries(test_sim PRIVATE sc2k_render sc2k_sim sc2k_save sc2k_audio sc2k_ui)
 add_test(NAME sim COMMAND test_sim)
 set_tests_properties(sim PROPERTIES ENVIRONMENT "SC2K_DATA_PATH=$ENV{SC2K_DATA_PATH}")
 

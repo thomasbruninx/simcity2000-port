@@ -1,5 +1,7 @@
 #include "app/game_ui.h"
 
+#include "app/ui_draw.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +12,7 @@
 #include "simulation/bonds.h"
 
 namespace sc2k {
+using namespace ui;   // fill, frame, text, wrappedText, drawButton ... (app/ui_draw.h)
 namespace {
 constexpr int kMenuBar = MenuBar::kHeight, kTopBar = 28 + MenuBar::kHeight, kGroupW = 150, kGroupH = 26, kItemW = 290, kItemH = 17, kBottomBar = 22;
 // icon of a toolbar group / top-bar button: strip 1 = main toolbar (resource 2, 23 px cells), strip 2 = terrain strip (resource 207, 19 px cells)
@@ -27,21 +30,6 @@ constexpr int kTopButtonStep = 27, kTopButtonCount = 10;
 constexpr const char* kMonths[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 constexpr const char* kSpeedNames[6] = {"", "Paused", "Turtle", "Llama", "Cheetah", "Swallow"};
 
-void fill(SDL_Renderer* r, int x, int y, int w, int h, Uint8 cr, Uint8 cg, Uint8 cb, Uint8 ca = 255) {
-    SDL_SetRenderDrawBlendMode(r, ca < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
-    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
-    const SDL_FRect f{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
-    SDL_RenderFillRect(r, &f);
-}
-void frame(SDL_Renderer* r, int x, int y, int w, int h, Uint8 cr, Uint8 cg, Uint8 cb) {
-    SDL_SetRenderDrawColor(r, cr, cg, cb, 255);
-    const SDL_FRect f{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
-    SDL_RenderRect(r, &f);
-}
-void text(SDL_Renderer* r, int x, int y, const std::string& s, Uint8 cr = 235, Uint8 cg = 235, Uint8 cb = 235) {
-    SDL_SetRenderDrawColor(r, cr, cg, cb, 255);
-    SDL_RenderDebugText(r, static_cast<float>(x), static_cast<float>(y), s.c_str());
-}
 }  // namespace
 
 GameUi::GameUi(Simulation& sim, MapRenderer& renderer, Camera& cam, Clock& clock, const PeResources& resources, CityFile base)
@@ -148,14 +136,13 @@ void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
     if (browser_.active()) { if (button == 1) browser_.mouseDown(x, y, width_, height_); return; }
     if (pauseOpen_ && !modal_) {
-        for (int i = 0; i < 5; ++i) if (Rect{width_ / 2 - 130, height_ / 2 - 130 + i * 48, 260, 38}.contains(x, y)) { pauseClick(i); return; }
+        const auto buttons = pauseButtons();
+        for (size_t i = 0; i < buttons.size(); ++i) if (buttons[i].hit(x, y)) { pauseClick(static_cast<int>(i)); return; }
         return;
     }
     if (modal_) {
-        const int n = static_cast<int>(modal_->options.size());
-        const int bx = (width_ - 520) / 2, by = (height_ - (70 + 22 * n)) / 2;
-        for (int i = 0; i < n; ++i)
-            if (Rect{bx + 20, by + 50 + 22 * i, 480, 20}.contains(x, y)) modal_->result = i;
+        const ModalLayout l = modalLayout();
+        for (size_t i = 0; i < l.buttons.size(); ++i) if (l.buttons[i].hit(x, y)) modal_->result = static_cast<int>(i);
         return;
     }
     if (button == 1) {   // the menu bar of the original
@@ -414,54 +401,63 @@ void GameUi::finishMapEditor() {   // DONE: the edited landscape becomes the new
     say("New city started");
 }
 
+GameUi::EditorWidgets GameUi::editorWidgets() const {
+    EditorWidgets e;
+    e.panel = editPanel();
+    Rect in = e.panel.inset(16, 0);
+    in.cutTop(54);
+    int* vals[3] = {nullptr, nullptr, nullptr};
+    (void)vals;
+    const int v[3] = {editParams_.hills, editParams_.water, editParams_.trees};
+    for (int i = 0; i < 3; ++i) {
+        Rect row = in.cutTop(34);
+        row.cutTop(16);
+        e.slider[i].r = row.inset(0, 0); e.slider[i].r.h = 14; e.slider[i].min = 0; e.slider[i].max = 47; e.slider[i].value = v[i];
+    }
+    in.cutTop(2);
+    Rect checks = in.cutTop(22);
+    auto cols = ui::columns(checks, 2, 4);
+    e.coast.r = cols[0]; e.coast.label = res_.string(791); e.coast.checked = editParams_.coast;
+    e.river.r = cols[1]; e.river.label = res_.string(792); e.river.checked = editParams_.river;
+    in.cutTop(8);
+    auto btns = ui::columns(in.cutTop(26), 2, 20);
+    e.make.r = btns[0]; e.make.label = res_.string(793);
+    e.done.r = btns[1]; e.done.label = res_.string(794);
+    return e;
+}
+
 bool GameUi::mapEditorMouse(int x, int y, bool press) {
-    const Rect p = editPanel();
-    if (!p.contains(x, y) && sliderDrag_ < 0) return false;
-    const int trackX = p.x + 16, trackW = 196;
+    EditorWidgets e = editorWidgets();
+    if (!e.panel.contains(x, y) && sliderDrag_ < 0) return false;
     int* vals[3] = {&editParams_.hills, &editParams_.water, &editParams_.trees};
     for (int i = 0; i < 3; ++i) {
-        const Rect row{trackX - 4, p.y + 56 + i * 34, trackW + 8, 24};
-        if ((press && row.contains(x, y)) || sliderDrag_ == i) {
-            sliderDrag_ = i;
-            *vals[i] = std::clamp((x - trackX) * 47 / trackW, 0, 47);
-            return true;
-        }
+        ui::Slider& sl = e.slider[i];
+        sl.r = sl.r.inset(0, -6);   // a taller grab area than the thin track
+        if (press && sl.press(x, y)) { sliderDrag_ = i; *vals[i] = sl.value; return true; }
+        if (sliderDrag_ == i) { sl.dragging = true; sl.drag(x); *vals[i] = sl.value; return true; }
     }
     if (!press) return true;
-    if (Rect{p.x + 16, p.y + 160, 100, 18}.contains(x, y)) editParams_.coast = !editParams_.coast;
-    else if (Rect{p.x + 120, p.y + 160, 100, 18}.contains(x, y)) editParams_.river = !editParams_.river;
-    else if (Rect{p.x + 16, p.y + 192, 90, 26}.contains(x, y)) makeTerrain();
-    else if (Rect{p.x + 120, p.y + 192, 90, 26}.contains(x, y)) finishMapEditor();
+    if (e.coast.click(x, y)) editParams_.coast = e.coast.checked;
+    else if (e.river.click(x, y)) editParams_.river = e.river.checked;
+    else if (e.make.hit(x, y)) makeTerrain();
+    else if (e.done.hit(x, y)) finishMapEditor();
     return true;
 }
 
 void GameUi::drawMapEditor(SDL_Renderer* r) {
-    const Rect p = editPanel();
-    fill(r, p.x, p.y, p.w, p.h, 28, 32, 44);
-    frame(r, p.x, p.y, p.w, p.h, 200, 200, 220);
-    const auto* dlg = res_.dialog(104);
-    text(r, p.x + 16, p.y + 10, dlg && !dlg->controls.empty() ? "Terrain Generation" : "Terrain Generation", 255, 255, 190);
-    text(r, p.x + 16, p.y + 28, progressText_.empty() ? res_.string(413) : progressText_, 190, 220, 160);
+    const EditorWidgets e = editorWidgets();
+    drawPanel(r, e.panel, "Terrain Generation");
+    clippedText(r, e.panel.x + 16, e.panel.y + 28, e.panel.w - 32, progressText_.empty() ? res_.string(413) : progressText_, Color{190, 220, 160});
     static const char* names[3] = {"Hills", "Water", "Trees"};
-    const int vals[3] = {editParams_.hills, editParams_.water, editParams_.trees};
     for (int i = 0; i < 3; ++i) {
-        const int y = p.y + 56 + i * 34;
-        text(r, p.x + 16, y, std::to_string(vals[i] * 100 / 47) + "% " + names[i], 235, 235, 235);
-        fill(r, p.x + 16, y + 16, 196, 4, 80, 90, 120);
-        fill(r, p.x + 16 + vals[i] * 196 / 47 - 3, y + 11, 7, 14, 230, 230, 140);
+        clippedText(r, e.slider[i].r.x, e.slider[i].r.y - 16, e.slider[i].r.w, std::to_string(e.slider[i].value * 100 / 47) + "% " + names[i], theme::kText);
+        drawSlider(r, e.slider[i]);
     }
-    auto check = [&](int x, int y, bool on, const std::string& label) {
-        frame(r, x, y + 2, 12, 12, 200, 200, 220);
-        if (on) fill(r, x + 3, y + 5, 6, 6, 120, 230, 120);
-        text(r, x + 18, y + 4, label, 235, 235, 235);
-    };
-    check(p.x + 16, p.y + 160, editParams_.coast, res_.string(791));
-    check(p.x + 120, p.y + 160, editParams_.river, res_.string(792));
-    fill(r, p.x + 16, p.y + 192, 90, 26, 40, 80, 56); frame(r, p.x + 16, p.y + 192, 90, 26, 190, 230, 200);
-    text(r, p.x + 16 + 45 - 16, p.y + 201, res_.string(793), 255, 255, 220);
-    fill(r, p.x + 120, p.y + 192, 90, 26, 80, 60, 40); frame(r, p.x + 120, p.y + 192, 90, 26, 230, 210, 190);
-    text(r, p.x + 120 + 45 - 16, p.y + 201, res_.string(794), 255, 255, 220);
-    text(r, p.x + 16, p.y + 228, "Use the tools on the left", 150, 160, 180);
+    drawCheckbox(r, e.coast);
+    drawCheckbox(r, e.river);
+    drawButton(r, e.make, Color{40, 80, 56});
+    drawButton(r, e.done, Color{80, 60, 40});
+    wrappedText(r, Rect{e.panel.x + 16, e.make.r.bottom() + 12, e.panel.w - 32, 48}, "Use the tools on the left to shape the land, then press DONE.", theme::kTextDim);
 }
 
 void GameUi::newCityDialog(bool randomMap) {
@@ -713,7 +709,11 @@ bool GameUi::askText(const std::string& title, std::string& text) {
 
 void GameUi::textInput(const std::string& utf8) {
     if (browser_.active()) { browser_.textInput(utf8); return; }
-    if (modal_ && modal_->textInput) for (char ch : utf8) if (ch >= 32 && ch < 127 && modal_->text.size() < 24) modal_->text.push_back(ch);
+    if (modal_ && modal_->textInput) {
+        ui::TextField f; f.text = modal_->text; f.maxLen = 24;
+        f.textInput(utf8);
+        modal_->text = f.text;
+    }
 }
 
 void GameUi::dragTool(int a0, int b0, int a1, int b1) {
@@ -785,16 +785,17 @@ void GameUi::pauseClick(int i) {
     }
 }
 
+std::vector<ui::Button> GameUi::pauseButtons() const {
+    static const char* labels[5] = {"Resume", "Save game", "Load game", "Settings", "Exit"};
+    std::vector<ui::Button> out;
+    for (int i = 0; i < 5; ++i) out.push_back({Rect{width_ / 2 - 130, height_ / 2 - 130 + i * 48, 260, 38}, labels[i]});
+    return out;
+}
+
 void GameUi::drawPause(SDL_Renderer* r) {
     fill(r, 0, 0, width_, height_, 0, 0, 0, 140);
-    text(r, width_ / 2 - 40, height_ / 2 - 160, "Game paused", 255, 255, 190);
-    static const char* labels[5] = {"Resume", "Save game", "Load game", "Settings", "Exit"};
-    for (int i = 0; i < 5; ++i) {
-        const Rect b{width_ / 2 - 130, height_ / 2 - 130 + i * 48, 260, 38};
-        fill(r, b.x, b.y, b.w, b.h, 40, 56, 96);
-        frame(r, b.x, b.y, b.w, b.h, 190, 200, 230);
-        text(r, b.x + 16, b.y + 15, labels[i], 255, 255, 220);
-    }
+    text(r, width_ / 2 - 44, height_ / 2 - 160, "Game paused", theme::kTitle);
+    for (const ui::Button& b : pauseButtons()) drawButton(r, b);
 }
 
 bool GameUi::saveCity(const std::string& path) {
@@ -998,10 +999,12 @@ void GameUi::draw(SDL_Renderer* r) {
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
     const int buttonsX = width_ - kTopButtonCount * kTopButtonStep - 4;
     for (int k = 0; k < kTopButtonCount; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2 + kMenuBar);
-    if (!right.empty()) {
-        const size_t room = static_cast<size_t>(std::max(0, (buttonsX - 500 - 8) / 8));
-        if (right.size() > room) right.resize(room);
-        text(r, std::max(500, buttonsX - static_cast<int>(right.size()) * 8 - 8), 10 + kMenuBar, right, 255, 220, 120);
+    if (!right.empty()) {   // status message: right-aligned left of the buttons, cut with "..." when it does not fit
+        const int room = std::max(0, buttonsX - 500 - 8);
+        if (room >= 8 * kDebugCharW) {
+            right = ellipsize(right, room);
+            text(r, buttonsX - debugWidth(right) - 8, 10 + kMenuBar, right, Color{255, 220, 120});
+        }
     }
 
     // tool groups
@@ -1099,59 +1102,88 @@ void GameUi::drawSigns(SDL_Renderer* r) {
 }
 
 void GameUi::drawQuery(SDL_Renderer* r) {
+    // the query popup: every text wraps inside the box, which grows with its content
+    const int bw = 380, pad = 10, lineGap = 3;
+    auto place = [&](int bh) { return Rect{std::min(std::max(0, mouseX_ + 20), width_ - bw), std::min(std::max(kTopBar, mouseY_ - bh / 2), height_ - kBottomBar - bh), bw, bh}; };
     if (micro_.valid) {
         std::vector<std::string> lines;
         const auto str = [this](int id) { return res_.string(id); };
         for (int id : micro_.lineStrings) if (id >= 0) lines.push_back(formatMicrosimLine(micro_, res_.string(id), str));
-        const int bw = 360, bh = 52 + 16 * static_cast<int>(lines.size()) + 22;
-        const int bx = std::min(std::max(0, mouseX_ + 20), width_ - bw), by = std::min(std::max(kTopBar, mouseY_ - bh / 2), height_ - kBottomBar - bh);
-        fill(r, bx, by, bw, bh, 250, 246, 210);
-        frame(r, bx, by, bw, bh, 70, 50, 20);
-        std::string name = micro_.name.empty() ? res_.string(query_.nameString) : micro_.name;
-        text(r, bx + 10, by + 10, name, 20, 10, 0);
-        text(r, bx + 10, by + 26, res_.string(query_.nameString), 110, 90, 60);
-        int y = by + 46;
-        for (const std::string& l : lines) { text(r, bx + 10, y, l, 40, 20, 0); y += 16; }
-        text(r, bx + 10, y + 4, "N renames the building   Esc closes", 120, 100, 80);
+        const std::string name = micro_.name.empty() ? res_.string(query_.nameString) : micro_.name;
+        const std::string kind = res_.string(query_.nameString);
+        const std::string hint = "N renames the building   Esc closes";
+        int h = pad + wrappedHeight(name, bw - 2 * pad, lineGap) + 6 + wrappedHeight(kind, bw - 2 * pad, lineGap) + 10;
+        for (const std::string& l : lines) h += wrappedHeight(l, bw - 2 * pad, lineGap) + lineGap;
+        h += 6 + wrappedHeight(hint, bw - 2 * pad, lineGap) + pad;
+        const Rect box = place(h);
+        fill(r, box, theme::kPaper);
+        frame(r, box, theme::kPaperBorder);
+        int y = box.y + pad;
+        y += wrappedText(r, Rect{box.x + pad, y, bw - 2 * pad, 0}, name, theme::kPaperText, lineGap) + 6;
+        y += wrappedText(r, Rect{box.x + pad, y, bw - 2 * pad, 0}, kind, Color{110, 90, 60}, lineGap) + 10;
+        for (const std::string& l : lines) y += wrappedText(r, Rect{box.x + pad, y, bw - 2 * pad, 0}, l, Color{40, 20, 0}, lineGap) + lineGap;
+        wrappedText(r, Rect{box.x + pad, y + 6, bw - 2 * pad, 0}, hint, theme::kPaperDim, lineGap);
         return;
     }
-    const int bw = 360, bh = 40 + 14 * static_cast<int>(query_.lines.size()) + 20;
-    int bx = std::min(std::max(0, mouseX_ + 20), width_ - bw), by = std::min(std::max(kTopBar, mouseY_ - bh / 2), height_ - kBottomBar - bh);
-    fill(r, bx, by, bw, bh, 250, 246, 210);
-    frame(r, bx, by, bw, bh, 70, 50, 20);
     std::string name = res_.string(query_.nameString);
     if (name.empty()) name = "(unnamed)";
     if (query_.overlay >= 1 && query_.overlay < 0x33) { const std::string sg = signText(sim_.context(), query_.a, query_.b); if (!sg.empty()) name += " - sign: " + sg; }
-    text(r, bx + 10, by + 10, name, 20, 10, 0);
-    int y = by + 28;
+    struct Row { std::string label, value; bool warn; int h; };
+    std::vector<Row> rows;
+    const int labelW = 120, valueW = bw - 2 * pad - labelW - 6;
     for (const QueryLine& l : query_.lines) {
-        std::string label = l.labelString >= 0 ? res_.string(l.labelString) : std::string();
-        text(r, bx + 10, y, label, 60, 40, 20);
-        std::string value;
-        bool warn = false;
+        Row row;
+        row.label = l.labelString >= 0 ? res_.string(l.labelString) : std::string();
+        row.warn = false;
         for (const QueryPiece& p : l.value) {
-            if (!value.empty()) value += " ";
-            value += p.stringId >= 0 ? res_.string(p.stringId) : p.text;
-            warn |= p.warn;
+            if (!row.value.empty()) row.value += " ";
+            row.value += p.stringId >= 0 ? res_.string(p.stringId) : p.text;
+            row.warn |= p.warn;
         }
-        text(r, bx + 130, y, value, warn ? 200 : 20, warn ? 20 : 10, 0);
-        y += 14;
+        row.h = std::max(wrappedHeight(row.value, valueW, lineGap), wrappedHeight(row.label, labelW, lineGap)) + lineGap;
+        rows.push_back(row);
     }
-    text(r, bx + 10, y + 4, "(" + std::to_string(query_.a) + ", " + std::to_string(query_.b) + ")  Esc closes", 120, 100, 80);
+    const std::string foot = "(" + std::to_string(query_.a) + ", " + std::to_string(query_.b) + ")  Esc closes";
+    int h = pad + wrappedHeight(name, bw - 2 * pad, lineGap) + 8;
+    for (const Row& row : rows) h += row.h;
+    h += 6 + kDebugLineH + pad;
+    const Rect box = place(h);
+    fill(r, box, theme::kPaper);
+    frame(r, box, theme::kPaperBorder);
+    int y = box.y + pad;
+    y += wrappedText(r, Rect{box.x + pad, y, bw - 2 * pad, 0}, name, theme::kPaperText, lineGap) + 8;
+    for (const Row& row : rows) {
+        wrappedText(r, Rect{box.x + pad, y, labelW, 0}, row.label, Color{60, 40, 20}, lineGap);
+        wrappedText(r, Rect{box.x + pad + labelW + 6, y, valueW, 0}, row.value, row.warn ? Color{200, 20, 0} : Color{20, 10, 0}, lineGap);
+        y += row.h;
+    }
+    text(r, box.x + pad, y + 6, ellipsize(foot, bw - 2 * pad), theme::kPaperDim);
+}
+
+GameUi::ModalLayout GameUi::modalLayout() const {
+    const Modal& m = *modal_;
+    ModalLayout l;
+    const int w = std::min(560, width_ - 40);
+    const int th = std::max(kDebugLineH, wrappedHeight(m.title, w - 40));
+    const int bh = 26;
+    const int h = 20 + th + 14 + (m.textInput ? 30 : 0) + static_cast<int>(m.options.size()) * (bh + 4) + 12;
+    l.panel = ui::centered(Rect{0, 0, width_, height_}, w, h);
+    Rect inner = l.panel.inset(20, 0);
+    inner.cutTop(20);
+    l.title = inner.cutTop(th);
+    inner.cutTop(14);
+    if (m.textInput) { l.field = inner.cutTop(22); inner.cutTop(8); }
+    for (const std::string& o : m.options) { l.buttons.push_back({inner.cutTop(bh), o}); inner.cutTop(4); }
+    return l;
 }
 
 void GameUi::drawModal(SDL_Renderer* r) {
-    const int n = static_cast<int>(modal_->options.size());
-    const int bx = (width_ - 520) / 2, by = (height_ - (70 + 22 * n)) / 2;
+    const ModalLayout l = modalLayout();
     fill(r, 0, 0, width_, height_, 0, 0, 0, 120);
-    fill(r, bx, by, 520, 70 + 22 * n, 28, 32, 44);
-    frame(r, bx, by, 520, 70 + 22 * n, 200, 200, 220);
-    text(r, bx + 20, by + 22, modal_->title, 255, 255, 190);
-    if (modal_->textInput) { fill(r, bx + 20, by + 48, 480, 20, 12, 14, 20); text(r, bx + 26, by + 54, modal_->text + "_", 255, 255, 255); }
-    for (int i = 0; i < n; ++i) {
-        fill(r, bx + 20, by + 50 + 22 * i, 480, 20, 60, 70, 100);
-        text(r, bx + 28, by + 56 + 22 * i, modal_->options[static_cast<size_t>(i)]);
-    }
+    drawPanel(r, l.panel);
+    wrappedText(r, l.title, modal_->title, theme::kTitle);   // long questions wrap instead of running out of the dialog
+    if (modal_->textInput) { ui::TextField f; f.r = l.field; f.text = modal_->text; drawTextField(r, f); }
+    for (const ui::Button& b : l.buttons) drawButton(r, b);
 }
 
 
