@@ -31,8 +31,12 @@ BudgetWindow::BudgetWindow(CityState& state, const GameTables& tables, const PeR
     if (const auto* d = res.dialog(102))
         for (const auto& c : d->controls)
             if (c.cls == "#130" && c.id == 0xFFFF && c.w >= 45 && c.x < 10 && !c.text.empty() && c.text.find('\n') == std::string::npos && c.text.find('$') == std::string::npos) labels.push_back(c.text);
-    static const char* fallback[8] = {"Property Taxes", "City Ordinances", "Bond Payments", "Police Department", "Fire Department", "Health & Welfare", "Education", "Transit Authority"};
-    auto label = [&](size_t i) { return i < labels.size() ? labels[i] : std::string(fallback[i]); };
+    static const char* fallback[8] = {"Property Taxes", "City Ordinance", "Bond Payments", "Police Department", "Fire Department", "Health & Welfare", "Education", "Transit Authority"};
+    auto label = [&](size_t i) {
+        std::string v = i < labels.size() ? labels[i] : std::string(fallback[i]);
+        for (size_t p; (p = v.find("Ordances")) != std::string::npos;) v.replace(p, 8, "Ordinance");   // the dialog template says "City Ordances"
+        return v;
+    };
     auto clean = [](std::string v) { for (size_t p; (p = v.find("&&")) != std::string::npos;) v.replace(p, 2, "&"); return v; };
     rows_ = {{clean(label(0)), {kRes, kCom, kInd}}, {clean(label(1)), {kOrdinance}}, {clean(label(2)), {kBond}}, {clean(label(3)), {kPolice}}, {clean(label(4)), {kFire}},
              {clean(label(5)), {kHealth}}, {clean(label(6)), {kSchool, kCollege}}, {clean(label(7)), {kRoad, kHighway, kBridge, kRail, kSubway, kTunnel}}};
@@ -71,7 +75,10 @@ void BudgetWindow::adjust(int row, int direction) {
     for (int c : rows_[static_cast<size_t>(row)].categories) adjustCategory(c, direction);
 }
 
-void BudgetWindow::toggleOrdinance(int bit) { s_.ordinances ^= 1u << bit; }
+void BudgetWindow::toggleOrdinance(int bit) {
+    s_.ordinances ^= 1u << bit;
+    updateMaintenanceCosts(s_);   // the ordinance row, the year-end estimate and the funds forecast follow at once (the monthly run would only refresh them later)
+}
 
 void BudgetWindow::draw(SDL_Renderer* r, int sw, int sh) const {
     if (!open) return;
@@ -124,7 +131,7 @@ void BudgetWindow::draw(SDL_Renderer* r, int sw, int sh) const {
                 const int col = static_cast<int>(k) / 10, row = static_cast<int>(k) % 10;
                 const int x = ox + 14 + col * 305, y = dy + 18 + row * 14;
                 const bool on = (s_.ordinances >> ordinances_[k].second) & 1u;
-                text(r, x, y, std::string(on ? "[x] " : "[ ] ") + ordinances_[k].first + "  " + money(ordinanceCost(s_, ordinances_[k].second)), on ? 190 : 150, on ? 255 : 160, on ? 190 : 170);
+                text(r, x, y, std::string(on ? "[x] " : "[ ] ") + ordinances_[k].first + "  " + money(static_cast<long long>(ordinanceCost(s_, ordinances_[k].second)) * s_.budget[kOrdinance].fundingPercent / std::max(1, static_cast<int>(t_.budgetDivisor[kOrdinance]))) + "/yr", on ? 190 : 150, on ? 255 : 160, on ? 190 : 170);
             }
         } else {
             text(r, ox + 14, dy + 2, rows_[static_cast<size_t>(detail_)].label + " detail", 255, 255, 190);
