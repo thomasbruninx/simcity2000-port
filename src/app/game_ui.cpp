@@ -90,6 +90,7 @@ bool GameUi::openMenu(const std::string& groupName) {
 
 void GameUi::setCityEdit(bool on) {
     cityEdit_ = on;
+    if (on) sim_.state().treasury = 99999999;
     group_ = item_ = -1; menuOpen_ = false; dragging_ = false; queryOpen_ = false; placeSel_ = -1;
     if (on) {
         if (editCatalog_.empty()) {   // SCURK's toolbox: bulldozer, water, zones, roads, rail, power lines and the centre tool
@@ -132,7 +133,7 @@ void GameUi::demolishAt(int a, int b) {   // Place & Print's Demolish/Clear: rem
     SimContext& c = sim_.context();
     World& w = sim_.world();
     if (!inMap(a, b)) return;
-    if (layers.underground) { ts_.underground = true; bulldozeTile(c, ts_, a, b); return; }
+    if (layers.underground) { ts_.underground = true; const int money = c.s.treasury; bulldozeTile(c, ts_, a, b); c.s.treasury = money; return; }
     const int id = w.xbld.at(a, b);
     if (id == 0) return;
     if (id < 0xD) { setTile(c, a, b, 0); return; }
@@ -195,6 +196,7 @@ void GameUi::update(int dtMs) {
 
 void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
+    if (cityEdit_) sim_.state().treasury = 99999999;   // the editor never runs update(): editing stays free
     if (browser_.active()) { if (button == 1) browser_.mouseDown(x, y, width_, height_); return; }
     if (pauseOpen_ && !modal_) {
         const auto buttons = pauseButtons();
@@ -1093,7 +1095,7 @@ void GameUi::draw(SDL_Renderer* r) {
         SDL_SetRenderClipRect(r, nullptr);
     }
     std::string right = message_;
-    if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
+    if (dragging_ && previewCost_ > 0 && !cityEdit_) right = "Cost " + moneyText(previewCost_);
     const int buttonsX = width_ - kTopButtonCount * kTopButtonStep - 4;
     for (int k = 0; k < (cityEdit_ ? 5 : kTopButtonCount); ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2 + kMenuBar);
     if (!right.empty()) {   // status message: right-aligned left of the buttons, cut with "..." when it does not fit
