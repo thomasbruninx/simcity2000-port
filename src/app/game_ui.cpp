@@ -592,6 +592,7 @@ void GameUi::finishDrag() {
         if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
         else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build a highway there");
     } else if (t->kind == ToolKind::Network) {
+        std::string linkHint;
         const bool border = (t->net == NetworkKind::Road || t->net == NetworkKind::Rail) && (lastA_ == 0 || lastA_ == 127 || lastB_ == 0 || lastB_ == 127) && (startA_ != lastA_ || startB_ != lastB_);
         if (border) {
             // A link to a neighbouring city is offered when the road / rail arrives at the map edge heading outward. The original follows the mouse trail, so the last leg
@@ -602,9 +603,9 @@ void GameUi::finishDrag() {
             ok = (ia == startA_ && ib == startB_) ? true : buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, ia, ib);
             if (ok) buildNetwork(c, ts_, t->net, t->sub, ia, ib, lastA_, lastB_);
             const int fee = t->net == NetworkKind::Road ? 1000 : 1500;
-            if (ok && sim_.world().xtxt.at(lastA_, lastB_) != 0xFA && sim_.state().treasury < fee) { say("A link to the neighbouring city costs " + moneyText(fee)); return; }
+            linkHint = ok && sim_.world().xtxt.at(lastA_, lastB_) != 0xFA && sim_.state().treasury < fee ? "A link to the neighbouring city costs " + moneyText(fee) : std::string();
         } else ok = buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, lastA_, lastB_);
-        if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
+        if (ok) say("Built for " + moneyText(funds - sim_.state().treasury) + (linkHint.empty() ? std::string() : " - " + linkHint));
         else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build that here");
     } else if (t->kind == ToolKind::Zone) {
         const int cost = zoneRectCost(c, startA_, startB_, lastA_, lastB_, t->zone, unitCost(*t));
