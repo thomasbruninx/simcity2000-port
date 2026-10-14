@@ -14,6 +14,12 @@ struct Sprite {
     std::vector<uint8_t> opaque;  // width*height, 1 = drawn
 };
 
+// The game's row-RLE pixel stream (docs/formats/sprite-archives.md), also used by the SHAP chunks of SCURK's .MIF files.
+// decode: `end` = pointer past the data; `endArg` receives the argument of the terminating record (kept so that an unchanged stream can be written back).
+Sprite decodeSpriteStream(const uint8_t* p, const uint8_t* end, int width, int height, int* endArg = nullptr);
+// encode: rows of skip (op 3) and literal (op 4, padded to even) records, each row led by [length][1], terminated by [endArg][2]
+std::vector<uint8_t> encodeSpriteStream(const Sprite& sprite, int endArg = 2);
+
 class SpriteArchive {
 public:
     static SpriteArchive load(const std::string& path);   // throws Sc2Error

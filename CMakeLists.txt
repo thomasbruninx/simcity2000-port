@@ -37,7 +37,7 @@ endif()
 add_executable(sc2k-audio tools/sc2k_audio.cpp)
 target_link_libraries(sc2k-audio PRIVATE sc2k_audio)
 
-add_library(sc2k_render src/render/map_renderer.cpp src/render/png.cpp src/resources/sprite_archive.cpp src/resources/bmp.cpp)
+add_library(sc2k_render src/scurk/mif.cpp src/render/map_renderer.cpp src/render/png.cpp src/resources/sprite_archive.cpp src/resources/bmp.cpp)
 target_link_libraries(sc2k_render PUBLIC sc2k_sim)
 target_compile_options(sc2k_render PRIVATE -Wall -Wextra -Wpedantic)
 
@@ -77,7 +77,7 @@ else()
 endif()
 
 enable_testing()
-add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.cpp tests/test_power.cpp tests/test_environment.cpp tests/test_economy.cpp tests/test_zone.cpp tests/test_things.cpp tests/test_tick.cpp tests/test_render.cpp tests/test_tools.cpp tests/test_audio.cpp tests/test_ui.cpp tests/test_main.cpp)
+add_executable(test_sim tests/test_rng.cpp tests/test_clock.cpp tests/test_save.cpp tests/test_power.cpp tests/test_environment.cpp tests/test_economy.cpp tests/test_zone.cpp tests/test_things.cpp tests/test_tick.cpp tests/test_render.cpp tests/test_tools.cpp tests/test_audio.cpp tests/test_ui.cpp tests/test_scurk.cpp tests/test_main.cpp)
 target_link_libraries(test_sim PRIVATE sc2k_render sc2k_sim sc2k_save sc2k_audio sc2k_ui)
 add_test(NAME sim COMMAND test_sim)
 set_tests_properties(sim PROPERTIES ENVIRONMENT "SC2K_DATA_PATH=$ENV{SC2K_DATA_PATH}")
