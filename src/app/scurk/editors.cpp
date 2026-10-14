@@ -1,5 +1,8 @@
 #include "app/scurk/editors.h"
 
+#include <algorithm>
+#include <functional>
+
 #include <filesystem>
 
 #include "app/scurk/pick_copy.h"
@@ -48,7 +51,27 @@ void ResourceEditors::open(Which which) {
     }
     if (!editor_) { active = false; return; }
     const auto it = res_->menus().find("#" + std::to_string(editor_->menuId()));
-    if (it != res_->menus().end()) menu_.load(it->second);
+    if (it != res_->menus().end()) {
+        PeResources::MenuItem root = it->second;
+        // printing is not implemented: its items go (with separators left dangling); the Object Group menu gets an entry to see everything again
+        std::function<void(PeResources::MenuItem&)> tidy = [&](PeResources::MenuItem& m) {
+            auto& v = m.items;
+            v.erase(std::remove_if(v.begin(), v.end(), [](const PeResources::MenuItem& i) { return i.id == 26006 || i.id == 26007 || i.id == 24337 || i.id == 24338 || i.id == 24340; }), v.end());
+            for (auto& i : v) tidy(i);
+            for (size_t k = 0; k < v.size();) {   // a separator at the start, the end or doubled
+                const bool sep = v[k].text.empty() && v[k].items.empty() && v[k].id == 0;
+                if (sep && (k == 0 || k + 1 == v.size() || (v[k - 1].text.empty() && v[k - 1].id == 0 && v[k - 1].items.empty()))) v.erase(v.begin() + static_cast<long>(k)); else ++k;
+            }
+        };
+        tidy(root);
+        for (auto& top : root.items) {
+            std::string t = top.text; t.erase(std::remove(t.begin(), t.end(), '&'), t.end());
+            bool has212 = false;
+            for (const auto& i : top.items) has212 = has212 || i.id == 212;
+            if (t == "Object Group" && !has212) { PeResources::MenuItem all; all.id = 212; all.text = "&All Buildings"; top.items.push_back(all); }
+        }
+        menu_.load(root);
+    }
     menu_.checked = [this](int id) { return menuChecked(id) || (editor_ && editor_->checked(id)); };
     menu_.enabled = [this](int id) { return !editor_ || editor_->enabled(id); };
     env_.message.clear();
