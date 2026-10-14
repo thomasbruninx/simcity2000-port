@@ -77,6 +77,7 @@ public:
     void newCityDialog(bool randomMap = false);
     void enterMapEditor();                              // File > Edit New Map: the terrain generator panel (Hills / Water / Trees, Coast, River, MAKE, DONE) and the terrain tools
     void showBrowser() { browser_.open("Save City As", savesDir(), "city"); }   // screenshots
+    bool inputCaptured() const { return browser_.active() || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
     bool mapEditing() const { return mapEdit_; }
     void loadCity(const CityFile& f);                  // a city / scenario was loaded into the simulation                              // asks for the starting year and the difficulty (the original dialog 101)
     std::string defaultMapPath;

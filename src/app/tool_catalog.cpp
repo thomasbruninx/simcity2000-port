@@ -28,7 +28,7 @@ const std::vector<ToolGroup>& toolCatalog() {
         {"Safety", {{"Police station", K::Building, 13, 0}, {"Fire station", K::Building, 13, 1}, {"Hospital", K::Building, 13, 2}, {"Prison", K::Building, 13, 3}}},
         {"Recreation", {{"Small park", K::Building, 14, 0}, {"Big park", K::Building, 14, 1}, {"Zoo", K::Building, 14, 2}, {"Stadium", K::Building, 14, 3},
                         {"Marina", K::Building, 14, 4}}},
-        {"Rewards", {{"Mayor's house", K::Building, 5, 0}, {"City hall", K::Building, 5, 1}, {"Plymouth arcology", K::Building, 5, 5}, {"Forest arcology", K::Building, 5, 6},
+        {"Rewards", {{"Mayor's house", K::Building, 5, 0}, {"City hall", K::Building, 5, 1}, {"Statue", K::Building, 5, 2}, {"Braun Llama dome", K::Building, 5, 3}, {"Plymouth arcology", K::Building, 5, 5}, {"Forest arcology", K::Building, 5, 6},
                      {"Darco arcology", K::Building, 5, 7}, {"Launch arcology", K::Building, 5, 8}}},
         {"Sign", {{"Place sign", K::Sign, 0, 0}}},
         {"Query", {{"Query", K::Query, 0, 0}}},

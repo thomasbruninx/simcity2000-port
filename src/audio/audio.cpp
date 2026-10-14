@@ -71,7 +71,8 @@ void Mixer::playEffect(int id, int repeat) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (repeat != 0) for (const Voice& v : voices_) if (v.id == id) return;   // a looping sound is not started twice
     for (const Voice& v : voices_) if (v.id == id && v.pos < 0.06 * v.wave->rate) return;   // the same effect just started: many things can fire it in one frame
-    if (voices_.size() >= 16) voices_.erase(voices_.begin());
+    // the original plays effects through sndPlaySound (0x480700, flags SND_ASYNC | SND_MEMORY): one sound at a time, a new one cuts the running one off
+    voices_.clear();
     voices_.push_back({id, w, 0.0, repeat});
 }
 

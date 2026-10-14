@@ -123,6 +123,7 @@ bool GameUi::overUi(int x, int y) const {
 }
 
 void GameUi::update(int dtMs) {
+    if (mapEdit_) sim_.state().treasury = 99999999;   // editing the map is free
     if (pauseOpen_) return;
     if (info_.popupDue() && !headless && info_.open == InfoWindows::Which::None && !modal_) info_.open = InfoWindows::Which::Newspaper;   // milestone / new tool stories pop the paper up
     const int month = sim_.state().month();
@@ -379,6 +380,7 @@ void GameUi::enterMapEditor() {
     base_ = map;
     group_ = item_ = -1; dragging_ = false; queryOpen_ = false; menuOpen_ = false;
     mapEdit_ = true;
+    sim_.state().treasury = 99999999;
     makeTerrain();
 }
 
@@ -622,6 +624,7 @@ void GameUi::applyClick(int a, int b) {
         return;
     }
     if (t->kind != ToolKind::Building) return;
+    if (!available(*t)) { say(t->cat == 5 ? "This reward is not available yet (the city is too small, or it is already built)" : "Not invented yet"); return; }
     const int cost = unitCost(*t);
     if (sim_.state().treasury < cost) { say("Not enough funds (" + moneyText(cost) + ")"); return; }
     message_.clear();
@@ -848,6 +851,13 @@ bool GameUi::available(const ToolItem& t) const {
     if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain || t.kind == ToolKind::TerrainEdit || t.kind == ToolKind::Landscape) return true;
     if (t.kind == ToolKind::Dispatch) return emergency_;
     if (t.kind == ToolKind::Zone && t.cat == 0) return true;   // de-zone
+    if (t.kind == ToolKind::Building && t.cat == 5) {   // rewards: granted by the city's growth (0x413FE0 -> 0x441800), one of each until it is demolished
+        const int m = sim_.state().milestone;
+        if (t.sub < 4) {
+            static const int need[4] = {1, 2, 3, 5};   // city class after crossing 2,000 / 10,000 / 30,000 / 90,000 inhabitants
+            if (m < need[t.sub] || sim_.state().census[static_cast<size_t>(toolBuildingId(5, t.sub)) & 0xFF] > 0) return false;
+        } else if (m < 6) return false;               // arcologies need a city class 6 (120,000 inhabitants) and the invented design
+    }
     return avail_.allows(t.cat, t.sub);
 }
 
@@ -946,7 +956,7 @@ void GameUi::draw(SDL_Renderer* r) {
     // top bar
     fill(r, 0, 0, width_, kTopBar, 20, 24, 32);
     char top[200];
-    std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s", kMonths[s.month()], s.startYear + s.day / 300, s.population10, moneyText(s.treasury).c_str());
+    std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s", kMonths[s.month()], s.startYear + s.day / 300, s.population10, mapEdit_ ? "-" : moneyText(s.treasury).c_str());
     const int demandX = 6 + static_cast<int>(std::strlen(top)) * 8 + 24;   // the residential / commercial / industrial demand bars (green, blue, yellow) follow the numbers
     char speed[40];
     std::snprintf(speed, sizeof speed, "[%s]", kSpeedNames[static_cast<int>(clock_.speed)]);
