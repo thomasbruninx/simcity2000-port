@@ -336,7 +336,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
     auto widthOf = [&](int id) { const Sprite* sp = sprites_.get(id); return sp ? sp->width : 0; };
     // 0x43C0DB: a powerable tile without power (XBIT & 0xC0 == 0x80) gets the lightning-bolt icon (sprite 0x56A) 16 px above the tile's base, centred on the sprite
     auto bolt = [&](int a, int b, int x, int tileBottom, int spriteWidth) {
-        if ((w.xbit.at(a, b) & 0xC0) != 0x80) return;
+        if (!layers.bolts || (w.xbit.at(a, b) & 0xC0) != 0x80) return;
         const int bid = 0x56A - 1000 + zoomBase, off = 16 >> (2 - z);
         blit(fb, bid, x + (spriteWidth >> 1) - off, tileBottom - off, false);
     };
@@ -392,7 +392,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
             };
 
             if (id >= 0x70) {
-                if (layers.buildings && (rotMask & w.xzon.at(a, b) & 0xF0) != 0) {
+                if (layers.buildings && (zone == 0 || layers.zones) && (rotMask & w.xzon.at(a, b) & 0xF0) != 0) {
                     // big buildings are drawn once, from the corner tile that is leftmost on screen for the current rotation
                     const int sid = id + 1000 + (z - 2) * 500;
                     blit(fb, sid, x, bottom + (widthOf(sid) >> 2) - th - height(sid), flip);
@@ -403,7 +403,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
                 continue;
             }
             if (id >= 0x61 && id <= 0x6B) {   // highway: a 2x2 piece drawn from its left-most tile over the four ground tiles
-                if ((rotMask & w.xzon.at(a, b) & 0xF0) != 0 && layers.buildings) {
+                if ((rotMask & w.xzon.at(a, b) & 0xF0) != 0 && layers.infrastructure) {
                     if (layers.terrain) {
                         groundOf(a, b, x, yBase);
                         int fa, fb2;
@@ -432,7 +432,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
                 if (id < 0x1D && xter == 0 && zone != 0 && layers.zones) ground = (0x50A + zone - 1000) + zoomBase;   // coloured zone tile under empty land and under the small objects (rubble, trees, power lines: ids below 0x1D, 0x43C0DB)
                 if (ground > 0) blit(fb, ground, x, bottom - height(ground), false);
             }
-            if (id != 0 && layers.buildings) {
+            if (id != 0 && layers.infrastructure) {
                 int sid = id + zoomBase;
                 int top;
                 // 0x43C0DB: objects stand on the (water-level) altitude of their tile like the ground; only slope type 0xD lifts the small ones by one step

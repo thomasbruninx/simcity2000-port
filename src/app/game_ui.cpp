@@ -59,7 +59,7 @@ std::string GameUi::moneyText(int v) const {
 }
 
 const ToolItem* GameUi::tool() const {
-    const auto& cat = toolCatalog();
+    const auto& cat = this->cat();
     if (group_ < 0 || group_ >= static_cast<int>(cat.size())) return nullptr;
     const auto& g = cat[static_cast<size_t>(group_)];
     if (item_ < 0 || item_ >= static_cast<int>(g.items.size())) return nullptr;
@@ -71,7 +71,7 @@ int GameUi::unitCost(const ToolItem& t) const { return toolCost(sim_.context(), 
 void GameUi::say(const std::string& s) { message_ = s; messageMs_ = 6000; }
 
 bool GameUi::selectTool(const std::string& name) {
-    const auto& cat = toolCatalog();
+    const auto& cat = this->cat();
     for (size_t g = 0; g < cat.size(); ++g)
         for (size_t i = 0; i < cat[g].items.size(); ++i)
             if (name == cat[g].items[i].name || (std::strstr(cat[g].items[i].name, name.c_str()) == cat[g].items[i].name)) {
@@ -82,16 +82,74 @@ bool GameUi::selectTool(const std::string& name) {
 }
 
 bool GameUi::openMenu(const std::string& groupName) {
-    const auto& cat = toolCatalog();
+    const auto& cat = this->cat();
     for (size_t g = 0; g < cat.size(); ++g)
         if (groupName == cat[g].name) { group_ = static_cast<int>(g); item_ = std::max(item_, 0); menuOpen_ = true; return true; }
     return false;
 }
 
+void GameUi::setCityEdit(bool on) {
+    cityEdit_ = on;
+    group_ = item_ = -1; menuOpen_ = false; dragging_ = false; queryOpen_ = false; placeSel_ = -1;
+    if (on) {
+        if (editCatalog_.empty()) {   // SCURK's toolbox: bulldozer, water, zones, roads, rail, power lines and the centre tool
+            auto find = [](const char* group, const char* item) {
+                for (const ToolGroup& g : toolCatalog()) if (std::string(g.name) == group) for (const ToolItem& t : g.items) if (std::string(t.name).rfind(item, 0) == 0) return t;
+                return ToolItem{"?", ToolKind::Unavailable, 0, 0};
+            };
+            using K = ToolKind;
+            ToolItem demolish = find("Bulldozer", "Bulldozer"); demolish.name = "Demolish/Clear";
+            ToolItem pond = find("Landscape", "Water"); pond.name = "Pond/Lake/River";
+            ToolItem military{"Military zone", K::Zone, 8, 2, 7};
+            ToolItem centre{"Center tool", K::Query, 0, 0};
+            editCatalog_ = {
+                {"Bulldozer", {demolish, find("Terrain", "Level"), find("Terrain", "Raise"), find("Terrain", "Lower"), find("Bulldozer", "De-zone")}},
+                {"Water", {pond, find("Water", "Pipes")}},
+                {"Zones", {find("Zones", "Light res"), find("Zones", "Dense res"), find("Zones", "Light com"), find("Zones", "Dense com"), find("Zones", "Light ind"), find("Zones", "Dense ind"), find("Zones", "Seaport"), find("Zones", "Airport"), military}},
+                {"Roads", {find("Roads", "Road"), find("Roads", "Highway"), find("Roads", "Tunnel"), find("Roads", "Onramp")}},
+                {"Rail", {find("Rail", "Rail")}},
+                {"Power", {find("Power", "Power line")}},
+                {"Center", {centre}},
+            };
+        }
+        layers.bolts = false;
+        layers.underground = false; layers.powerOverlay = layers.waterOverlay = false;
+    } else {
+        layers.bolts = true;
+        layers.buildings = layers.infrastructure = layers.zones = layers.signs = true;
+        layers.underground = false;
+    }
+}
+
+void GameUi::rotateView(int dir) {   // Place & Print: the tile in the middle of the view stays there
+    int a = -1, b = -1;
+    const bool have = renderer_.pickTile(sim_.world(), cam_, mapW() / 2, mapH() / 2, a, b);
+    cam_.rotation = (cam_.rotation + dir) & 3;
+    if (have) cam_.centerOn(a, b, mapW() / 2, mapH() / 2);
+}
+
+void GameUi::demolishAt(int a, int b) {   // Place & Print's Demolish/Clear: removes the objects without rubble; terrain and zoning stay
+    SimContext& c = sim_.context();
+    World& w = sim_.world();
+    if (!inMap(a, b)) return;
+    if (layers.underground) { ts_.underground = true; bulldozeTile(c, ts_, a, b); return; }
+    const int id = w.xbld.at(a, b);
+    if (id == 0) return;
+    if (id < 0xD) { setTile(c, a, b, 0); return; }
+    std::vector<std::pair<int, int>> before;   // rubble that already lies around stays; new rubble is cleared
+    for (int x = a - 4; x <= a + 4; ++x) for (int y = b - 4; y <= b + 4; ++y) if (inMap(x, y) && w.xbld.at(x, y) >= 1 && w.xbld.at(x, y) <= 4) before.push_back({x, y});
+    ts_.underground = false;
+    const int treasury = c.s.treasury;
+    bulldozeTile(c, ts_, a, b);
+    c.s.treasury = treasury;
+    for (int x = a - 4; x <= a + 4; ++x) for (int y = b - 4; y <= b + 4; ++y)
+        if (inMap(x, y) && w.xbld.at(x, y) >= 1 && w.xbld.at(x, y) <= 4 && std::find(before.begin(), before.end(), std::make_pair(x, y)) == before.end()) setTile(c, x, y, 0);
+}
+
 bool GameUi::groupAllowed(size_t g) const {   // the map editor offers only the terrain tools
-    if (cityEdit_) { const std::string n = toolCatalog()[g].name; return n != "Disasters" && n != "Dispatch"; }   // everything the editor can do without the simulation
+    if (cityEdit_) return true;
     if (!mapEdit_) return true;
-    const std::string n = toolCatalog()[g].name;
+    const std::string n = cat()[g].name;
     return n == "Landscape" || n == "Terrain editor" || n == "Terrain";
 }
 
@@ -101,12 +159,12 @@ GameUi::Rect GameUi::itemRect(int i) const { return {kGroupW + 2, kTopBar + std:
 bool GameUi::overUi(int x, int y) const {
     if (modal_ || budget_.open || info_.open != InfoWindows::Which::None) return true;
     if (mapEdit_ && editPanel().contains(x, y)) return true;
-    if (cityEdit_ && placePanel().contains(x, y)) return true;
+    if (cityEdit_ && reserved_.contains(x, y)) return true;
     if (y < kTopBar || y >= height_ - kBottomBar) return true;
-    const int groups = static_cast<int>(toolCatalog().size());
+    const int groups = static_cast<int>(cat().size());
     if (x < kGroupW && y < kTopBar + groups * kGroupH) return true;
     if (menuOpen_ && group_ >= 0) {
-        const int n = static_cast<int>(toolCatalog()[static_cast<size_t>(group_)].items.size());
+        const int n = static_cast<int>(cat()[static_cast<size_t>(group_)].items.size());
         if (itemRect(0).x <= x && x < itemRect(0).x + kItemW && y >= itemRect(0).y && y < itemRect(0).y + n * kItemH) return true;
     }
     return false;
@@ -148,10 +206,6 @@ void GameUi::mouseDown(int x, int y, int button) {
         for (size_t i = 0; i < l.buttons.size(); ++i) if (l.buttons[i].hit(x, y)) modal_->result = static_cast<int>(i);
         return;
     }
-    if (cityEdit_ && button == 1 && placePanel().contains(x, y)) {
-        if (placeList_.press(x, y)) { const int i = placeList_.selected; placeSel_ = i >= 0 && i < static_cast<int>(placeItems_.size()) ? placeItems_[static_cast<size_t>(i)].id : -1; if (placeSel_ >= 0) { group_ = item_ = -1; menuOpen_ = false; } }
-        return;
-    }
     if (button == 1 && !cityEdit_) {   // the menu bar of the original
         int cmd = 0;
         if (menu_.mouseDown(x, y, cmd)) { if (cmd) menuCommand(cmd); return; }
@@ -163,6 +217,8 @@ void GameUi::mouseDown(int x, int y, int button) {
     if (mapEdit_ && mapEditorMouse(x, y, true)) return;
     if (y >= kMenuBar && y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
         const int k = (x - (width_ - kTopButtonCount * kTopButtonStep - 4)) / kTopButtonStep;
+        if (cityEdit_ && k >= 5) return;
+        if (cityEdit_ && k < 2) { rotateView(k == 0 ? 3 : 1); return; }
         if (k == 0 || k == 1) { cam_.rotation = (cam_.rotation + (k == 0 ? 3 : 1)) & 3; cam_.centerOn(sim_.state().centerA2 / 2, sim_.state().centerB2 / 2, mapW() / 2, mapH() / 2); }
         else if (k == 2) setZoomLevel(zoomLevel_ - 1);
         else if (k == 3) setZoomLevel(zoomLevel_ + 1);
@@ -175,11 +231,11 @@ void GameUi::mouseDown(int x, int y, int button) {
         return;
     }
     if (overUi(x, y)) {
-        const auto& cat = toolCatalog();
+        const auto& cat = this->cat();
         for (size_t g = 0; g < cat.size(); ++g)
             if (groupRect(static_cast<int>(g)).contains(x, y)) {
                 if (!groupAllowed(g)) { say("Not while editing"); return; }
-                placeSel_ = -1; placeList_.selected = -1;
+                placeSel_ = -1;
                 group_ = static_cast<int>(g);
                 item_ = std::max(0, item_ < static_cast<int>(cat[g].items.size()) ? item_ : 0);
                 if (cat[g].items.size() == 1) { item_ = 0; menuOpen_ = false; } else menuOpen_ = true;
@@ -193,6 +249,12 @@ void GameUi::mouseDown(int x, int y, int button) {
                     else { item_ = i; menuOpen_ = false; }
                     return;
                 }
+        }
+        if (cityEdit_ && y >= height_ - kBottomBar) {   // Show Underground / Buildings / Infrastructure / Signs / Zones
+            const int k = x < 104 ? 0 : x < 200 ? 1 : x < 332 ? 2 : x < 408 ? 3 : x < 488 ? 4 : -1;
+            if (k == 0) layers.underground = !layers.underground; else if (k == 1) layers.buildings = !layers.buildings; else if (k == 2) layers.infrastructure = !layers.infrastructure;
+            else if (k == 3) layers.signs = !layers.signs; else if (k == 4) layers.zones = !layers.zones;
+            return;
         }
         if (y >= height_ - kBottomBar) {   // view buttons
             if (x < 100) layers.underground = !layers.underground;
@@ -233,15 +295,15 @@ void GameUi::mouseDown(int x, int y, int button) {
     }
 }
 
-void GameUi::placeObjectAt(int a, int b) {   // Place & Print: one object of the list onto the map
+void GameUi::placeObjectAt(int a, int b) {   // Place & Print: the selected object onto the map, without any of the game's constraints
     SimContext& c = sim_.context();
-    bool ok = true;
-    if (placeSel_ >= 0x70) {
-        int size = c.t.footprint[static_cast<size_t>(placeSel_) & 0xFF];
-        ok = placeSpecialBuilding(c, a, b, placeSel_, size > 0 ? size : 1);
-    } else setTile(c, a, b, placeSel_);
+    const int size = placeSel_ >= 0x70 ? std::max<int>(1, c.t.footprint[static_cast<size_t>(placeSel_) & 0xFF]) : 1;
+    const int o = size > 2 ? -1 : 0;
+    for (int x = a + o; x < a + o + size; ++x) for (int y = b + o; y < b + o + size; ++y) if (inMap(x, y)) demolishAt(x, y);
+    bool ok;
+    if (placeSel_ >= 0x70) ok = placeSpecialBuilding(c, a, b, placeSel_, size, true);
+    else { ok = inMap(a, b); if (ok) setTile(c, a, b, placeSel_); }
     say(ok ? "Placed" : "Cannot place the object there");
-    playSound(ok ? 500 : 0x1F5);
 }
 
 void GameUi::mouseUp(int x, int y, int button) {
@@ -286,7 +348,6 @@ void GameUi::mouseMove(int x, int y) {
 }
 
 void GameUi::wheel(int x, int y, int dy) {
-    if (cityEdit_ && placePanel().contains(x, y)) { placeList_.wheel(dy); return; }
     if (browser_.active()) { browser_.wheel(dy); return; }
     if (dy > 0) setZoomLevel(zoomLevel_ + 1);
     else if (dy < 0) setZoomLevel(zoomLevel_ - 1);
@@ -310,6 +371,13 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         return true;
     }
     if (queryOpen_ && k == SDLK_ESCAPE) { queryOpen_ = false; return true; }
+    if (cityEdit_) {   // Place & Print: only the view keys
+        if (k == SDLK_R) rotateView(1);
+        else if (k == SDLK_EQUALS || k == SDLK_KP_PLUS) setZoomLevel(zoomLevel_ + 1);
+        else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) setZoomLevel(zoomLevel_ - 1);
+        else if (k == SDLK_U) layers.underground = !layers.underground;
+        return true;
+    }
     if (queryOpen_ && micro_.valid && k == SDLK_N) { renameQueried(); return true; }
     if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
     if (ctrl && k == SDLK_O && onTitle) { onTitle(); return true; }
@@ -551,6 +619,7 @@ void GameUi::terrainAt(int a, int b) {
 }
 
 void GameUi::bulldozeAt(int a, int b) {
+    if (cityEdit_) { demolishAt(a, b); return; }
     ts_.underground = layers.underground;
     const int before = sim_.state().treasury;
     if (!bulldozeTile(sim_.context(), ts_, a, b) && message_.empty()) say(sim_.state().treasury < toolCost(sim_.context(), 0, 0) ? "Not enough funds" : "Nothing to bulldoze here");
@@ -641,6 +710,7 @@ void GameUi::finishDrag() {
 void GameUi::applyClick(int a, int b) {
     const ToolItem* t = tool();
     if (!t) return;
+    if (t->kind == ToolKind::Query && cityEdit_) { centerView(a, b); return; }   // Center tool
     if (t->kind == ToolKind::Query) { queryTile(a, b); return; }
     if (t->kind == ToolKind::Special) {
         SimContext& c = sim_.context();
@@ -885,6 +955,7 @@ void GameUi::toolMessage(int id) {
 
 bool GameUi::available(const ToolItem& t) const {
     if (t.kind == ToolKind::Unavailable) return false;
+    if (cityEdit_) return true;
     if (t.kind == ToolKind::Query || t.kind == ToolKind::Bulldoze || t.kind == ToolKind::Terrain || t.kind == ToolKind::TerrainEdit || t.kind == ToolKind::Landscape) return true;
     if (t.kind == ToolKind::Dispatch) return emergency_;
     if (t.kind == ToolKind::Zone && t.cat == 0) return true;   // de-zone
@@ -975,7 +1046,11 @@ void GameUi::overlay(Framebuffer& fb) {
             for (int b = std::min(startB_, lastB_); b <= std::max(startB_, lastB_); ++b)
                 renderer_.highlightTile(fb, w, cam_, a, b, colors[t->zone % 10], 90);
     }
-    if (hoverA_ >= 0 && t && !dragging_) {
+    if (cityEdit_ && placeSel_ >= 0 && hoverA_ >= 0) {
+        const int size = placeSel_ >= 0x70 ? std::max<int>(1, sim_.context().t.footprint[static_cast<size_t>(placeSel_) & 0xFF]) : 1;
+        const int o = size > 2 ? -1 : 0;
+        for (int a = hoverA_ + o; a < hoverA_ + o + size; ++a) for (int b = hoverB_ + o; b < hoverB_ + o + size; ++b) if (inMap(a, b)) renderer_.highlightTile(fb, w, cam_, a, b, 0xFFFFFFFFu, 80);
+    } else if (hoverA_ >= 0 && t && !dragging_) {
         if (t->kind == ToolKind::Building) {
             int size;
             const auto o = footprint(*t, hoverA_, hoverB_, size);
@@ -993,7 +1068,8 @@ void GameUi::draw(SDL_Renderer* r) {
     // top bar
     fill(r, 0, 0, width_, kTopBar, 20, 24, 32);
     char top[200];
-    std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s", kMonths[s.month()], s.startYear + s.day / 300, s.population10, mapEdit_ ? "-" : moneyText(s.treasury).c_str());
+    if (cityEdit_) std::snprintf(top, sizeof top, "%s   %s", info_.cityName.c_str(), hoverA_ >= 0 ? ("(" + std::to_string(hoverA_) + ", " + std::to_string(hoverB_) + ")").c_str() : "");
+    else std::snprintf(top, sizeof top, "%s %d   Pop %u   Funds %s", kMonths[s.month()], s.startYear + s.day / 300, s.population10, mapEdit_ ? "-" : moneyText(s.treasury).c_str());
     const int demandX = 6 + static_cast<int>(std::strlen(top)) * 8 + 24;   // the residential / commercial / industrial demand bars (green, blue, yellow) follow the numbers
     char speed[40];
     std::snprintf(speed, sizeof speed, "[%s]", kSpeedNames[static_cast<int>(clock_.speed)]);
@@ -1005,7 +1081,7 @@ void GameUi::draw(SDL_Renderer* r) {
         static const Uint8 col[3][3] = {{0, 200, 0}, {60, 120, 255}, {240, 220, 0}};
         static const char* letters[3] = {"R", "C", "I"};
         const int mid = kMenuBar + 14;
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < (cityEdit_ ? 0 : 3); ++i) {
             const int bx = demandX + i * 40;
             text(r, bx, mid - 4, letters[i], 200, 205, 220);
             fill(r, bx + 12, mid, 16, 1, 120, 125, 140);                                    // zero line
@@ -1013,13 +1089,13 @@ void GameUi::draw(SDL_Renderer* r) {
             if (h > 0) fill(r, bx + 12, mid - h, 16, h, col[i][0], col[i][1], col[i][2]);
             else if (h < 0) fill(r, bx + 12, mid + 1, 16, -h, col[i][0] / 2, col[i][1] / 2, col[i][2] / 2);
         }
-        text(r, demandX + 124, 10 + kMenuBar, speed);
+        if (!cityEdit_) text(r, demandX + 124, 10 + kMenuBar, speed);
         SDL_SetRenderClipRect(r, nullptr);
     }
     std::string right = message_;
     if (dragging_ && previewCost_ > 0) right = "Cost " + moneyText(previewCost_);
     const int buttonsX = width_ - kTopButtonCount * kTopButtonStep - 4;
-    for (int k = 0; k < kTopButtonCount; ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2 + kMenuBar);
+    for (int k = 0; k < (cityEdit_ ? 5 : kTopButtonCount); ++k) drawIcon(r, 1, kTopButtons[k], buttonsX + k * kTopButtonStep + 2, 2 + kMenuBar);
     if (!right.empty()) {   // status message: right-aligned left of the buttons, cut with "..." when it does not fit
         const int room = std::max(0, buttonsX - 500 - 8);
         if (room >= 8 * kDebugCharW) {
@@ -1029,7 +1105,7 @@ void GameUi::draw(SDL_Renderer* r) {
     }
 
     // tool groups
-    const auto& cat = toolCatalog();
+    const auto& cat = this->cat();
     for (size_t g = 0; g < cat.size(); ++g) {
         const Rect rc = groupRect(static_cast<int>(g));
         const bool sel = static_cast<int>(g) == group_;
@@ -1045,7 +1121,7 @@ void GameUi::draw(SDL_Renderer* r) {
         fill(r, 0, y, kGroupW, 34, 30, 34, 44);
         text(r, 4, y + 4, t->name, 255, 255, 160);
         const int c = unitCost(*t);
-        if (c >= 0) text(r, 4, y + 18, moneyText(c) + (t->kind == ToolKind::Network || t->kind == ToolKind::Zone || t->kind == ToolKind::Terrain || t->kind == ToolKind::Bulldoze ? " / tile" : t->kind == ToolKind::Highway ? " / piece" : ""), 200, 220, 200);
+        if (c >= 0 && !cityEdit_) text(r, 4, y + 18, moneyText(c) + (t->kind == ToolKind::Network || t->kind == ToolKind::Zone || t->kind == ToolKind::Terrain || t->kind == ToolKind::Bulldoze ? " / tile" : t->kind == ToolKind::Highway ? " / piece" : ""), 200, 220, 200);
     }
     if (menuOpen_ && group_ >= 0) {
         const auto& g = cat[static_cast<size_t>(group_)];
@@ -1059,7 +1135,7 @@ void GameUi::draw(SDL_Renderer* r) {
             const Uint8 shade = dead ? 120 : 235;
             text(r, rc.x + 6, rc.y + 5, g.items[i].name, shade, shade, shade);
             const int c = toolCost(sim_.context(), g.items[i].cat, g.items[i].sub);
-            if (c >= 0 && g.items[i].kind != ToolKind::Query) {
+            if (c >= 0 && g.items[i].kind != ToolKind::Query && !cityEdit_) {
                 const std::string ct = moneyText(c);
                 text(r, rc.x + rc.w - static_cast<int>(ct.size()) * 8 - 6, rc.y + 5, ct, shade, shade, dead ? 120 : 160);
             }
@@ -1071,29 +1147,28 @@ void GameUi::draw(SDL_Renderer* r) {
         fill(r, x, height_ - kBottomBar + 2, w, kBottomBar - 4, on ? 70 : 40, on ? 100 : 46, on ? 70 : 56);
         text(r, x + 6, height_ - kBottomBar + 7, label);
     };
+    if (cityEdit_) {
+        button(4, 100, "Underground", layers.underground); button(108, 92, "Buildings", layers.buildings); button(204, 128, "Infrastructure", layers.infrastructure);
+        button(336, 72, "Signs", layers.signs); button(412, 72, "Zones", layers.zones);
+    } else {
     button(4, 92, layers.underground ? "Underground" : "Surface", layers.underground);
     button(104, 72, "Power", layers.powerOverlay);
     button(184, 72, "Water", layers.waterOverlay);
     button(264, 72, "Streets", layers.streets);   // underground view: show / hide the roads and rails of the surface
-    const SDL_Rect hintClip{346, height_ - kBottomBar, std::max(0, width_ - 346), kBottomBar};
+    }
+    const int hintX = cityEdit_ ? 500 : 346;
+    const SDL_Rect hintClip{hintX, height_ - kBottomBar, std::max(0, width_ - hintX), kBottomBar};
     SDL_SetRenderClipRect(r, &hintClip);
+    if (cityEdit_) text(r, hintX, height_ - kBottomBar + 7, "R rotate  +/- zoom  arrows scroll  right-drag scroll  Esc deselect", 150, 160, 180); else
     text(r, 346, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O/T views  right-drag scroll  B budget  G graphs  Ctrl+S save  Esc", 150, 160, 180);
     SDL_SetRenderClipRect(r, nullptr);
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);
     if (mapEdit_) drawMapEditor(r);
-    if (cityEdit_) drawPlacePanel(r); else menu_.draw(r, width_);
+    if (!cityEdit_) menu_.draw(r, width_);
     if (queryOpen_) drawQuery(r);
     if (modal_) drawModal(r);
     if (browser_.active()) browser_.draw(r, width_, height_);
-}
-
-void GameUi::drawPlacePanel(SDL_Renderer* r) {
-    const Rect p = placePanel();
-    drawPanel(r, p, "Place Object");
-    placeList_.r = {p.x + 6, p.y + 24, p.w - 12, p.h - 30};
-    placeList_.rowH = 16;
-    drawListBox(r, placeList_);
 }
 
 void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
@@ -1111,7 +1186,7 @@ void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
 }
 
 void GameUi::drawSigns(SDL_Renderer* r) {
-    if (cam_.zoom == 0) return;
+    if (cam_.zoom == 0 || !layers.signs || layers.underground) return;
     const World& w = sim_.world();
     for (int a = 0; a < 128; ++a)
         for (int b = 0; b < 128; ++b) {

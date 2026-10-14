@@ -82,16 +82,18 @@ public:
     void showBrowser() { browser_.open("Save City As", savesDir(), "city"); }   // screenshots
     bool inputCaptured() const { return browser_.active() || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
     bool mapEditing() const { return mapEdit_; }
-    // Place & Print (SCURK): the city is edited in this view - paused, free, every tool, plus a list of objects to place.
-    struct PlaceItem { int id; std::string name; };
-    void setCityEdit(bool on) { cityEdit_ = on; if (on) { group_ = item_ = -1; menuOpen_ = false; dragging_ = false; queryOpen_ = false; placeSel_ = -1; } }
+    // Place & Print (SCURK): the city is edited in this view - paused, free, SCURK's own toolbox and view buttons; the object selector belongs to the editor.
+    void setCityEdit(bool on);
     bool cityEditing() const { return cityEdit_; }
-    void setPlaceItems(std::vector<PlaceItem> items) { placeList_.items.clear(); placeItems_ = std::move(items); for (auto& i : placeItems_) placeList_.items.push_back(i.name); placeList_.selected = -1; placeList_.scroll = 0; placeSel_ = -1; }
-    bool clearSelection() { const bool had = group_ >= 0 || placeSel_ >= 0 || menuOpen_; group_ = item_ = -1; menuOpen_ = false; placeSel_ = -1; placeList_.selected = -1; return had; }   // Esc in the city editor
+    void setPlaceObject(int id) { placeSel_ = id; if (id >= 0) { group_ = item_ = -1; menuOpen_ = false; } }   // -1: use the toolbox tool
+    int placeObject() const { return placeSel_; }
+    void setReserved(ui::Rect r) { reserved_ = r; }        // area covered by the object selector (the map ignores clicks there)
+    bool smallView() const { return cam_.zoom == 0; }
+    bool clearSelection() { const bool had = group_ >= 0 || placeSel_ >= 0 || menuOpen_; group_ = item_ = -1; menuOpen_ = false; placeSel_ = -1; return had; }   // Esc in the city editor
+    void loadCity(const CityFile& f);                  // a city / scenario was loaded into the simulation
     const std::string& cityPath() const { return savePath_; }
     std::string cityName() const { return info_.cityName; }
     void resetCityPath() { savePath_.clear(); }
-    void loadCity(const CityFile& f);                  // a city / scenario was loaded into the simulation                              // asks for the starting year and the difficulty (the original dialog 101)
     std::string defaultMapPath;
     void setCityName(const std::string& n) { info_.cityName = n; }
     void initNews(const std::string& dir) { info_.initNews(dir); }                        // DEFAULT.SC2 of the game directory
@@ -147,12 +149,13 @@ private:
     bool autoBudget_ = false, autoGoto_ = true, soundOn_ = true, musicOn_ = true;   // Options menu (the original keeps them in the profile; defaults = the menu's check marks)
     int lastMonth_ = -1;
     bool mapEdit_ = false, cityEdit_ = false;
-    std::vector<PlaceItem> placeItems_;
-    ui::ListBox placeList_;
+    Rect reserved_{};
+    std::vector<ToolGroup> editCatalog_;                   // Place & Print's toolbox, built from the game's catalogue
+    const std::vector<ToolGroup>& cat() const { return cityEdit_ ? editCatalog_ : toolCatalog(); }
+    void demolishAt(int a, int b);
+    void rotateView(int dir);
     int placeSel_ = -1;                                    // object id selected in the Place Object list (-1 = use the tool)
-    Rect placePanel() const { return {width_ - 236, kTopBarPx + 8, 228, std::max(120, height_ - kTopBarPx - 60)}; }
     void placeObjectAt(int a, int b);
-    void drawPlacePanel(SDL_Renderer* r);
     TerrainParams editParams_;
     int sliderDrag_ = -1;
     std::string progressText_;

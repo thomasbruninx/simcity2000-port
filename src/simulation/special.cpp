@@ -140,13 +140,14 @@ int allocateMicrosim(SimContext& c, int id) {
     return slot + 0x33;
 }
 
-bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size) {
+bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size, bool unconstrained) {
     int sz = size - 1;
     if (sz > 1) { --a; --b; }
     const int a1 = a + sz, b1 = b + sz;
     int waterCount = 0;
     for (int x = a; x <= a1; ++x)
         for (int y = b; y <= b1; ++y) {
+            if (unconstrained) { if (!inMap(x, y)) return false; continue; }
             if (sz < 1) { if (!inMap(x, y)) return false; }
             else if (x < 1 || y < 1 || x > 0x7E || y > 0x7E) return false;
             const int t = c.w.xbld.at(x, y);
@@ -157,9 +158,9 @@ bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size) {
             if (c.w.xter.at(x, y) != 0) return false;
             if (water) return false;
         }
-    if (id == 0xF8 && (waterCount == 0 || waterCount == 9)) return false;   // original posts message 0x6B
+    if (!unconstrained && id == 0xF8 && (waterCount == 0 || waterCount == 9)) return false;   // original posts message 0x6B
     const int flags = (id == 0xD5 || id == 0xD) ? 0x20 : 0xE0;
-    if (id == 0xD && bldAt(c, a, b) > 0xC) return false;
+    if (!unconstrained && id == 0xD && bldAt(c, a, b) > 0xC) return false;
     const int overlay = allocateMicrosim(c, id);
     for (int x = a; x <= a1; ++x)
         for (int y = b; y <= b1; ++y) {

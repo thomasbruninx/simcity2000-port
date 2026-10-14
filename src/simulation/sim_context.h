@@ -110,7 +110,7 @@ void destroyTile(SimContext& c, int a, int b, int animate);              // 0x45
 
 // ---- military / airport / seaport placement (docs/simulation/special-zones.md) ----
 void clearSpecialBuilding(SimContext& c, int a, int b);                  // 0x438C20
-bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size);   // 0x440600
+bool placeSpecialBuilding(SimContext& c, int a, int b, int id, int size, bool unconstrained = false);   // unconstrained: the Place & Print editor ignores terrain, water and existing objects   // 0x440600
 int allocateMicrosim(SimContext& c, int id);                             // 0x44C8E0 (+0x44D740): XTXT overlay value of the new record, or 0
 int populationLimit(const SimContext& c, int limit, int divisor);        // 0x44F150
 bool placeZoneBuilding(SimContext& c, int a, int b, int id, int zone);   // 0x437C30

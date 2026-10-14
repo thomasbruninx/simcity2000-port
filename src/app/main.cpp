@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
         bool sized = false;
         std::unique_ptr<scurk::ResourceEditors> editors;   // the SCURK port, created when first opened
         auto editorsActive = [&] { return editors && editors->active; };
-        int presentedW = 0, presentedH = 0;
+        int presentedW = 0, presentedH = 0, lastUiW = 0, lastUiH = 0;
         float wheelAcc = 0.f;
         Uint64 lastWheel = 0;
         Uint64 last = SDL_GetTicks(), thingAcc = 0;
@@ -190,6 +190,10 @@ int main(int argc, char** argv) {
                 ui.resize(lw, lh);
                 if (!sized) { sized = true; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
                 SDL_SetRenderLogicalPresentation(sdlr, lw, lh, SDL_LOGICAL_PRESENTATION_STRETCH);
+            }
+            {   // Place & Print: the SCURK status line sits below the game's view
+                const int uiH = lh - (editorsActive() && ui.cityEditing() ? 20 : 0);
+                if (uiH != lastUiH || lw != lastUiW) { ui.resize(lw, uiH); lastUiH = uiH; lastUiW = lw; }
             }
             if (editorsActive() && !editors->drawsOwnBackground()) {   // the resource editors replace everything
                 SDL_SetRenderDrawColor(sdlr, 8, 12, 24, 255);
@@ -233,19 +237,16 @@ int main(int argc, char** argv) {
             titleScreen.active = false;
         };
         // Place & Print: the editor runs the application's own map view in its editing mode
-        auto placeItems = [&] {
-            std::vector<GameUi::PlaceItem> items;
-            scurk::Env& env = editors->env();
-            for (const ObjectInfo* o : env.catalog.inGroup(env.group)) items.push_back({o->id, env.working.name(o->id, o->name)});
-            ui.setPlaceItems(std::move(items));
-        };
         auto applyWorking = [&] {
             sprites.clearOverrides();
             editors->env().working.applyTo(sprites);
         };
         setupCityBridge = [&] {
             scurk::CityBridge& b = editors->city;
-            b.enter = [&, placeItems, applyWorking] { ui.setCityEdit(true); ui.layers.powerOverlay = ui.layers.waterOverlay = false; applyWorking(); placeItems(); };
+            b.enter = [&, applyWorking] { ui.setCityEdit(true); applyWorking(); };
+            b.reserve = [&](ui::Rect rc) { ui.setReserved(rc); };
+            b.selectObject = [&](int id) { ui.setPlaceObject(id); };
+            b.selectedObject = [&] { return ui.placeObject(); };
             b.leave = [&] { ui.setCityEdit(false); sprites.clearOverrides(); };
             b.draw = [&](SDL_Renderer*) {};
             b.mouseDown = [&](int x, int y, int bt) { ui.mouseDown(x, y, bt); };
@@ -259,15 +260,15 @@ int main(int argc, char** argv) {
                 return true;
             };
             b.loadCity = [&](const std::string& p) {
-                try { loadGame(p); titleScreen.active = false; ui.setCityEdit(true); placeItems(); return true; } catch (const std::exception&) { return false; }
+                try { loadGame(p); titleScreen.active = false; ui.setCityEdit(true); return true; } catch (const std::exception&) { return false; }
             };
             b.saveCity = [&](const std::string& p) { return ui.saveCity(p); };
             b.newCity = [&] { loadGame(args.dir + "/CITIES/DEFAULT.SC2"); ui.resetCityPath(); ui.setCityEdit(true); };
             b.cityPath = [&] { return ui.cityPath(); };
             b.cityName = [&] { return ui.cityName(); };
-            b.placeGroupChanged = [placeItems](int) { placeItems(); };
             b.applyTileSet = [applyWorking](const std::string&) { applyWorking(); };
-            b.exportCity = [&](const std::string& p) {   // the whole map at the smallest zoom, as a 24-bit BMP
+            b.exportCity = [&](const std::string& p) {   // the whole map at the smallest zoom, as a 24-bit BMP ("small view only")
+                if (!ui.smallView()) return false;
                 Camera c0; c0.zoom = 0; c0.rotation = 0;
                 Framebuffer shot(1032, 520, 0xFF000000u);
                 c0.centerOn(64, 64, 516, 260);

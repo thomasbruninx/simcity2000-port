@@ -55,7 +55,9 @@ struct CityBridge {
     std::function<void()> newCity;                                // blank terrain
     std::function<std::string()> cityPath;                        // file of the city being edited ("" = none yet)
     std::function<std::string()> cityName;
-    std::function<void(int)> placeGroupChanged;                   // the Object Group menu changed
+    std::function<void(ui::Rect)> reserve;                        // the object selector's area (the map ignores clicks there)
+    std::function<void(int)> selectObject;                        // object to place (-1 = none: the toolbox tool applies)
+    std::function<int()> selectedObject;
     std::function<void(const std::string&)> applyTileSet;         // working set graphics changed (re-install the overrides)
 };
 

@@ -28,6 +28,9 @@ struct RenderLayers {
     bool powerOverlay = false;    // tint powered / unpowered tiles
     bool waterOverlay = false;    // tint watered / piped / dry tiles
     bool blinkOn = true;          // phase of the blinking no-power bolt
+    bool infrastructure = true;   // objects below 0x70: roads, rails, power lines, trees, parks ... (Place & Print: Show Infrastructure)
+    bool signs = true;            // sign labels (drawn by the interface)
+    bool bolts = true;            // the power-outage icon
 };
 
 // Palette animation of the original (0x456A60 / 0x456B70): 49 entries from index 0xAB rotate (water shimmer) and 16 entries from 0xE0
