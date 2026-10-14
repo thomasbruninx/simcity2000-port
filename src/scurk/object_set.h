@@ -40,6 +40,7 @@ public:
     const std::string& path() const { return path_; }
     void setPath(std::string p) { path_ = std::move(p); }
     bool dirty = false;
+    unsigned revision = 0;      // bumped by every change (texture caches key on it)
 
     static int spriteId(int objectId, int zoom) { return objectId + 500 * zoom; }
     bool customized(int objectId, int zoom) const;                   // a real (not placeholder) shape is stored

@@ -10,8 +10,9 @@ namespace sc2k {
 using namespace ui;
 namespace fs = std::filesystem;
 
-void FileBrowser::open(const std::string& title, const std::string& dir, const std::string& name) {
+void FileBrowser::open(const std::string& title, const std::string& dir, const std::string& name, std::vector<std::string> exts, bool openMode) {
     title_ = title; dir_ = dir; result_ = -2; active_ = true;
+    exts_ = std::move(exts); openMode_ = openMode;
     name_.text = name; name_.maxLen = 60;
     name_.accept = [](char ch) { return ch >= 32 && ch < 127 && ch != '/' && ch != '\\' && ch != ':'; };
     refresh();
@@ -30,7 +31,7 @@ void FileBrowser::refresh() {
         else {
             std::string ext = e.path().extension().string();
             for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            if (ext == ".sc2" || ext == ".scn") files.push_back({n, false});
+            if (std::find(exts_.begin(), exts_.end(), ext) != exts_.end()) files.push_back({n, false});
         }
     }
     auto byName = [](const Entry& a, const Entry& b) { return a.name < b.name; };
@@ -47,13 +48,16 @@ void FileBrowser::refresh() {
 std::string FileBrowser::path() const {
     std::string n = name_.text;
     std::string low = n;
-    for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    if (low.size() < 4 || (low.substr(low.size() - 4) != ".sc2" && low.substr(low.size() - 4) != ".scn")) n += ".sc2";
+    for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    bool has = false;
+    for (const std::string& e : exts_) has = has || (low.size() >= e.size() && low.compare(low.size() - e.size(), e.size(), e) == 0);
+    if (!has && !exts_.empty()) n += exts_.front();
     return (fs::path(dir_) / n).string();
 }
 
 void FileBrowser::accept() {
     if (name_.text.empty()) return;
+    if (openMode_) { std::error_code ec; if (!fs::is_regular_file(path(), ec)) return; }
     result_ = 0;
     active_ = false;
 }
@@ -75,7 +79,7 @@ FileBrowser::Widgets FileBrowser::layout(int w, int h) const {
     l.name = name_;
     l.name.r = nameRow.inset(0, 3);
     auto cols = columns(bottom.cutRight(200), 2, 14);
-    l.save.r = cols[0]; l.save.label = "Save";
+    l.save.r = cols[0]; l.save.label = openMode_ ? "Open" : "Save";
     l.cancel.r = cols[1]; l.cancel.label = "Cancel";
     return l;
 }
@@ -91,7 +95,7 @@ void FileBrowser::draw(SDL_Renderer* r, int w, int h) {
     text(r, l.panel.x + 14, l.name.r.y + 6, "File name:", theme::kTextDim);
     drawTextField(r, l.name);
     const int nameW = debugWidth(ellipsizeStart(l.name.text + "_", std::max(8, l.name.r.w - 12)));
-    if (nameW + 6 + 40 < l.name.r.w) text(r, l.name.r.x + 6 + nameW, l.name.r.y + (l.name.r.h - kDebugLineH) / 2, ".sc2", theme::kTextDim);   // the extension is added automatically
+    if (!exts_.empty() && nameW + 6 + 40 < l.name.r.w) text(r, l.name.r.x + 6 + nameW, l.name.r.y + (l.name.r.h - kDebugLineH) / 2, exts_.front(), theme::kTextDim);   // the extension is added automatically
     drawButton(r, l.save, Color{40, 80, 56});
     drawButton(r, l.cancel, Color{80, 40, 40});
 }

@@ -12,7 +12,8 @@ namespace sc2k {
 
 class FileBrowser {
 public:
-    void open(const std::string& title, const std::string& dir, const std::string& name);
+    // `exts`: the file types listed (lower case, with the dot); the first one is appended to a typed name. `openMode`: choose an existing file (button "Open").
+    void open(const std::string& title, const std::string& dir, const std::string& name, std::vector<std::string> exts = {".sc2", ".scn"}, bool openMode = false);
     bool active() const { return active_; }
     int result() const { return result_; }              // -2 open, 0 accepted (see path()), -1 cancelled
     std::string path() const;                           // directory + file name with the .sc2 extension
@@ -30,6 +31,8 @@ private:
     bool active_ = false;
     int result_ = -2;
     std::string title_, dir_;
+    std::vector<std::string> exts_{".sc2", ".scn"};
+    bool openMode_ = false;
     std::vector<Entry> entries_;
     ui::ListBox list_;          // items mirror entries_ (folders shown in brackets); only scroll / selection live here
     ui::TextField name_;

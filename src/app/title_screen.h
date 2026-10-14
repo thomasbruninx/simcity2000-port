@@ -24,12 +24,13 @@ struct ScenarioEntry {
 
 class TitleScreen {
 public:
-    enum class Action { None, NewCity, NewMap, LoadScenario, LoadCity, Quit };
+    enum class Action { None, NewCity, NewMap, LoadScenario, LoadCity, OpenEditor, Quit };   // OpenEditor: `editor` says which resource editor (0 Place & Print, 1 Pick & Copy, 2 Paint The Town)
     TitleScreen(const std::string& gameDir, const PeResources& res, const std::array<uint32_t, 256>& gamePalette);
     ~TitleScreen();
     bool active = true;
     Action action = Action::None;
     std::string chosenPath;
+    int editor = 0;
     Action take(std::string* path = nullptr) { const Action a = action; if (path) *path = chosenPath; action = Action::None; return a; }
 
     void draw(SDL_Renderer* r, int w, int h);
@@ -49,7 +50,7 @@ public:
     void select(int index) { selected_ = index; }
 
 private:
-    enum class Mode { Menu, Scenarios, Cities, Settings };
+    enum class Mode { Menu, Scenarios, Cities, Settings, Editors };
     std::string dir_;
     const PeResources& res_;
     std::array<uint32_t, 256> palette_;

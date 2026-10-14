@@ -66,14 +66,14 @@ void ObjectSet::setSprite(int objectId, int zoom, const Sprite& s) {
     if (const MifShape* old = mif_.find(sh.id)) sh.endArg = old->endArg;
     sh.setSprite(s);
     mif_.put(sh);
-    dirty = true;
+    dirty = true; ++revision;
 }
 
 void ObjectSet::copyObject(const ObjectSet& from, int objectId) {
     for (int z = 0; z < 3; ++z)
         if (const MifShape* s = from.mif_.find(spriteId(objectId, z))) mif_.put(*s);
     if (const auto n = from.mif_.names.find(objectId); n != from.mif_.names.end()) { mif_.names[objectId] = n->second; mif_.order.emplace_back('N', objectId); }
-    dirty = true;
+    dirty = true; ++revision;
 }
 
 std::string ObjectSet::name(int objectId, const std::string& fallback) const {
@@ -83,11 +83,11 @@ std::string ObjectSet::name(int objectId, const std::string& fallback) const {
 void ObjectSet::setName(int objectId, const std::string& n) {
     if (!mif_.names.count(objectId)) mif_.order.emplace_back('N', objectId);
     mif_.names[objectId] = n;
-    dirty = true;
+    dirty = true; ++revision;
 }
 void ObjectSet::clearName(int objectId) {
     mif_.names.erase(objectId);
-    dirty = true;
+    dirty = true; ++revision;
 }
 
 void ObjectSet::applyTo(SpriteSet& target) const {

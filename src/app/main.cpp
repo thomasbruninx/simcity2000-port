@@ -13,6 +13,7 @@
 #include <string>
 
 #include "app/game_ui.h"
+#include "app/scurk/editors.h"
 #include "app/title_screen.h"
 #include "audio/audio.h"
 #include "render/map_renderer.h"
@@ -142,6 +143,8 @@ int main(int argc, char** argv) {
         float scaleX = 1.f, scaleY = 1.f;   // window points -> logical UI pixels
         float uiScale = 1.f;
         bool sized = false;
+        std::unique_ptr<scurk::ResourceEditors> editors;   // the SCURK port, created when first opened
+        auto editorsActive = [&] { return editors && editors->active; };
         int presentedW = 0, presentedH = 0;
         float wheelAcc = 0.f;
         Uint64 lastWheel = 0;
@@ -164,6 +167,13 @@ int main(int argc, char** argv) {
                 ui.resize(lw, lh);
                 if (!sized) { sized = true; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
                 SDL_SetRenderLogicalPresentation(sdlr, lw, lh, SDL_LOGICAL_PRESENTATION_STRETCH);
+            }
+            if (editorsActive()) {   // the resource editors replace everything
+                SDL_SetRenderDrawColor(sdlr, 8, 12, 24, 255);
+                SDL_RenderClear(sdlr);
+                editors->draw(sdlr, lw, lh);
+                SDL_RenderPresent(sdlr);
+                return;
             }
             if (titleScreen.active) {   // title screen and pickers replace the game view
                 SDL_SetRenderDrawColor(sdlr, 8, 12, 24, 255);
@@ -204,6 +214,18 @@ int main(int argc, char** argv) {
                 case TitleScreen::Action::NewCity: titleScreen.active = false; ui.newCityDialog(false); break;
                 case TitleScreen::Action::NewMap: titleScreen.active = false; ui.newCityDialog(true); break;
                 case TitleScreen::Action::LoadScenario: case TitleScreen::Action::LoadCity: loadGame(path); break;
+                case TitleScreen::Action::OpenEditor: {
+                    if (!editors) {
+                        editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites);
+                        editors->onExit = [&] { titleScreen.fromGame = false; titleScreen.show(); if (window) SDL_StopTextInput(window); };
+                    }
+                    static const scurk::ResourceEditors::Which kWhich[3] = {scurk::ResourceEditors::Which::PlaceAndPrint, scurk::ResourceEditors::Which::PickAndCopy, scurk::ResourceEditors::Which::PaintTheTown};
+                    titleScreen.active = false;
+                    editors->open(kWhich[titleScreen.editor % 3]);
+                    if (!editors->active) titleScreen.show();
+                    else if (window) SDL_StartTextInput(window);
+                    break;
+                }
                 case TitleScreen::Action::Quit: running = false; break;
                 default: break;
             }
@@ -225,6 +247,19 @@ int main(int argc, char** argv) {
             }
             SDL_Event e;
             while (SDL_PollEvent(&e)) {
+                if (editorsActive() && e.type != SDL_EVENT_QUIT) {   // the resource editors take every input event
+                    const int ex = static_cast<int>(e.button.x * scaleX), ey = static_cast<int>(e.button.y * scaleY);
+                    switch (e.type) {
+                        case SDL_EVENT_KEY_DOWN: editors->keyDown(e.key.key, (e.key.mod & SDL_KMOD_CTRL) != 0 || (e.key.mod & SDL_KMOD_GUI) != 0); break;
+                        case SDL_EVENT_TEXT_INPUT: editors->textInput(e.text.text); break;
+                        case SDL_EVENT_MOUSE_BUTTON_DOWN: editors->mouseDown(ex, ey, e.button.button, width, height); break;
+                        case SDL_EVENT_MOUSE_BUTTON_UP: editors->mouseUp(ex, ey, e.button.button); break;
+                        case SDL_EVENT_MOUSE_MOTION: editors->mouseMove(static_cast<int>(e.motion.x * scaleX), static_cast<int>(e.motion.y * scaleY)); break;
+                        case SDL_EVENT_MOUSE_WHEEL: editors->wheel(0, 0, e.wheel.y > 0 ? 1 : (e.wheel.y < 0 ? -1 : 0)); break;
+                        default: break;
+                    }
+                    continue;
+                }
                 if (titleScreen.active && (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
                     if (e.type == SDL_EVENT_KEY_DOWN) titleScreen.keyDown(e.key.key);
                     else titleScreen.mouseDown(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), width, height);
@@ -257,7 +292,7 @@ int main(int argc, char** argv) {
             }
             const bool* keys = SDL_GetKeyboardState(nullptr);
             const int pan = 12;
-            if (!ui.inputCaptured() && !titleScreen.active) {
+            if (!ui.inputCaptured() && !titleScreen.active && !editorsActive()) {
                 if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A]) cam.scrollX += pan;
                 if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) cam.scrollX -= pan;
                 if (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) cam.scrollY += pan;
@@ -273,6 +308,7 @@ int main(int argc, char** argv) {
                 mixer.playMusic(kTunes[musicIndex++ % 5]);
             }
             cycler.update(dt);
+            if (editorsActive()) { editors->update(dt); renderFrame(); SDL_Delay(8); return; }
             if (titleScreen.active) { renderFrame(); SDL_Delay(8); return; }
             ui.update(dt);
             const int steps = ui.paused() ? 0 : clock.advance(dt);
@@ -301,8 +337,15 @@ int main(int argc, char** argv) {
                 else if (op == "tile") { int a, b; words >> a >> b; std::printf("tile %d %d: bld %02x bit %02x zon %02x txt %02x\n", a, b, sim->world().xbld.at(a, b), sim->world().xbit.at(a, b), sim->world().xzon.at(a, b), sim->world().xtxt.at(a, b)); }
                 else if (op == "modal") { std::string t; std::getline(words >> std::ws, t); ui.showTestModal(t, t.rfind("field", 0) == 0); }
                 else if (op == "browser") ui.showBrowser();
+                else if (op == "editor") {   // headless: open a resource editor (0 Place & Print, 1 Pick & Copy, 2 Paint The Town)
+                    int n = 1; words >> n;
+                    if (!editors) editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites);
+                    static const scurk::ResourceEditors::Which kW[3] = {scurk::ResourceEditors::Which::PlaceAndPrint, scurk::ResourceEditors::Which::PickAndCopy, scurk::ResourceEditors::Which::PaintTheTown};
+                    titleScreen.active = false;
+                    editors->open(kW[n % 3]);
+                }
                 else if (op == "mapedit") ui.enterMapEditor();
-                else if (op == "press") { int a, b; words >> a >> b; ui.mouseDown(a, b, 1); }
+                else if (op == "press") { int a, b; words >> a >> b; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseUp(a, b, 1); } else ui.mouseDown(a, b, 1); }
                 else if (op == "zoom") { int z; words >> z; ui.setZoomLevel(z); }
                 else if (op == "center") { int a, b; words >> a >> b; ui.centerView(a, b); }
                 else if (op == "days") { int d; words >> d; sim->advanceDays(d); }

@@ -36,12 +36,12 @@ std::vector<std::string> listFiles(const std::string& dir, const std::string& ex
 
 TitleScreen::TitleScreen(const std::string& gameDir, const PeResources& res, const std::array<uint32_t, 256>& gamePalette) : dir_(gameDir), res_(res), palette_(gamePalette) {
     // labels of the original's main menu (dialog 103)
-    menuLabels_ = {"Start New City", "Edit New Map", "Load Scenario", "Load Saved City", "Settings", "Quit"};
+    menuLabels_ = {"Start New City", "Edit New Map", "Load Scenario", "Load Saved City", "Settings", "Resource Editors", "Quit"};
     if (const auto* d = res.dialog(103)) {
         auto text = [&](int id) { for (const auto& c : d->controls) if (c.id == id) return c.text; return std::string(); };
         const int ids[4] = {112, 113, 114, 111};
         for (int i = 0; i < 4; ++i) if (!text(ids[i]).empty()) menuLabels_[static_cast<size_t>(i)] = text(ids[i]);
-        if (!text(115).empty()) menuLabels_[5] = text(115);
+        if (!text(115).empty()) menuLabels_[6] = text(115);
     }
     try { palette_ = Bmp8::load(gameDir + "/BITMAPS/PAL_MAC.BMP").palette; } catch (const std::exception&) {}   // the scenario pictures use the Macintosh palette
     settings = AudioSettings::load();
@@ -103,7 +103,7 @@ void TitleScreen::ensureTextures(SDL_Renderer* r) {
     }
 }
 
-TitleScreen::Rect TitleScreen::menuButton(int i, int w, int h) const { return {w - 330, h / 2 - 140 + i * 48, 260, 38}; }
+TitleScreen::Rect TitleScreen::menuButton(int i, int w, int h) const { return {w - 330, h / 2 - 160 + i * 46, 260, 38}; }
 TitleScreen::Rect TitleScreen::button(int which, int w, int h) const { return {w / 2 - 170 + which * 190, h - 70, 160, 34}; }
 
 void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
@@ -114,13 +114,25 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
         const SDL_FRect dst{20.f, (static_cast<float>(h) - titleH_ * scale) / 2.f, titleW_ * scale, titleH_ * scale};
         SDL_RenderTexture(r, titleTex_, nullptr, &dst);
     }
+    if (mode_ == Mode::Editors) {
+        static const char* names[4] = {"Place & Print", "Pick & Copy", "Paint The Town", "Back"};
+        text(r, w - 330, h / 2 - 170, "Resource Editors (SCURK)", theme::kTitle);
+        for (int i = 0; i < 4; ++i) {
+            const Rect b = menuButton(i, w, h);
+            fill(r, b.x, b.y, b.w, b.h, 40, 56, 96); frame(r, b.x, b.y, b.w, b.h, 190, 200, 230);
+            text(r, b.x + 16, b.y + 15, names[i], 255, 255, 220);
+        }
+        static const char* hints[3] = {"city editor: place objects, terrain, zones, roads", "copy objects from a source set to your working set", "draw and edit the graphics of an object"};
+        for (int i = 0; i < 3; ++i) clippedText(r, w - 330, menuButton(3, w, h).y + 52 + i * 14, 300, hints[i], theme::kTextDim);
+        return;
+    }
     if (mode_ == Mode::Menu) {
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < 7; ++i) {
             const Rect b = menuButton(i, w, h);
             fill(r, b.x, b.y, b.w, b.h, 40, 56, 96); frame(r, b.x, b.y, b.w, b.h, 190, 200, 230);
             text(r, b.x + 16, b.y + 15, menuLabels_[static_cast<size_t>(i)], 255, 255, 220);
         }
-        text(r, w - 330, h / 2 + 170, "SimCity 2000 (port) - needs your own game files", 150, 160, 190);
+        text(r, w - 330, h / 2 + 175, "SimCity 2000 (port) - needs your own game files", 150, 160, 190);
         return;
     }
     if (mode_ == Mode::Settings) { drawSettings(r, w, h); return; }
@@ -219,6 +231,7 @@ void TitleScreen::activateMenu(int i) {
         case 2: mode_ = Mode::Scenarios; selected_ = 0; break;
         case 3: mode_ = Mode::Cities; selected_ = 0; break;
         case 4: mode_ = Mode::Settings; status_.clear(); break;
+        case 5: mode_ = Mode::Editors; break;
         default: action = Action::Quit; break;
     }
 }
@@ -235,7 +248,11 @@ void TitleScreen::choose() {
 
 void TitleScreen::mouseDown(int x, int y, int w, int h) {
     if (mode_ == Mode::Menu) {
-        for (int i = 0; i < 6; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
+        for (int i = 0; i < 7; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
+        return;
+    }
+    if (mode_ == Mode::Editors) {   // the Resource Editors submenu: the three utilities of SCURK, then Back
+        for (int i = 0; i < 4; ++i) if (menuButton(i, w, h).in(x, y)) { if (i == 3) mode_ = Mode::Menu; else { editor = i; action = Action::OpenEditor; } return; }
         return;
     }
     if (mode_ == Mode::Settings) { settingsClick(x, y, w, h); return; }
@@ -252,7 +269,15 @@ void TitleScreen::keyDown(SDL_Keycode k) {
         else if (k == SDLK_S) activateMenu(2);
         else if (k == SDLK_L) activateMenu(3);
         else if (k == SDLK_C) activateMenu(4);
-        else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(5);
+        else if (k == SDLK_R) activateMenu(5);
+        else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(6);
+        return;
+    }
+    if (mode_ == Mode::Editors) {
+        if (k == SDLK_ESCAPE) mode_ = Mode::Menu;
+        else if (k == SDLK_P) { editor = 0; action = Action::OpenEditor; }
+        else if (k == SDLK_K) { editor = 1; action = Action::OpenEditor; }
+        else if (k == SDLK_T) { editor = 2; action = Action::OpenEditor; }
         return;
     }
     if (mode_ == Mode::Settings) { if (k == SDLK_ESCAPE) { settings.save(); leave(); } return; }
