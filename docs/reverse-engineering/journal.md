@@ -146,3 +146,7 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 
 ## 2026-10-14 — Session 20: UI toolkit
 * New `src/ui` toolkit (geometry, text wrapping / ellipsizing, theme, Button / Checkbox / Slider / ListBox / TextField) with unit tests; the modal questions, pause menu, map editor panel, file browser, tab strip and industry buttons are built from it; long texts (confirmations, query popup, advisor advice, status lines, paths) now wrap or ellipsize instead of running out of their boxes. See docs/ui-architecture.md.
+
+## 2026-10-14 — Session 21: SCURK port (Resource Editors)
+* WINSCURK.EXE menus (#200/#300/#400/#500), strings 29000+ and 32001.. (object names) read from its resources; MIF format decoded and documented ([formats/mif.md](../formats/mif.md)).
+* New main-menu entry **Resource Editors** with Place & Print, Pick & Copy and Paint The Town ([docs/scurk.md](../scurk.md)); Place & Print reuses the game's map view in an editing mode.

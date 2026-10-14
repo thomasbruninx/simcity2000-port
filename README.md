@@ -7,6 +7,7 @@ A clean-room-style reimplementation of SimCity 2000 (Windows 95, 1995 CD Collect
 - [docs/ui-architecture.md](docs/ui-architecture.md) — the interface toolkit (widgets, text layout, input routing) and how to extend it
 - [docs/original-file-inventory.md](docs/original-file-inventory.md)
 - [docs/executable-analysis.md](docs/executable-analysis.md), [docs/windows-api-usage.md](docs/windows-api-usage.md)
+- [docs/scurk.md](docs/scurk.md) — the Resource Editors (SCURK port: Place & Print, Pick & Copy, Paint The Town)
 - [docs/formats/](docs/formats/) — file formats (save format: verified container + RLE)
 - [docs/community-patch-analysis.md](docs/community-patch-analysis.md), [docs/known-versions.md](docs/known-versions.md)
 - [docs/reverse-engineering/journal.md](docs/reverse-engineering/journal.md)
