@@ -66,4 +66,23 @@ Bmp8 Bmp8::fromDib(const std::vector<uint8_t>& d) {
     return b;
 }
 
+void Bmp8::save(const std::string& path) const {
+    const uint32_t stride = (static_cast<uint32_t>(width) + 3u) & ~3u;
+    const uint32_t offset = 14 + 40 + 1024, size = offset + stride * static_cast<uint32_t>(height);
+    std::vector<uint8_t> out(size, 0);
+    auto le32 = [&](size_t at, uint32_t v) { for (int i = 0; i < 4; ++i) out[at + static_cast<size_t>(i)] = static_cast<uint8_t>(v >> (8 * i)); };
+    auto le16 = [&](size_t at, uint16_t v) { out[at] = static_cast<uint8_t>(v); out[at + 1] = static_cast<uint8_t>(v >> 8); };
+    out[0] = 'B'; out[1] = 'M';
+    le32(2, size); le32(10, offset);
+    le32(14, 40); le32(18, static_cast<uint32_t>(width)); le32(22, static_cast<uint32_t>(height)); le16(26, 1); le16(28, 8); le32(34, stride * static_cast<uint32_t>(height)); le32(46, 256);
+    for (size_t i = 0; i < 256; ++i) {
+        out[54 + i * 4] = static_cast<uint8_t>(palette[i]); out[55 + i * 4] = static_cast<uint8_t>(palette[i] >> 8); out[56 + i * 4] = static_cast<uint8_t>(palette[i] >> 16);
+    }
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x) out[offset + static_cast<size_t>(height - 1 - y) * stride + static_cast<size_t>(x)] = index[static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)];
+    std::ofstream f(path, std::ios::binary);
+    if (!f) throw Sc2Error("cannot write " + path);
+    f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
+}
+
 }  // namespace sc2k

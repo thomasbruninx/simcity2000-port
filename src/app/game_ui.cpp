@@ -89,6 +89,7 @@ bool GameUi::openMenu(const std::string& groupName) {
 }
 
 bool GameUi::groupAllowed(size_t g) const {   // the map editor offers only the terrain tools
+    if (cityEdit_) { const std::string n = toolCatalog()[g].name; return n != "Disasters" && n != "Dispatch"; }   // everything the editor can do without the simulation
     if (!mapEdit_) return true;
     const std::string n = toolCatalog()[g].name;
     return n == "Landscape" || n == "Terrain editor" || n == "Terrain";
@@ -100,6 +101,7 @@ GameUi::Rect GameUi::itemRect(int i) const { return {kGroupW + 2, kTopBar + std:
 bool GameUi::overUi(int x, int y) const {
     if (modal_ || budget_.open || info_.open != InfoWindows::Which::None) return true;
     if (mapEdit_ && editPanel().contains(x, y)) return true;
+    if (cityEdit_ && placePanel().contains(x, y)) return true;
     if (y < kTopBar || y >= height_ - kBottomBar) return true;
     const int groups = static_cast<int>(toolCatalog().size());
     if (x < kGroupW && y < kTopBar + groups * kGroupH) return true;
@@ -111,7 +113,8 @@ bool GameUi::overUi(int x, int y) const {
 }
 
 void GameUi::update(int dtMs) {
-    if (mapEdit_) sim_.state().treasury = 99999999;   // editing the map is free
+    if (mapEdit_ || cityEdit_) sim_.state().treasury = 99999999;   // editing is free
+    if (cityEdit_) return;
     if (pauseOpen_) return;
     if (info_.popupDue() && !headless && info_.open == InfoWindows::Which::None && !modal_) info_.open = InfoWindows::Which::Newspaper;   // milestone / new tool stories pop the paper up
     const int month = sim_.state().month();
@@ -145,7 +148,11 @@ void GameUi::mouseDown(int x, int y, int button) {
         for (size_t i = 0; i < l.buttons.size(); ++i) if (l.buttons[i].hit(x, y)) modal_->result = static_cast<int>(i);
         return;
     }
-    if (button == 1) {   // the menu bar of the original
+    if (cityEdit_ && button == 1 && placePanel().contains(x, y)) {
+        if (placeList_.press(x, y)) { const int i = placeList_.selected; placeSel_ = i >= 0 && i < static_cast<int>(placeItems_.size()) ? placeItems_[static_cast<size_t>(i)].id : -1; if (placeSel_ >= 0) { group_ = item_ = -1; menuOpen_ = false; } }
+        return;
+    }
+    if (button == 1 && !cityEdit_) {   // the menu bar of the original
         int cmd = 0;
         if (menu_.mouseDown(x, y, cmd)) { if (cmd) menuCommand(cmd); return; }
     }
@@ -171,7 +178,8 @@ void GameUi::mouseDown(int x, int y, int button) {
         const auto& cat = toolCatalog();
         for (size_t g = 0; g < cat.size(); ++g)
             if (groupRect(static_cast<int>(g)).contains(x, y)) {
-                if (!groupAllowed(g)) { say("Not while editing the map"); return; }
+                if (!groupAllowed(g)) { say("Not while editing"); return; }
+                placeSel_ = -1; placeList_.selected = -1;
                 group_ = static_cast<int>(g);
                 item_ = std::max(0, item_ < static_cast<int>(cat[g].items.size()) ? item_ : 0);
                 if (cat[g].items.size() == 1) { item_ = 0; menuOpen_ = false; } else menuOpen_ = true;
@@ -198,6 +206,7 @@ void GameUi::mouseDown(int x, int y, int button) {
     const ToolItem* t = tool();
     int a, b;
     if (!renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b)) return;
+    if (cityEdit_ && placeSel_ >= 0) { placeObjectAt(a, b); return; }
     if (!t) { queryTile(a, b); return; }
     switch (t->kind) {
         case ToolKind::Bulldoze: playSound(0x1FC, -1); dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
@@ -222,6 +231,17 @@ void GameUi::mouseDown(int x, int y, int button) {
         case ToolKind::Query: applyClick(a, b); break;
         case ToolKind::Unavailable: break;
     }
+}
+
+void GameUi::placeObjectAt(int a, int b) {   // Place & Print: one object of the list onto the map
+    SimContext& c = sim_.context();
+    bool ok = true;
+    if (placeSel_ >= 0x70) {
+        int size = c.t.footprint[static_cast<size_t>(placeSel_) & 0xFF];
+        ok = placeSpecialBuilding(c, a, b, placeSel_, size > 0 ? size : 1);
+    } else setTile(c, a, b, placeSel_);
+    say(ok ? "Placed" : "Cannot place the object there");
+    playSound(ok ? 500 : 0x1F5);
 }
 
 void GameUi::mouseUp(int x, int y, int button) {
@@ -265,7 +285,8 @@ void GameUi::mouseMove(int x, int y) {
     if (t->kind != ToolKind::Bulldoze && t->kind != ToolKind::Terrain && t->kind != ToolKind::Landscape && t->kind != ToolKind::TerrainEdit) updatePreview();
 }
 
-void GameUi::wheel(int, int, int dy) {
+void GameUi::wheel(int x, int y, int dy) {
+    if (cityEdit_ && placePanel().contains(x, y)) { placeList_.wheel(dy); return; }
     if (browser_.active()) { browser_.wheel(dy); return; }
     if (dy > 0) setZoomLevel(zoomLevel_ + 1);
     else if (dy < 0) setZoomLevel(zoomLevel_ - 1);
@@ -1061,10 +1082,18 @@ void GameUi::draw(SDL_Renderer* r) {
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);
     if (mapEdit_) drawMapEditor(r);
-    menu_.draw(r, width_);
+    if (cityEdit_) drawPlacePanel(r); else menu_.draw(r, width_);
     if (queryOpen_) drawQuery(r);
     if (modal_) drawModal(r);
     if (browser_.active()) browser_.draw(r, width_, height_);
+}
+
+void GameUi::drawPlacePanel(SDL_Renderer* r) {
+    const Rect p = placePanel();
+    drawPanel(r, p, "Place Object");
+    placeList_.r = {p.x + 6, p.y + 24, p.w - 12, p.h - 30};
+    placeList_.rowH = 16;
+    drawListBox(r, placeList_);
 }
 
 void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {

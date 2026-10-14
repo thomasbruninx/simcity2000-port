@@ -15,6 +15,7 @@
 #include "app/menu_bar.h"
 #include "app/scurk/prompt.h"
 #include "app/scurk/sprite_view.h"
+#include "render/map_renderer.h"
 #include "resources/pe_resources.h"
 #include "resources/sprite_archive.h"
 #include "scurk/object_set.h"
@@ -36,8 +37,26 @@ struct Env {
     std::string message;                      // status line
     bool colorCycling = true, sound = true;   // Options menu
     int cycle = 0;                            // colour cycle step
+    std::unique_ptr<PaletteCycler> cycler;    // Options > Cycle Colors: the animated palette entries (water shimmer, blinking lights)
+    const std::array<uint32_t, 256>& shownPalette() const { return colorCycling && cycler ? cycler->palette() : palette; }
     std::string sourceName() const;
     std::string workingName() const;
+};
+
+// Place & Print edits a city in the application's own map view; main.cpp supplies these functions (they call into the game's interface in its editing mode).
+struct CityBridge {
+    std::function<void()> enter, leave;
+    std::function<void(SDL_Renderer*)> draw;                      // draws the map view and the city tools (below the host's menu bar and status line)
+    std::function<void(int, int, int)> mouseDown, mouseUp;       // x, y, button
+    std::function<void(int, int)> mouseMove;
+    std::function<void(int)> wheel;
+    std::function<bool(SDL_Keycode, bool)> key;                   // true when used
+    std::function<bool(const std::string&)> loadCity, saveCity, exportCity;
+    std::function<void()> newCity;                                // blank terrain
+    std::function<std::string()> cityPath;                        // file of the city being edited ("" = none yet)
+    std::function<std::string()> cityName;
+    std::function<void(int)> placeGroupChanged;                   // the Object Group menu changed
+    std::function<void(const std::string&)> applyTileSet;         // working set graphics changed (re-install the overrides)
 };
 
 class Editor {
@@ -53,6 +72,8 @@ public:
     virtual bool key(SDL_Keycode, bool) { return false; }
     virtual void textInput(const std::string&) {}
     virtual bool command(int) { return false; }
+    virtual bool drawsBackground() const { return true; }   // false: the editor paints the whole area itself (the city view)
+    virtual void leave() {}
     virtual bool checked(int) const { return false; }
     virtual bool enabled(int) const { return true; }
 };
@@ -60,14 +81,15 @@ public:
 class ResourceEditors {
 public:
     enum class Which { PlaceAndPrint, PickAndCopy, PaintTheTown };
-    ResourceEditors(const std::string& gameDir, const std::array<uint32_t, 256>& palette, SpriteSet& sprites);
+    ResourceEditors(const std::string& gameDir, const std::array<uint32_t, 256>& palette, SpriteSet& sprites, const GameTables* tables = nullptr);
     ~ResourceEditors();
     bool active = false;
     std::function<void()> onExit;                       // back to the main menu
-    std::function<std::unique_ptr<Editor>(Env&, ResourceEditors&)> makeCityEditor;   // Place & Print is built by the application (it reuses the game's map tools)
+    CityBridge city;                                    // Place & Print: the application's map view (set by main.cpp)
     void open(Which which);
     void close();
     Env& env() { return env_; }
+    bool drawsOwnBackground() const { return editor_ && !editor_->drawsBackground(); }   // Place & Print: the game's map view is drawn first
     const PeResources& scurkResources() const { return *res_; }
     bool loaded() const { return res_ != nullptr; }
     std::string loadError;
@@ -82,6 +104,8 @@ public:
     void update(int dtMs);
 
     // file operations shared by the utilities (also called by the menus)
+    // Opens the file browser; `done(path)` runs when a file was chosen.
+    void pickFile(const std::string& title, const std::string& dir, const std::string& name, std::vector<std::string> exts, bool openMode, std::function<void(const std::string&)> done);
     void loadSet(bool working);
     void saveWorking(bool saveAs);
     void newWorking();
@@ -98,7 +122,7 @@ private:
     std::unique_ptr<Editor> editor_;
     Which which_ = Which::PickAndCopy;
     MenuBar menu_;
-    int pendingBrowser_ = 0;          // 1 load source, 2 load working, 3 save working
+    std::function<void(const std::string&)> browserDone_;   // runs with the chosen path when the file browser is accepted
     int width_ = 0, height_ = 0;
     ui::Rect area() const { return {0, MenuBar::kHeight, width_, height_ - MenuBar::kHeight - 20}; }   // the status line takes the bottom 20 pixels
     void menuCommand(int id);

@@ -4,6 +4,7 @@
 
 #include "app/scurk/pick_copy.h"
 #include "app/scurk/paint.h"
+#include "app/scurk/place_print.h"
 #include "app/ui_draw.h"
 #include "save/error.h"
 
@@ -15,9 +16,10 @@ namespace fs = std::filesystem;
 std::string Env::sourceName() const { return source.path().empty() ? "Untitled" : fs::path(source.path()).filename().string(); }
 std::string Env::workingName() const { return working.path().empty() ? "Untitled" : fs::path(working.path()).filename().string(); }
 
-ResourceEditors::ResourceEditors(const std::string& gameDir, const std::array<uint32_t, 256>& palette, SpriteSet& sprites) : sprites_(sprites) {
+ResourceEditors::ResourceEditors(const std::string& gameDir, const std::array<uint32_t, 256>& palette, SpriteSet& sprites, const GameTables* tables) : sprites_(sprites) {
     env_.gameDir = gameDir;
     env_.palette = palette;
+    if (tables) env_.cycler = std::make_unique<PaletteCycler>(palette, *tables);
     env_.originals = &sprites;
     try {
         exe_ = std::make_unique<PeImage>(PeImage::load(gameDir + "/WINSCURK.EXE"));
@@ -42,7 +44,7 @@ void ResourceEditors::open(Which which) {
     switch (which) {
         case Which::PickAndCopy: editor_ = makePickCopy(env_, *this); break;
         case Which::PaintTheTown: editor_ = makePaint(env_, *this); break;
-        case Which::PlaceAndPrint: if (makeCityEditor) editor_ = makeCityEditor(env_, *this); break;
+        case Which::PlaceAndPrint: if (city.enter) editor_ = makePlacePrint(env_, *this, city); break;
     }
     if (!editor_) { active = false; return; }
     const auto it = res_->menus().find("#" + std::to_string(editor_->menuId()));
@@ -52,7 +54,7 @@ void ResourceEditors::open(Which which) {
     env_.message.clear();
 }
 
-void ResourceEditors::close() { active = false; editor_.reset(); if (onExit) onExit(); }
+void ResourceEditors::close() { if (editor_) editor_->leave(); active = false; editor_.reset(); if (onExit) onExit(); }
 
 bool ResourceEditors::menuChecked(int id) const {
     if (id >= 202 && id <= 212) {
@@ -77,7 +79,7 @@ void ResourceEditors::menuCommand(int id) {
         case 141: newWorking(); break;
         case 24310: requestExit(); break;
         case 514: env_.colorCycling = !env_.colorCycling; break;
-        case 515: env_.cycle = (env_.cycle + 1) & 15; break;
+        case 515: if (env_.cycler) { env_.cycler->update(140); env_.cycler->update(500); } break;   // Increment Cycle: one step by hand
         case 516: env_.sound = !env_.sound; break;
         case 2009: env_.prompt.open(res_->string(29003) + " - ported into the SimCity 2000 port (resource editors)", {"OK"}, [](int, const std::string&) {}); break;
         case 24341: case 24345: setMessage("The SCURK help file is not available in this port"); break;
@@ -88,16 +90,25 @@ void ResourceEditors::menuCommand(int id) {
     }
 }
 
+void ResourceEditors::pickFile(const std::string& title, const std::string& dir, const std::string& name, std::vector<std::string> exts, bool openMode, std::function<void(const std::string&)> done) {
+    browserDone_ = std::move(done);
+    env_.browser.open(title, dir, name, std::move(exts), openMode);
+}
+
 void ResourceEditors::loadSet(bool working) {
-    pendingBrowser_ = working ? 2 : 1;
-    env_.browser.open(working ? "Load Working Object Set" : "Load Source Object Set", env_.gameDir + "/SCURKART", {}, {".mif"}, true);
+    pickFile(working ? "Load Working Object Set" : "Load Source Object Set", env_.gameDir + "/SCURKART", {}, {".mif"}, true, [this, working](const std::string& path) {
+        try {
+            if (working) { env_.working = ObjectSet::load(path); setMessage("Working Object Set: " + path); if (city.applyTileSet) city.applyTileSet(path); }
+            else { env_.source = ObjectSet::load(path); setMessage("Source Object Set: " + path); }
+        } catch (const std::exception&) { setMessage(res_->string(29009)); }   // "Not a valid *.MIF file"
+    });
 }
 
 void ResourceEditors::saveWorking(bool saveAs) {
     if (!saveAs && !env_.working.path().empty()) { doSave(env_.working.path()); return; }
-    pendingBrowser_ = 3;
-    std::string name = env_.working.path().empty() ? "MYSET" : fs::path(env_.working.path()).stem().string();
-    env_.browser.open("Save Working Object Set As", env_.working.path().empty() ? env_.gameDir + "/SCURKART" : fs::path(env_.working.path()).parent_path().string(), name, {".mif"}, false);
+    const std::string name = env_.working.path().empty() ? "MYSET" : fs::path(env_.working.path()).stem().string();
+    pickFile("Save Working Object Set As", env_.working.path().empty() ? env_.gameDir + "/SCURKART" : fs::path(env_.working.path()).parent_path().string(), name, {".mif"}, false,
+             [this](const std::string& path) { doSave(path); });
 }
 
 void ResourceEditors::doSave(const std::string& path) {
@@ -130,25 +141,22 @@ void ResourceEditors::requestExit() {
 }
 
 void ResourceEditors::finishBrowser() {
-    if (pendingBrowser_ == 0 || env_.browser.active()) return;
-    const int what = pendingBrowser_;
-    pendingBrowser_ = 0;
-    if (env_.browser.result() != 0) return;
-    const std::string path = env_.browser.path();
-    try {
-        if (what == 1) { env_.source = ObjectSet::load(path); setMessage("Source Object Set: " + path); }
-        else if (what == 2) { env_.working = ObjectSet::load(path); setMessage("Working Object Set: " + path); }
-        else if (what == 3) doSave(path);
-    } catch (const std::exception&) { setMessage(res_->string(29009)); }   // "Not a valid *.MIF file"
+    if (!browserDone_ || env_.browser.active()) return;
+    auto cb = std::move(browserDone_);
+    browserDone_ = nullptr;
+    if (env_.browser.result() == 0) cb(env_.browser.path());
 }
 
-void ResourceEditors::update(int) { finishBrowser(); }
+void ResourceEditors::update(int dtMs) {
+    finishBrowser();
+    if (env_.colorCycling && env_.cycler) env_.cycler->update(dtMs);
+}
 
 void ResourceEditors::draw(SDL_Renderer* r, int w, int h) {
     width_ = w; height_ = h;
     finishBrowser();
-    fill(r, 0, 0, w, h, 16, 20, 30);
-    if (!res_ || !editor_) { text(r, 40, 60, loadError, theme::kTextWarn); return; }
+    if (!res_ || !editor_) { fill(r, 0, 0, w, h, 16, 20, 30); text(r, 40, 60, loadError, theme::kTextWarn); return; }
+    if (editor_->drawsBackground()) fill(r, 0, 0, w, h, 16, 20, 30);
     editor_->draw(r, area());
     menu_.draw(r, w);
     // status line

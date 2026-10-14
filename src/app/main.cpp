@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <vector>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -27,6 +29,26 @@
 using namespace sc2k;
 
 namespace {
+
+bool writeBmp24(const std::string& path, const Framebuffer& fb) {
+    const int w = fb.width, h = fb.height, row = (w * 3 + 3) & ~3;
+    std::vector<uint8_t> out(54 + static_cast<size_t>(row) * h, 0);
+    auto put32 = [&](size_t o, uint32_t v) { for (int i = 0; i < 4; ++i) out[o + i] = static_cast<uint8_t>(v >> (8 * i)); };
+    out[0] = 'B'; out[1] = 'M';
+    put32(2, static_cast<uint32_t>(out.size())); put32(10, 54); put32(14, 40); put32(18, static_cast<uint32_t>(w)); put32(22, static_cast<uint32_t>(h));
+    out[26] = 1; out[28] = 24; put32(34, static_cast<uint32_t>(row * h));
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const uint32_t p = fb.pixels[static_cast<size_t>(y) * w + x];
+            uint8_t* d = &out[54 + static_cast<size_t>(h - 1 - y) * row + x * 3];
+            d[0] = p & 0xFF; d[1] = (p >> 8) & 0xFF; d[2] = (p >> 16) & 0xFF;
+        }
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) return false;
+    const bool ok = std::fwrite(out.data(), 1, out.size(), f) == out.size();
+    std::fclose(f);
+    return ok;
+}
 constexpr Uint64 kThingFrameMs = 100;   // animation frame interval of ships, planes, vehicles, smoke ... (10 frames per second)
 
 struct Args {
@@ -153,6 +175,7 @@ int main(int argc, char** argv) {
         bool running = true;
         bool ctrl = false;
 
+        std::function<void()> setupCityBridge;
         auto renderFrame = [&] {
             int pw = width, ph = height;   // physical pixels of the window
             if (window) SDL_GetWindowSizeInPixels(window, &pw, &ph);
@@ -168,7 +191,7 @@ int main(int argc, char** argv) {
                 if (!sized) { sized = true; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // first frame: centre the city in the logical view
                 SDL_SetRenderLogicalPresentation(sdlr, lw, lh, SDL_LOGICAL_PRESENTATION_STRETCH);
             }
-            if (editorsActive()) {   // the resource editors replace everything
+            if (editorsActive() && !editors->drawsOwnBackground()) {   // the resource editors replace everything
                 SDL_SetRenderDrawColor(sdlr, 8, 12, 24, 255);
                 SDL_RenderClear(sdlr);
                 editors->draw(sdlr, lw, lh);
@@ -197,6 +220,7 @@ int main(int argc, char** argv) {
             const SDL_FRect dst{0.f, 0.f, mw * ui.mapMag(), mh * ui.mapMag()};
             SDL_RenderTexture(sdlr, tex, nullptr, &dst);
             ui.draw(sdlr);
+            if (editorsActive()) editors->draw(sdlr, lw, lh);   // Place & Print: the SCURK menu and status line over the map view
             SDL_RenderPresent(sdlr);
         };
 
@@ -208,6 +232,50 @@ int main(int argc, char** argv) {
             ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2);
             titleScreen.active = false;
         };
+        // Place & Print: the editor runs the application's own map view in its editing mode
+        auto placeItems = [&] {
+            std::vector<GameUi::PlaceItem> items;
+            scurk::Env& env = editors->env();
+            for (const ObjectInfo* o : env.catalog.inGroup(env.group)) items.push_back({o->id, env.working.name(o->id, o->name)});
+            ui.setPlaceItems(std::move(items));
+        };
+        auto applyWorking = [&] {
+            sprites.clearOverrides();
+            editors->env().working.applyTo(sprites);
+        };
+        setupCityBridge = [&] {
+            scurk::CityBridge& b = editors->city;
+            b.enter = [&, placeItems, applyWorking] { ui.setCityEdit(true); ui.layers.powerOverlay = ui.layers.waterOverlay = false; applyWorking(); placeItems(); };
+            b.leave = [&] { ui.setCityEdit(false); sprites.clearOverrides(); };
+            b.draw = [&](SDL_Renderer*) {};
+            b.mouseDown = [&](int x, int y, int bt) { ui.mouseDown(x, y, bt); };
+            b.mouseUp = [&](int x, int y, int bt) { ui.mouseUp(x, y, bt); };
+            b.mouseMove = [&](int x, int y) { ui.mouseMove(x, y); };
+            b.wheel = [&](int dy) { ui.wheel(ui.mapW(), 0, dy); };
+            b.key = [&](SDL_Keycode k, bool ctrl) {
+                if (k == SDLK_ESCAPE) return ui.clearSelection();
+                if (ctrl) return false;
+                ui.keyDown(k, false);
+                return true;
+            };
+            b.loadCity = [&](const std::string& p) {
+                try { loadGame(p); titleScreen.active = false; ui.setCityEdit(true); placeItems(); return true; } catch (const std::exception&) { return false; }
+            };
+            b.saveCity = [&](const std::string& p) { return ui.saveCity(p); };
+            b.newCity = [&] { loadGame(args.dir + "/CITIES/DEFAULT.SC2"); ui.resetCityPath(); ui.setCityEdit(true); };
+            b.cityPath = [&] { return ui.cityPath(); };
+            b.cityName = [&] { return ui.cityName(); };
+            b.placeGroupChanged = [placeItems](int) { placeItems(); };
+            b.applyTileSet = [applyWorking](const std::string&) { applyWorking(); };
+            b.exportCity = [&](const std::string& p) {   // the whole map at the smallest zoom, as a 24-bit BMP
+                Camera c0; c0.zoom = 0; c0.rotation = 0;
+                Framebuffer shot(1032, 520, 0xFF000000u);
+                c0.centerOn(64, 64, 516, 260);
+                RenderLayers lay; lay.powerOverlay = lay.waterOverlay = false;
+                renderer.draw(shot, sim->world(), sim->state(), c0, lay);
+                return writeBmp24(p, shot);
+            };
+        };
         auto handleTitle = [&] {
             std::string path;
             switch (titleScreen.take(&path)) {
@@ -216,8 +284,9 @@ int main(int argc, char** argv) {
                 case TitleScreen::Action::LoadScenario: case TitleScreen::Action::LoadCity: loadGame(path); break;
                 case TitleScreen::Action::OpenEditor: {
                     if (!editors) {
-                        editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites);
+                        editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites, &sim->tables());
                         editors->onExit = [&] { titleScreen.fromGame = false; titleScreen.show(); if (window) SDL_StopTextInput(window); };
+                        setupCityBridge();
                     }
                     static const scurk::ResourceEditors::Which kWhich[3] = {scurk::ResourceEditors::Which::PlaceAndPrint, scurk::ResourceEditors::Which::PickAndCopy, scurk::ResourceEditors::Which::PaintTheTown};
                     titleScreen.active = false;
@@ -292,7 +361,7 @@ int main(int argc, char** argv) {
             }
             const bool* keys = SDL_GetKeyboardState(nullptr);
             const int pan = 12;
-            if (!ui.inputCaptured() && !titleScreen.active && !editorsActive()) {
+            if (!ui.inputCaptured() && !titleScreen.active && (!editorsActive() || ui.cityEditing())) {
                 if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A]) cam.scrollX += pan;
                 if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) cam.scrollX -= pan;
                 if (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) cam.scrollY += pan;
@@ -339,11 +408,13 @@ int main(int argc, char** argv) {
                 else if (op == "browser") ui.showBrowser();
                 else if (op == "editor") {   // headless: open a resource editor (0 Place & Print, 1 Pick & Copy, 2 Paint The Town)
                     int n = 1; words >> n;
-                    if (!editors) editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites);
+                    if (!editors) { editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites, &sim->tables()); setupCityBridge(); }
                     static const scurk::ResourceEditors::Which kW[3] = {scurk::ResourceEditors::Which::PlaceAndPrint, scurk::ResourceEditors::Which::PickAndCopy, scurk::ResourceEditors::Which::PaintTheTown};
                     titleScreen.active = false;
                     editors->open(kW[n % 3]);
                 }
+                else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
+                else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();
                 else if (op == "press") { int a, b; words >> a >> b; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseUp(a, b, 1); } else ui.mouseDown(a, b, 1); }
                 else if (op == "zoom") { int z; words >> z; ui.setZoomLevel(z); }
