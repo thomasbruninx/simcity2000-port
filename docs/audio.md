@@ -14,3 +14,8 @@ Port: `src/audio/` (`midi.{h,cpp}`, `audio.{h,cpp}`, `audio_device.cpp`), tool `
 
 ## One sound at a time (0x480700)
 The original plays effects through `sndPlaySound` with `SND_ASYNC | SND_MEMORY` (flags 7, 15 with `SND_LOOP` for the repeated ones): there is **one** sound channel, a new sound cuts the running one off (so a demolition, a siren and a horn never overlap), ids outside 500..529 are ignored, and the same sound is not restarted within a few ticks of its start. The port's mixer now keeps a single effect voice the same way (music is separate); before, effects were mixed polyphonically, which made sounds that the original drops or cuts audible.
+
+## Tool sounds (verified against 0x43EBC0 / 0x442040 / 0x442760)
+* The **0x1FC loop** ("grinding") belongs to the drags of the *bulldozer menu* (0x442760: demolish, level, raise, lower terrain, de-zone) and of the *terrain editor* tools (0x442040 -> 0x443400 / 0x4432B0 / 0x4442A0 / 0x4423E0); it plays from mouse-down to mouse-up (0x424AD0 .. 0x424AF0). Demolished tiles add the explosion 0x1F8 (0x458690), and 1 in 20 refused demolitions plays 0x200.
+* **Roads, rails, pipes, subways, highways and power lines** have no loop: their drag functions (0x449530 road, 0x4498D0 rail, 0x449C90 power line, 0x449F20 pipes, 0x44A0A0 subway, 0x461B80 highway) return a flag and the dispatcher plays **500** (built; **0x202** for a power line) or **0x1F5** (refused) once the drag ends. Zoning plays 0x1F7 (0x1F7 for residential / commercial / industrial, 500 for the port and airport zones) or 0x1F5.
+* Landscape: trees and the editor's forest 0x1F7, water and the editor's stream 0x1FF, per tile. Raise / lower / level terrain play only the loop.

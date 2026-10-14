@@ -218,17 +218,17 @@ void GameUi::mouseDown(int x, int y, int button) {
             dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b;
             editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = mapPx(y); editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
             editSample(a, b, mapPx(y));
-            if (tool()->sub <= 2) playSound(0x1FC, -1);   // 0x424AD0 loop while the spray is held (stopped by 0x424AF0)
+            playSound(0x1FC, -1);   // 0x442040 -> 0x443400 / 0x4432B0 / 0x4442A0 / 0x4423E0: the loop plays while the mouse button is held (stopped by 0x424AF0)
             break;
         case ToolKind::Landscape: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; landscapeAt(a, b); break;
         case ToolKind::Dispatch:
             if (placeDispatch(sim_.context(), ts_, t->sub, a, b)) { say("Dispatched"); static const int snd[3] = {0x1FA, 0x1FD, 0x20D}; playSound(snd[t->sub % 3]); }   // 0x44F4D0 / 0x44F6E0 / 0x44F8F0
             else { say("Can't dispatch there"); playSound(0x1F5); }
             break;
-        case ToolKind::Terrain: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; levelTarget_ = sim_.world().altm.at(a, b) & 0x1F; terrainAt(a, b); break;
+        case ToolKind::Terrain: playSound(0x1FC, -1); dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; levelTarget_ = sim_.world().altm.at(a, b) & 0x1F; terrainAt(a, b); break;
+        case ToolKind::Zone: if (t->cat == 0) playSound(0x1FC, -1); [[fallthrough]];   // de-zone is a mode of the bulldozer drag 0x442760 (loop 0x1FC); zoning itself plays its sound at the end
         case ToolKind::Highway:
-        case ToolKind::Network: playSound(0x1FC, -1); [[fallthrough]];
-        case ToolKind::Zone: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
+        case ToolKind::Network: dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; updatePreview(); break;
         case ToolKind::Sign: signAt(a, b); break;
         case ToolKind::Building:
         case ToolKind::Special:
@@ -515,10 +515,11 @@ void GameUi::editSample(int pa, int pb, int pointerY) {   // one iteration of a 
 void GameUi::landscapeAt(int a, int b) {
     const ToolItem* t = tool();
     SimContext& c = sim_.context();
-    if (t->sub == 2) { plantForest(c, ts_, a, b); playSound(0x1FF); }          // 0x442040 cases 5 / 6: trees and water
+    // 0x441DF0 / 0x442040: trees and the editor's forest play 0x1F7, water and the editor's stream play 0x1FF (once per tile)
+    if (t->sub == 2) { plantForest(c, ts_, a, b); playSound(0x1F7); }
     else if (t->sub == 3) { placeStream(c, ts_, a, b); playSound(0x1FF); }
     else if (!landscapeTool(c, ts_, t->sub, a, b)) { if (message_.empty()) say(sim_.state().treasury < unitCost(*t) ? "Not enough funds" : "Can't do that here"); }
-    else playSound(0x1F7);                                                      // cases 7 / 8
+    else playSound(t->sub == 1 ? 0x1FF : 0x1F7);
 }
 
 void GameUi::terrainAt(int a, int b) {
@@ -530,7 +531,6 @@ void GameUi::terrainAt(int a, int b) {
     else if (t->sub == 2) ok = raiseTerrain(c, ts_, a, b);
     else ok = lowerTerrain(c, ts_, a, b, true);
     if (!ok && message_.empty()) say("Can't change the terrain there");
-    if (ok) playSound(0x1F7);
 }
 
 void GameUi::bulldozeAt(int a, int b) {
@@ -601,7 +601,10 @@ void GameUi::finishDrag() {
         if (ok) say("Zoned for " + moneyText(cost));
         else say(cost > funds ? "Not enough funds (" + moneyText(cost) + ")" : "Nothing to zone there");
     }
-    if (t->kind == ToolKind::Zone) playSound(ok ? 0x1F7 : 0x1F5);   // 0x442040: zones; the other drags only ran the 0x1FC loop
+    // 0x43EBC0 after the drag: zones 0x1F7 (the port / airport zones 500), roads, rails, pipes, subways and highways 500, power lines 0x202; refused: 0x1F5
+    if (t->kind == ToolKind::Zone && t->cat != 0) playSound(ok ? (t->cat == 8 ? 500 : 0x1F7) : 0x1F5);
+    else if (t->kind == ToolKind::Network) playSound(ok ? (t->net == NetworkKind::Power ? 0x202 : 500) : 0x1F5);
+    else if (t->kind == ToolKind::Highway) playSound(ok ? 500 : 0x1F5);
     preview_ = PathPreview{};
     previewCost_ = 0;
 }
