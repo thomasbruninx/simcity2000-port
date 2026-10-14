@@ -592,7 +592,18 @@ void GameUi::finishDrag() {
         if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
         else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build a highway there");
     } else if (t->kind == ToolKind::Network) {
-        ok = buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, lastA_, lastB_);
+        const bool border = (t->net == NetworkKind::Road || t->net == NetworkKind::Rail) && (lastA_ == 0 || lastA_ == 127 || lastB_ == 0 || lastB_ == 127) && (startA_ != lastA_ || startB_ != lastB_);
+        if (border) {
+            // A link to a neighbouring city is offered when the road / rail arrives at the map edge heading outward. The original follows the mouse trail, so the last leg
+            // points outward when you drag straight at the edge; the port plans one route from the start to the end tile, which may run along the edge instead.
+            // So the route ends one tile inside and the last step outward is a drag of its own (which asks for the link).
+            int ia = lastA_, ib = lastB_;
+            if (lastA_ == 0) ia = 1; else if (lastA_ == 127) ia = 126; else if (lastB_ == 0) ib = 1; else ib = 126;
+            ok = (ia == startA_ && ib == startB_) ? true : buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, ia, ib);
+            if (ok) buildNetwork(c, ts_, t->net, t->sub, ia, ib, lastA_, lastB_);
+            const int fee = t->net == NetworkKind::Road ? 1000 : 1500;
+            if (ok && sim_.world().xtxt.at(lastA_, lastB_) != 0xFA && sim_.state().treasury < fee) { say("A link to the neighbouring city costs " + moneyText(fee)); return; }
+        } else ok = buildNetwork(c, ts_, t->net, t->sub, startA_, startB_, lastA_, lastB_);
         if (ok) say("Built for " + moneyText(funds - sim_.state().treasury));
         else say(previewCost_ > funds ? "Not enough funds (" + moneyText(previewCost_) + ")" : "Can't build that here");
     } else if (t->kind == ToolKind::Zone) {
