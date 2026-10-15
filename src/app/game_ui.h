@@ -15,6 +15,7 @@
 #include "app/budget_window.h"
 #include "app/icons.h"
 #include "app/file_browser.h"
+#include "app/help_viewer.h"
 #include "ui/geometry.h"
 #include "ui/widgets.h"
 #include "app/info_windows.h"
@@ -47,7 +48,7 @@ public:
     float mapMag() const { return mag_; }                // magnification of the map framebuffer on screen
     int mapW() const { return std::max(1, static_cast<int>(std::ceil(width_ / mag_))); }   // size of the map framebuffer
     int mapH() const { return std::max(1, static_cast<int>(std::ceil(height_ / mag_))); }
-    bool paused() const { return pauseOpen_ || mapEdit_ || cityEdit_ || budget_.open || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
+    bool paused() const { return pauseOpen_ || mapEdit_ || cityEdit_ || budget_.open || help_.active || info_.open != InfoWindows::Which::None; }   // the pause menu and the city / graphs / advisors / newspaper windows stop the game
     static std::string savesDir();     // where saved games go (next to the settings file)
     bool headless = false;          // modal questions are answered with their first option
     RenderLayers layers;
@@ -80,7 +81,7 @@ public:
     void enterMapEditor();                              // File > Edit New Map: the terrain generator panel (Hills / Water / Trees, Coast, River, MAKE, DONE) and the terrain tools
     void showTestModal(const std::string& title, bool field) { testModal_ = Modal{}; testModal_.title = title; testModal_.textInput = field; testModal_.text = "A long city name"; testModal_.options = {"Yes", "No"}; modal_ = &testModal_; }   // screenshots
     void showBrowser() { browser_.open("Save City As", savesDir(), "city"); }   // screenshots
-    bool inputCaptured() const { return browser_.active() || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
+    bool inputCaptured() const { return browser_.active() || help_.active || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
     bool mapEditing() const { return mapEdit_; }
     // Place & Print (SCURK): the city is edited in this view - paused, free, SCURK's own toolbox and view buttons; the object selector belongs to the editor.
     void setCityEdit(bool on);
@@ -95,6 +96,8 @@ public:
     std::string cityName() const { return info_.cityName; }
     void resetCityPath() { savePath_.clear(); }
     std::string defaultMapPath;
+    std::string helpFile;                              // SC2USA.HLP of the game directory (Help menu)
+    void openHelp(int what);                           // 0 contents, 1 search, 2 using help
     void setCityName(const std::string& n) { info_.cityName = n; }
     void initNews(const std::string& dir) { info_.initNews(dir); }                        // DEFAULT.SC2 of the game directory
 
@@ -221,6 +224,7 @@ private:
     void saveDialog();                                   // Save City: straight to the current file once there is one
     void saveAs();                                       // Save City As: the folder / file browser
     FileBrowser browser_;
+    HelpViewer help_;
     std::string savePath_;
     bool askText(const std::string& title, std::string& text);   // modal single-line text entry; false = cancelled
     bool queryOpen_ = false;

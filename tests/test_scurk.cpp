@@ -2,6 +2,7 @@
 #include <string>
 
 #include "resources/pe_resources.h"
+#include "resources/winhelp.h"
 #include "scurk/mif.h"
 #include "scurk/object_set.h"
 #include "test.h"
@@ -73,4 +74,17 @@ TEST(scurk_catalog_names_and_groups) {
     ObjectSet other = ObjectSet::load(std::string(root) + "/SCURKART/PARIS.MIF");
     set.copyObject(other, 174);
     CHECK(set.dirty);
+}
+
+TEST(help_files_are_read_with_topics_text_and_links) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const WinHelp game = WinHelp::load(std::string(root) + "/SC2USA.HLP");
+    CHECK(game.topics().size() == 167 && game.topics()[0].title == "Help Contents");
+    CHECK(game.plainText(1).find("planner, designer and Mayor") != std::string::npos);   // phrase compression expanded
+    size_t links = 0, resolved = 0;
+    for (const auto& t : game.topics()) for (const auto& l : t.lines) for (const auto& r : l.runs) if (r.link >= 0 || r.popup) { ++links; if (r.link >= 0) ++resolved; }
+    CHECK(links > 100 && resolved * 10 >= links * 8);
+    const WinHelp scurk = WinHelp::load(std::string(root) + "/SCURK.HLP");
+    CHECK(scurk.topics().size() == 126 && scurk.topics()[0].title == "Contents");
 }

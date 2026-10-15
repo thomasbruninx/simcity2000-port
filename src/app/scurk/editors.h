@@ -12,6 +12,7 @@
 #include <string>
 
 #include "app/file_browser.h"
+#include "app/help_viewer.h"
 #include "app/menu_bar.h"
 #include "app/scurk/prompt.h"
 #include "app/scurk/sprite_view.h"
@@ -87,6 +88,7 @@ public:
     ~ResourceEditors();
     bool active = false;
     std::function<void()> onExit;                       // back to the main menu
+    HelpViewer help;                                    // SCURK.HLP (Help menu)
     CityBridge city;                                    // Place & Print: the application's map view (set by main.cpp)
     void open(Which which);
     void close();

@@ -199,6 +199,7 @@ void GameUi::update(int dtMs) {
 void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
     if (cityEdit_) sim_.state().treasury = 99999999;   // the editor never runs update(): editing stays free
+    if (help_.active) { help_.mouseDown(x, y, button, width_, height_); return; }
     if (browser_.active()) { if (button == 1) browser_.mouseDown(x, y, width_, height_); return; }
     if (pauseOpen_ && !modal_) {
         const auto buttons = pauseButtons();
@@ -400,13 +401,16 @@ void GameUi::mouseMove(int x, int y) {
 }
 
 void GameUi::wheel(int x, int y, int dy) {
+    if (help_.active) { help_.wheel(dy); return; }
     if (browser_.active()) { browser_.wheel(dy); return; }
     if (dy > 0) setZoomLevel(zoomLevel_ + 1);
     else if (dy < 0) setZoomLevel(zoomLevel_ - 1);
 }
 
 bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
+    if (help_.active) { help_.key(k); return true; }
     if (browser_.active()) { browser_.key(k); return true; }
+    if (k == SDLK_F1 && !cityEdit_) { openHelp(0); return true; }
     if (pauseOpen_ && !modal_) {
         if (k == SDLK_ESCAPE) pauseOpen_ = false;
         else if (k == SDLK_S) pauseClick(1);
@@ -469,6 +473,12 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     else if (k == SDLK_P) layers.powerOverlay = !layers.powerOverlay;
     else if (k == SDLK_O) layers.waterOverlay = !layers.waterOverlay;
     return true;
+}
+
+void GameUi::openHelp(int what) {
+    if (what == 2) { help_.openUsing(); return; }
+    if (helpFile.empty() || !help_.openFile(helpFile, "SimCity 2000 Help")) { say(help_.error.empty() ? "The help file was not found" : "Help: " + help_.error); return; }
+    if (what == 1) help_.openSearch();
 }
 
 void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
@@ -856,6 +866,7 @@ bool GameUi::askText(const std::string& title, std::string& text) {
 }
 
 void GameUi::textInput(const std::string& utf8) {
+    if (help_.active) { help_.textInput(utf8); return; }
     if (browser_.active()) { browser_.textInput(utf8); return; }
     if (modal_ && modal_->textInput) {
         ui::TextField f; f.text = modal_->text; f.maxLen = 24;
@@ -1230,6 +1241,7 @@ void GameUi::draw(SDL_Renderer* r) {
     if (shortcut_.open) drawShortcutMenu(r);
     if (modal_) drawModal(r);
     if (browser_.active()) browser_.draw(r, width_, height_);
+    if (help_.active) help_.draw(r, width_, height_);
 }
 
 void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
@@ -1473,7 +1485,9 @@ void GameUi::menuCommand(int id) {   // the original's WM_COMMAND handlers (mess
         case 32783: info_.open = InfoWindows::Which::Map; break;
         case 32791: info_.subscription = !info_.subscription; break;
         case 32792: info_.extraEditions = !info_.extraEditions; break;
-        case 57666: case 32893: case 57667: say("The help file is not available in this port"); break;
+        case 57666: openHelp(0); break;                                           // Contents
+        case 32893: openHelp(1); break;                                           // Search For Help On...
+        case 57667: openHelp(2); break;                                           // Using Help
         case 32908: case 32909: case 32910: case 32911: case 32922: case 32923: case 32924: case 32925: case 32926: case 32927: case 32928: case 32931: debugCommand(id); break;
         case 57664: { Modal m; m.title = "SimCity 2000 (port) - an independent re-implementation; it needs your own copy of the game."; m.options = {"OK"}; runModal(m); break; }
         default: break;

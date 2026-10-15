@@ -37,7 +37,7 @@ endif()
 add_executable(sc2k-audio tools/sc2k_audio.cpp)
 target_link_libraries(sc2k-audio PRIVATE sc2k_audio)
 
-add_library(sc2k_render src/scurk/mif.cpp src/scurk/object_set.cpp src/render/map_renderer.cpp src/render/png.cpp src/resources/sprite_archive.cpp src/resources/bmp.cpp)
+add_library(sc2k_render src/resources/winhelp.cpp src/scurk/mif.cpp src/scurk/object_set.cpp src/render/map_renderer.cpp src/render/png.cpp src/resources/sprite_archive.cpp src/resources/bmp.cpp)
 target_link_libraries(sc2k_render PUBLIC sc2k_sim)
 target_compile_options(sc2k_render PRIVATE -Wall -Wextra -Wpedantic)
 
@@ -59,7 +59,7 @@ target_link_libraries(sc2k-verify PRIVATE sc2k_sim)
 # Interactive application (SDL3, from Homebrew `sdl3`)
 find_package(SDL3 QUIET CONFIG)
 if(SDL3_FOUND)
-  add_executable(sc2k-app src/app/main.cpp src/app/game_ui.cpp src/app/tool_catalog.cpp src/app/budget_window.cpp src/app/icons.cpp src/app/info_windows.cpp src/app/file_browser.cpp src/app/scurk/editors.cpp src/app/scurk/prompt.cpp src/app/scurk/sprite_view.cpp src/app/scurk/pick_copy.cpp src/app/scurk/paint.cpp src/app/scurk/place_print.cpp src/app/city_windows.cpp src/app/title_screen.cpp src/app/menu_bar.cpp src/app/ft_text.cpp src/audio/audio_device.cpp)
+  add_executable(sc2k-app src/app/main.cpp src/app/game_ui.cpp src/app/help_viewer.cpp src/app/tool_catalog.cpp src/app/budget_window.cpp src/app/icons.cpp src/app/info_windows.cpp src/app/file_browser.cpp src/app/scurk/editors.cpp src/app/scurk/prompt.cpp src/app/scurk/sprite_view.cpp src/app/scurk/pick_copy.cpp src/app/scurk/paint.cpp src/app/scurk/place_print.cpp src/app/city_windows.cpp src/app/title_screen.cpp src/app/menu_bar.cpp src/app/ft_text.cpp src/audio/audio_device.cpp)
   target_include_directories(sc2k-app PRIVATE src)
   target_link_libraries(sc2k-app PRIVATE sc2k_render sc2k_audio sc2k_ui SDL3::SDL3)
   # FreeType (brew install freetype): the newspaper draws Times New Roman from the system's fonts

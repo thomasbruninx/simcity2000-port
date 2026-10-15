@@ -105,7 +105,10 @@ void ResourceEditors::menuCommand(int id) {
         case 515: if (env_.cycler) { env_.cycler->update(140); env_.cycler->update(500); } break;   // Increment Cycle: one step by hand
         case 516: env_.sound = !env_.sound; break;
         case 2009: env_.prompt.open(res_->string(29003) + " - ported into the SimCity 2000 port (resource editors)", {"OK"}, [](int, const std::string&) {}); break;
-        case 24341: case 24345: setMessage("The SCURK help file is not available in this port"); break;
+        case 24341:
+            if (!help.openFile(env_.gameDir + "/SCURK.HLP", "SCURK Help")) setMessage("Help: " + (help.error.empty() ? std::string("SCURK.HLP not found") : help.error));
+            break;
+        case 24345: help.openUsing(); break;
         default:
             if (id >= 202 && id <= 212) env_.group = byId[id - 202];
             else setMessage("That command is not available in this editor");
@@ -187,10 +190,12 @@ void ResourceEditors::draw(SDL_Renderer* r, int w, int h) {
     clippedText(r, 8, h - 14, w - 16, env_.message, Color{190, 220, 160});
     env_.prompt.draw(r, w, h);
     env_.browser.draw(r, w, h);
+    help.draw(r, w, h);
 }
 
 void ResourceEditors::mouseDown(int x, int y, int button, int w, int h) {
     width_ = w; height_ = h;
+    if (help.active) { help.mouseDown(x, y, button, w, h); return; }
     if (env_.browser.active()) { if (button == 1) env_.browser.mouseDown(x, y, w, h); return; }
     if (env_.prompt.active()) { if (button == 1) env_.prompt.mouseDown(x, y, w, h); return; }
     if (button == 1) {
@@ -208,11 +213,14 @@ void ResourceEditors::mouseMove(int x, int y) {
 }
 
 void ResourceEditors::wheel(int x, int y, int dy) {
+    if (help.active) { help.wheel(dy); return; }
     if (env_.browser.active()) { env_.browser.wheel(dy); return; }
     if (editor_ && !env_.prompt.active()) editor_->wheel(x, y, dy);
 }
 
 void ResourceEditors::keyDown(SDL_Keycode k, bool ctrl) {
+    if (help.active) { help.key(k); return; }
+    if (k == SDLK_F1) { menuCommand(24341); return; }
     if (env_.browser.active()) { env_.browser.key(k); return; }
     if (env_.prompt.active()) { env_.prompt.key(k); return; }
     if (editor_ && editor_->key(k, ctrl)) return;
