@@ -40,6 +40,13 @@ ResourceEditors::ResourceEditors(const std::string& gameDir, const std::array<ui
 
 ResourceEditors::~ResourceEditors() = default;
 
+void ResourceEditors::switchTo(Which which) {
+    if (!res_ || (editor_ && which == which_)) return;
+    if (editor_) editor_->leave();
+    editor_.reset();
+    open(which);
+}
+
 void ResourceEditors::open(Which which) {
     if (!res_) return;
     which_ = which;
@@ -68,6 +75,10 @@ void ResourceEditors::open(Which which) {
             std::string t = top.text; t.erase(std::remove(t.begin(), t.end(), '&'), t.end());
             bool has212 = false;
             for (const auto& i : top.items) has212 = has212 || i.id == 212;
+            if (t == "Window") {   // the original's MDI window list: the three utilities
+                top.items.clear();
+                for (const auto& [id, str] : {std::pair<int, int>{60101, 29002}, {60102, 29001}, {60103, 29000}}) { PeResources::MenuItem w; w.id = id; std::string label = res_->string(str); for (size_t k = 0; (k = label.find('&', k)) != std::string::npos; k += 2) label.insert(k, "&"); w.text = label; top.items.push_back(w); }
+            }
             if (t == "Object Group" && !has212) { PeResources::MenuItem all; all.id = 212; all.text = "&All Buildings"; top.items.push_back(all); }
         }
         menu_.load(root);
@@ -85,6 +96,7 @@ bool ResourceEditors::menuChecked(int id) const {
                                              ObjectGroup::Misc, ObjectGroup::Animated1, ObjectGroup::Animated2, ObjectGroup::Construction, ObjectGroup::All};
         return env_.group == byId[id - 202];
     }
+    if (id >= 60101 && id <= 60103) return which_ == (id == 60101 ? Which::PaintTheTown : id == 60102 ? Which::PickAndCopy : Which::PlaceAndPrint);
     if (id == 514) return env_.colorCycling;
     if (id == 516) return env_.sound;
     return false;
@@ -101,9 +113,15 @@ void ResourceEditors::menuCommand(int id) {
         case 131: saveWorking(true); break;
         case 141: newWorking(); break;
         case 24310: requestExit(); break;
+        case 60101: switchTo(Which::PaintTheTown); break;
+        case 60102: switchTo(Which::PickAndCopy); break;
+        case 60103: switchTo(Which::PlaceAndPrint); break;
         case 514: env_.colorCycling = !env_.colorCycling; break;
-        case 515: if (env_.cycler) { env_.cycler->update(140); env_.cycler->update(500); } break;   // Increment Cycle: one step by hand
-        case 516: env_.sound = !env_.sound; break;
+        case 515:   // Increment Cycle: one step by hand
+            if (env_.cycler) { env_.cycler->update(140); env_.cycler->update(500); }
+            if (city.stepColors) city.stepColors();
+            break;
+        case 516: env_.sound = !env_.sound; if (city.setSound) city.setSound(env_.sound); break;
         case 2009: env_.prompt.open(res_->string(29003) + " - ported into the SimCity 2000 port (resource editors)", {"OK"}, [](int, const std::string&) {}); break;
         case 24341:
             if (!help.openFile(env_.gameDir + "/SCURK.HLP", "SCURK Help")) setMessage("Help: " + (help.error.empty() ? std::string("SCURK.HLP not found") : help.error));
@@ -160,7 +178,10 @@ void ResourceEditors::newWorking() {
 
 void ResourceEditors::requestExit() {
     if (env_.working.dirty) env_.prompt.open(res_->string(29005), {"Yes", "No", "Cancel"}, [this](int c, const std::string&) {
-        if (c == 0) { if (env_.working.path().empty()) { saveWorking(true); return; } doSave(env_.working.path()); close(); }
+        if (c == 0) {
+            if (env_.working.path().empty()) { pickFile("Save Working Object Set As", env_.gameDir + "/SCURKART", "MYSET", {".mif"}, false, [this](const std::string& path) { doSave(path); if (!env_.working.dirty) close(); }); return; }
+            doSave(env_.working.path()); close();
+        }
         else if (c == 1) { env_.working.dirty = false; close(); }
     });
     else close();

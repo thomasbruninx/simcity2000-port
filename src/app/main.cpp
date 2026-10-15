@@ -80,6 +80,9 @@ SDL_Keycode keyByName(const std::string& n) {
     if (n.size() == 1) return static_cast<SDL_Keycode>(std::tolower(n[0]));
     if (n == "escape") return SDLK_ESCAPE;
     if (n == "space") return SDLK_SPACE;
+    if (n == "return") return SDLK_RETURN;
+    if (n == "backspace") return SDLK_BACKSPACE;
+    if (n == "tab") return SDLK_TAB;
     return SDLK_UNKNOWN;
 }
 }  // namespace
@@ -178,6 +181,7 @@ int main(int argc, char** argv) {
         bool ctrl = false;
 
         std::function<void()> setupCityBridge, blankCity;
+        bool cityStarted = false, effectsBefore = true;   // Place & Print: its city exists / the game's sound option before the editors
         auto renderFrame = [&] {
             int pw = width, ph = height;   // physical pixels of the window
             if (window) SDL_GetWindowSizeInPixels(window, &pw, &ph);
@@ -255,11 +259,17 @@ int main(int argc, char** argv) {
         };
         setupCityBridge = [&] {
             scurk::CityBridge& b = editors->city;
-            b.enter = [&, applyWorking] { blankCity(); ui.setCityEdit(true); applyWorking(); };
+            b.enter = [&, applyWorking] {
+                if (!cityStarted) { blankCity(); cityStarted = true; }   // the city stays while you visit the other utilities
+                ui.setCityEdit(true); applyWorking();
+                effectsBefore = ui.effectsOn(); ui.setEffects(editors->env().sound);
+            };
+            b.setSound = [&](bool on) { ui.setEffects(on); };
+            b.stepColors = [&] { cycler.update(140); cycler.update(500); };
             b.reserve = [&](ui::Rect rc) { ui.setReserved(rc); };
             b.selectObject = [&](int id) { ui.setPlaceObject(id); };
             b.selectedObject = [&] { return ui.placeObject(); };
-            b.leave = [&] { ui.setCityEdit(false); installTileSet(); };
+            b.leave = [&] { ui.setCityEdit(false); installTileSet(); ui.setEffects(effectsBefore); };
             b.draw = [&](SDL_Renderer*) {};
             b.mouseDown = [&](int x, int y, int bt) { ui.mouseDown(x, y, bt); };
             b.mouseUp = [&](int x, int y, int bt) { ui.mouseUp(x, y, bt); };
@@ -298,7 +308,8 @@ int main(int argc, char** argv) {
                 case TitleScreen::Action::OpenEditor: {
                     if (!editors) {
                         editors = std::make_unique<scurk::ResourceEditors>(args.dir, pal.palette, sprites, &sim->tables());
-                        editors->onExit = [&] { titleScreen.fromGame = false; titleScreen.show(); if (window) SDL_StopTextInput(window); };
+                        editors->onExit = [&] { cityStarted = false; titleScreen.fromGame = false; titleScreen.show(); if (window) SDL_StopTextInput(window); };
+                        editors->env().playSound = [&](int id) { ui.playSound(id); };
                         setupCityBridge();
                     }
                     static const scurk::ResourceEditors::Which kWhich[3] = {scurk::ResourceEditors::Which::PlaceAndPrint, scurk::ResourceEditors::Which::PickAndCopy, scurk::ResourceEditors::Which::PaintTheTown};
@@ -390,7 +401,7 @@ int main(int argc, char** argv) {
                 static const int kTunes[5] = {10001, 10004, 10008, 10012, 10018};
                 mixer.playMusic(kTunes[musicIndex++ % 5]);
             }
-            cycler.update(dt);
+            if (!editorsActive() || editors->env().colorCycling) cycler.update(dt);   // Options > Cycle Colors of the resource editors also governs Place & Print's map
             if (editorsActive()) { editors->update(dt); renderFrame(); SDL_Delay(8); return; }
             if (titleScreen.active) { renderFrame(); SDL_Delay(8); return; }
             ui.update(dt);
@@ -432,12 +443,21 @@ int main(int argc, char** argv) {
                 else if (op == "rclick") { int a, b; words >> a >> b; ui.mouseDown(a, b, 3); ui.mouseUp(a, b, 3); }   // right button without moving: the shortcut menu
                 else if (op == "rdrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; ui.mouseDown(a, b, 3); ui.mouseMove(c2, d2); ui.mouseUp(c2, d2, 3); }
                 else if (op == "help") { int w2 = 0; words >> w2; ui.openHelp(w2); }   // 0 contents, 1 search, 2 using help
-                else if (op == "type") { std::string t; std::getline(words >> std::ws, t); ui.textInput(t); }
+                else if (op == "type") { std::string t; std::getline(words >> std::ws, t); if (editorsActive()) editors->textInput(t); else ui.textInput(t); }
                 else if (op == "newdlg") ui.showNewCityDialog();
                 else if (op == "about") ui.showAbout();
                 else if (op == "joke") ui.showJoke();
                 else if (op == "tileset") { std::string p; words >> p; std::printf("tile set %s: %d\n", p.c_str(), loadTileSet(p) ? 1 : 0); }
                 else if (op == "newcitydlg") ui.newCityDialog(false);   // headless: the dialog answers itself, the map is random
+                else if (op == "ecmd") { int id = 0; words >> id; if (editorsActive()) editors->runCommand(id); }   // a menu command of the resource editors
+                else if (op == "eprint") {   // the working / source set: file, changes, name and a hash of the large graphics of one object
+                    int id = 0; words >> id;
+                    if (editors) {
+                        auto& env = editors->env();
+                        auto hash = [&](ObjectSet& s) { const Sprite sp = s.sprite(id, 2, *env.originals); uint64_t h = 1469598103934665603ull; for (size_t i = 0; i < sp.index.size(); ++i) { h ^= static_cast<uint64_t>(sp.index[i]) + (sp.opaque[i] ? 256u : 0u); h *= 1099511628211ull; } return h; };
+                        std::printf("working %s dirty=%d name='%s' gfx=%016llx | source %s gfx=%016llx | msg: %s\n", env.working.path().c_str(), env.working.dirty ? 1 : 0, env.working.name(id, "?").c_str(), static_cast<unsigned long long>(hash(env.working)), env.source.path().c_str(), static_cast<unsigned long long>(hash(env.source)), env.message.c_str());
+                    }
+                }
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();
@@ -454,7 +474,7 @@ int main(int argc, char** argv) {
                 else if (op == "newcity") { int e = 0, d = 0; words >> e >> d; ui.newCity(e, d); }
                 else if (op == "newmap") { int e = 0, d = 0, coast = 0, river = 0; TerrainParams tp; words >> e >> d >> coast >> river >> tp.hills >> tp.water >> tp.trees; tp.coast = coast != 0; tp.river = river != 0; ui.newCity(e, d, &tp); }
                 else if (op == "funds") { int f; words >> f; sim->state().treasury = f; }
-                else if (op == "key") { std::string k; words >> k; const bool ct = k.rfind("ctrl+", 0) == 0; if (ct) k = k.substr(5); ui.keyDown(keyByName(k), ct); }
+                else if (op == "key") { std::string k; words >> k; const bool ct = k.rfind("ctrl+", 0) == 0; if (ct) k = k.substr(5); if (editorsActive()) editors->keyDown(keyByName(k), ct); else ui.keyDown(keyByName(k), ct); }
                 else if (op == "budget") { std::string d; words >> d; ui.keyDown(SDLK_B, false); if (!d.empty()) ui.openBudgetDetail(std::atoi(d.c_str())); }
                 else if (op == "window") { int w; words >> w; ui.openInfo(w); }
                 else if (op == "menu") { std::string n; std::getline(words >> std::ws, n); ui.openMenu(n); }

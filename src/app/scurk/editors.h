@@ -37,6 +37,8 @@ struct Env {
     FileBrowser browser;
     std::string message;                      // status line
     bool colorCycling = true, sound = true;   // Options menu
+    std::function<void(int)> playSound;       // the game's sound effects (set by main.cpp); the editors call it only while `sound` is on
+    void beep(int id) const { if (sound && playSound) playSound(id); }
     int cycle = 0;                            // colour cycle step
     std::unique_ptr<PaletteCycler> cycler;    // Options > Cycle Colors: the animated palette entries (water shimmer, blinking lights)
     const std::array<uint32_t, 256>& shownPalette() const { return colorCycling && cycler ? cycler->palette() : palette; }
@@ -59,6 +61,8 @@ struct CityBridge {
     std::function<void(ui::Rect)> reserve;                        // the object selector's area (the map ignores clicks there)
     std::function<void(int)> selectObject;                        // object to place (-1 = none: the toolbox tool applies)
     std::function<int()> selectedObject;
+    std::function<void()> stepColors;                             // Options > Increment Cycle: one step of the colour cycling of the map view
+    std::function<void(bool)> setSound;                           // Options > Sound
     std::function<void(const std::string&)> applyTileSet;         // working set graphics changed (re-install the overrides)
 };
 
@@ -91,6 +95,8 @@ public:
     HelpViewer help;                                    // SCURK.HLP (Help menu)
     CityBridge city;                                    // Place & Print: the application's map view (set by main.cpp)
     void open(Which which);
+    void switchTo(Which which);                         // Window menu: another utility (the working set and the file settings stay)
+    void runCommand(int id) { menuCommand(id); }       // scripting / tests
     void close();
     Env& env() { return env_; }
     bool drawsOwnBackground() const { return editor_ && !editor_->drawsBackground(); }   // Place & Print: the game's map view is drawn first
@@ -115,7 +121,6 @@ public:
     void newWorking();
     void requestExit();
     void setMessage(const std::string& m) { env_.message = m; }
-    void switchTo(Which w) { open(w); }
     Which current() const { return which_; }
 
 private:

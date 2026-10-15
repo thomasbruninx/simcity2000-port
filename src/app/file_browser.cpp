@@ -13,7 +13,7 @@ namespace fs = std::filesystem;
 void FileBrowser::open(const std::string& title, const std::string& dir, const std::string& name, std::vector<std::string> exts, bool openMode) {
     title_ = title; dir_ = dir; result_ = -2; active_ = true;
     exts_ = std::move(exts); openMode_ = openMode;
-    name_.text = name; name_.maxLen = 60;
+    name_.text = name; name_.maxLen = 60; name_.selected = !name.empty();
     name_.accept = [](char ch) { return ch >= 32 && ch < 127 && ch != '/' && ch != '\\' && ch != ':'; };
     refresh();
 }
@@ -52,6 +52,14 @@ std::string FileBrowser::path() const {
     bool has = false;
     for (const std::string& e : exts_) has = has || (low.size() >= e.size() && low.compare(low.size() - e.size(), e.size(), e) == 0);
     if (!has && !exts_.empty()) n += exts_.front();
+    std::string nl = n;
+    for (char& ch : nl) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    for (const Entry& e : entries_) {   // a file that exists keeps its own spelling (FUTURE.MIF when "future" was typed)
+        if (e.dir) continue;
+        std::string el = e.name;
+        for (char& ch : el) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (el == nl) { n = e.name; break; }
+    }
     return (fs::path(dir_) / n).string();
 }
 
@@ -114,6 +122,7 @@ void FileBrowser::mouseDown(int x, int y, int w, int h) {
             refresh();
         } else {
             name_.text = fs::path(e.name).stem().string();   // choose an existing file to overwrite
+            name_.selected = true;
             list_.selected = k;
         }
     }

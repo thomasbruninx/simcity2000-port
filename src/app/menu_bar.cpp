@@ -12,9 +12,13 @@ std::string MenuBar::clean(const std::string& s, std::string* shortcut) {
     std::string t = s, sc;
     const size_t tab = t.find('\t');
     if (tab != std::string::npos) { sc = t.substr(tab + 1); t.resize(tab); }
-    t.erase(std::remove(t.begin(), t.end(), '&'), t.end());
+    std::string out;   // '&' marks the accelerator letter; '&&' is a literal ampersand
+    for (size_t i = 0; i < t.size(); ++i) {
+        if (t[i] == '&') { if (i + 1 < t.size() && t[i + 1] == '&') { out += '&'; ++i; } continue; }
+        out += t[i];
+    }
     if (shortcut) *shortcut = sc;
-    return t;
+    return out;
 }
 
 int MenuBar::titleX(int i) const {

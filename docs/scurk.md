@@ -13,6 +13,12 @@ Main menu → **Resource Editors** opens a submenu with SCURK's three utilities.
 * **Paint The Town** — the pixel editor for one object at its three sizes: pencil, brush, line, rectangle / ellipse (hollow or filled), fill, undo (60 steps), cut / copy / paste, rotate, flip, rename, revert, export BMP to `SCURKART/<spriteId>.BMP`, 16×16 palette with a transparent colour, grid / snap options.
 * File menus: load Source / Working set, save / save as Working set, New working set.
 
+## Windows, options, sound
+* **Window** menu: the three utilities (the original's MDI window list). Switching keeps the working set and Place & Print's city; Pick & Copy / Paint The Town start fresh on the shared sets.
+* **Options > Cycle Colors / Increment Cycle** also govern the colour animation of Place & Print's map; **Sound** switches the sound effects (placing an object plays the "built" / "refused" sounds, copying objects the "built" sound) and is restored to the game's own setting when you leave.
+* Text fields that open with a name filled in (rename object, save as, the new-city name) have it selected: typing replaces it, Backspace clears it.
+* Exercised with scripted input (copy objects from FUTURE.MIF, save, New, load; draw, undo, rename in Paint The Town, export BMP, save, reload): the graphics hash of the object and its name come back identical after the file round trip.
+
 ## Architecture
 * `src/scurk/` (no SDL): `MifFile`, `ObjectCatalog`, `ObjectSet` (overrides per object and zoom, names, revision counter, `applyTo(SpriteSet&)`).
 * `src/app/scurk/editors.{h,cpp}`: `Env` (shared state), `Editor` interface, `ResourceEditors` host (menu bar from the PE resources, status line, file browser via `pickFile(callback)`, prompts).

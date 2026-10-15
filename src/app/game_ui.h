@@ -91,6 +91,8 @@ public:
     // Place & Print (SCURK): the city is edited in this view - paused, free, SCURK's own toolbox and view buttons; the object selector belongs to the editor.
     void setCityEdit(bool on);
     bool cityEditing() const { return cityEdit_; }
+    bool effectsOn() const { return soundOn_; }
+    void setEffects(bool on) { soundOn_ = on; if (audio) audio->setEffectsEnabled(on); }   // Options > Sound (also the resource editors' switch)
     void setPlaceObject(int id) { placeSel_ = id; if (id >= 0) { group_ = item_ = -1; menuOpen_ = false; } }   // -1: use the toolbox tool
     int placeObject() const { return placeSel_; }
     void setReserved(ui::Rect r) { reserved_ = r; }        // area covered by the object selector (the map ignores clicks there)
@@ -130,7 +132,7 @@ public:
 
 private:
     using Rect = ui::Rect;   // src/ui/geometry.h
-    struct Modal { std::string title; std::vector<std::string> options; int result = -2; bool textInput = false; std::string text; };
+    struct Modal { std::string title; std::vector<std::string> options; int result = -2; bool textInput = false; std::string text; bool fresh = false; };
 
     Simulation& sim_;
     MapRenderer& renderer_;

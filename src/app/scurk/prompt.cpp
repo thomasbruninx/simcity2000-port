@@ -8,7 +8,7 @@ using namespace ui;
 
 void Prompt::open(const std::string& title, std::vector<std::string> options, std::function<void(int, const std::string&)> done, bool field, const std::string& text, size_t maxLen) {
     title_ = title; options_ = std::move(options); done_ = std::move(done); field_ = field;
-    text_.text = text; text_.maxLen = maxLen;
+    text_.text = text; text_.maxLen = maxLen; text_.selected = !text.empty();
     active_ = true;
 }
 

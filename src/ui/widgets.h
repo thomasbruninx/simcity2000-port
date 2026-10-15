@@ -56,9 +56,10 @@ struct TextField {
     Rect r;
     std::string text;
     size_t maxLen = 24;
+    bool selected = false;          // the whole text is selected: the next character replaces it, Backspace clears it (as in a dialog that opens with a name filled in)
     std::function<bool(char)> accept = [](char c) { return c >= 32 && c < 127; };
     void textInput(const std::string& utf8);
-    bool backspace() { if (text.empty()) return false; text.pop_back(); return true; }
+    bool backspace() { if (selected) { text.clear(); selected = false; return true; } if (text.empty()) return false; text.pop_back(); return true; }
 };
 
 }  // namespace sc2k::ui

@@ -89,6 +89,7 @@ inline void drawTextField(SDL_Renderer* r, const TextField& t, bool focused = tr
     const int room = std::max(8, t.r.w - 12);
     std::string shown = t.text + (focused ? "_" : "");
     shown = ellipsizeStart(shown, room);   // a long entry scrolls: the end (where the caret is) stays visible
+    if (t.selected && !t.text.empty()) fill(r, t.r.x + 4, t.r.y + 3, std::min(t.r.w - 8, debugWidth(shown) + 4), t.r.h - 6, theme::kRowSelected.r, theme::kRowSelected.g, theme::kRowSelected.b);
     text(r, t.r.x + 6, t.r.y + (t.r.h - kDebugLineH) / 2, shown, theme::kFieldText);
 }
 

@@ -324,6 +324,7 @@ void GameUi::placeObjectAt(int a, int b) {   // Place & Print: the selected obje
     if (placeSel_ >= 0x70) ok = placeSpecialBuilding(c, a, b, placeSel_, size, true);
     else { ok = inMap(a, b); if (ok) setTile(c, a, b, placeSel_); }
     say(ok ? "Placed" : "Cannot place the object there");
+    playSound(ok ? 500 : 0x1F5);   // built / refused (0x43EBC0)
 }
 
 bool GameUi::openShortcutMenu(int x, int y) {
@@ -437,7 +438,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     if (modal_) {
         if (k == SDLK_ESCAPE) modal_->result = -1;
         else if (k == SDLK_RETURN) modal_->result = 0;
-        else if (k == SDLK_BACKSPACE && modal_->textInput && !modal_->text.empty()) modal_->text.pop_back();
+        else if (k == SDLK_BACKSPACE && modal_->textInput && !modal_->text.empty()) { if (modal_->fresh) { modal_->text.clear(); modal_->fresh = false; } else modal_->text.pop_back(); }
         return true;
     }
     if (shortcut_.open && k == SDLK_ESCAPE) { shortcut_.open = false; return true; }
@@ -797,7 +798,7 @@ bool GameUi::newCityMouse(int x, int y) {
 bool GameUi::runNewCityDialog(int& era, int& difficulty, std::string& name) {
     nc_ = NewCityDialog{};
     nc_.era = era; nc_.difficulty = difficulty;
-    nc_.name.text = name; nc_.name.maxLen = 24;
+    nc_.name.text = name; nc_.name.maxLen = 24; nc_.name.selected = !name.empty();
     if (headless || !pump) return true;
     nc_.open = true;
     SDL_StartTextInput(SDL_GetKeyboardFocus());
@@ -1014,6 +1015,7 @@ bool GameUi::askText(const std::string& title, std::string& text) {
     m.title = title;
     m.textInput = true;
     m.text = text;
+    m.fresh = !text.empty();
     if (headless || !pump) return true;
     modal_ = &m;
     SDL_StartTextInput(SDL_GetKeyboardFocus());
@@ -1029,6 +1031,7 @@ void GameUi::textInput(const std::string& utf8) {
     if (help_.active) { help_.textInput(utf8); return; }
     if (browser_.active()) { browser_.textInput(utf8); return; }
     if (modal_ && modal_->textInput) {
+        if (modal_->fresh) { modal_->text.clear(); modal_->fresh = false; }   // the filled-in name is selected: typing replaces it
         ui::TextField f; f.text = modal_->text; f.maxLen = 24;
         f.textInput(utf8);
         modal_->text = f.text;
@@ -1476,8 +1479,9 @@ void GameUi::drawQuery(SDL_Renderer* r) {
         row.label = l.labelString >= 0 ? res_.string(l.labelString) : std::string();
         row.warn = false;
         for (const QueryPiece& p : l.value) {
-            if (!row.value.empty()) row.value += " ";
-            row.value += p.stringId >= 0 ? res_.string(p.stringId) : p.text;
+            const std::string piece = p.stringId >= 0 ? res_.string(p.stringId) : p.text;
+            if (!row.value.empty() && piece.rfind(",", 0) != 0) row.value += " ";   // the original draws the pieces one after the other: the "",000 acre"" string continues the number
+            row.value += piece;
             row.warn |= p.warn;
         }
         row.h = std::max(wrappedHeight(row.value, valueW, lineGap), wrappedHeight(row.label, labelW, lineGap)) + lineGap;

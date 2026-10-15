@@ -45,6 +45,7 @@ Rect ListBox::scrollBar() const {
 }
 
 void TextField::textInput(const std::string& utf8) {
+    if (selected) { text.clear(); selected = false; }
     for (char ch : utf8)
         if (accept(ch) && text.size() < maxLen) text.push_back(ch);
 }

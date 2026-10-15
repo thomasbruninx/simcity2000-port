@@ -53,6 +53,7 @@ public:
                 if (c != 0) return;
                 for (int o : ids) env_.working.copyObject(env_.source, o);
                 host_.setMessage("Copied " + std::to_string(ids.size()) + " object(s)");
+                env_.beep(500);
                 selected_.clear();
             });
             return true;
@@ -64,6 +65,7 @@ public:
                 int n = 0;
                 for (const ObjectInfo* o : env_.catalog.inGroup(env_.group)) { env_.working.copyObject(env_.source, o->id); ++n; }
                 host_.setMessage("Copied " + std::to_string(n) + " object(s)");
+                env_.beep(500);
             });
             return true;
         }
