@@ -437,6 +437,7 @@ int main(int argc, char** argv) {
                 else if (op == "about") ui.showAbout();
                 else if (op == "joke") ui.showJoke();
                 else if (op == "tileset") { std::string p; words >> p; std::printf("tile set %s: %d\n", p.c_str(), loadTileSet(p) ? 1 : 0); }
+                else if (op == "newcitydlg") ui.newCityDialog(false);   // headless: the dialog answers itself, the map is random
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();

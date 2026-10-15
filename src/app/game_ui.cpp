@@ -1,6 +1,7 @@
 #include "app/game_ui.h"
 
 #include <pwd.h>
+#include <random>
 #include <unistd.h>
 
 #include "app/ui_draw.h"
@@ -719,7 +720,13 @@ void GameUi::newCityDialog(bool randomMap) {
     std::string name = "New City";
     if (!runNewCityDialog(era, d, name)) return;
     if (name.empty()) name = "New City";
-    newCity(era, d, nullptr);
+    // a new city starts on a random map: 20% hills, 40% trees, 25% water, a river in 60% of the cases, a coast in 25%
+    static std::mt19937 gen{std::random_device{}()};
+    TerrainParams tp;
+    tp.hills = (20 * 47 + 50) / 100; tp.trees = (40 * 47 + 50) / 100; tp.water = (25 * 47 + 50) / 100;
+    tp.river = std::uniform_int_distribution<int>(0, 99)(gen) < 60;
+    tp.coast = std::uniform_int_distribution<int>(0, 99)(gen) < 25;
+    newCity(era, d, &tp);
     setCityNameAll(name);
 }
 
@@ -1122,9 +1129,10 @@ int GameUi::runModal(Modal& m) {
 
 bool GameUi::confirm(int id, int amount) {
     Modal m;
-    if (id == 0x6D || id == 0x6E) {
-        const int fee = id == 0x6D ? 1000 : 1500;
-        m.title = res_.string(id) + " to the neighbouring city for " + moneyText(fee) + "?";
+    if (id == 0x6D || id == 0x6E || id == 0xF6) {   // "Do you want to build a connection / to your neighbor for $1000?": the strings already name the price
+        std::string t = res_.string(id);
+        for (char& ch : t) if (ch == '\n' || ch == '\r') ch = ' ';
+        m.title = t;
     } else if (id == 0x121 || id == 0x123) {
         std::string t = res_.string(id);
         const size_t p = t.find("%d");
