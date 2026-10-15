@@ -349,9 +349,37 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
     };
     const int margin = 260 << (z > 0 ? z - 1 : 0) >> 1;
 
+    // Terrain shapes (slopes, shores) belong to the compass: a view that is turned needs the shape the tile has seen from that side. The shape of a tile is a
+    // function of which of its 8 neighbours are higher (table shoreType, the shoreline fixer 0x4469C0); for the turned view the neighbours are examined in the
+    // turned directions. Tiles whose stored shape does not follow the table (special tiles, edited terrain) keep theirs.
+    std::vector<uint8_t> turned;
+    if ((cam.rotation & 3) != 0) {
+        turned.resize(128 * 128);
+        for (int a = 0; a < 128; ++a)
+            for (int b = 0; b < 128; ++b) {
+                const int x = w.xter.at(a, b);
+                turned[static_cast<size_t>(a) * 128 + static_cast<size_t>(b)] = static_cast<uint8_t>(x);
+                if (x >= 0x3E) continue;
+                const int own = w.altm.at(a, b) & 0x1F;
+                int mask0 = 0, maskR = 0;
+                for (int i = 0; i < 8; ++i) {
+                    int dx = t_.shoreDx[static_cast<size_t>(i)], dy = t_.shoreDy[static_cast<size_t>(i)];
+                    auto higher = [&](int ox, int oy) { const int na = a + ox, nb = b + oy; return inMapAB(na, nb) && own < (w.altm.at(na, nb) & 0x1F); };
+                    if (higher(dx, dy)) mask0 |= t_.shoreBit[static_cast<size_t>(i)];
+                    for (int k = 0; k < (cam.rotation & 3); ++k) { const int nx = -dy; dy = dx; dx = nx; }   // the display direction i is this file direction
+                    if (higher(dx, dy)) maskR |= t_.shoreBit[static_cast<size_t>(i)];
+                }
+                if (t_.shoreType[static_cast<size_t>(mask0)] != (x & 0xF)) continue;
+                const int shape = t_.shoreType[static_cast<size_t>(maskR)];
+                if (shape > 0xD) continue;
+                turned[static_cast<size_t>(a) * 128 + static_cast<size_t>(b)] = static_cast<uint8_t>((x & 0xF0) | shape);
+            }
+    }
+    auto xterAt = [&](int a, int b) { return turned.empty() ? static_cast<int>(w.xter.at(a, b)) : static_cast<int>(turned[static_cast<size_t>(a) * 128 + static_cast<size_t>(b)]); };
+
     // ground sprite of a file tile drawn at (x, yBase); yBase is the tile's bottom vertex (before altitude)
     auto groundOf = [&](int a, int b, int x, int yBase) {
-        const int xter = w.xter.at(a, b);
+        const int xter = xterAt(a, b);
         const uint16_t aw = w.altm.at(a, b);
         const int alt = xter < 0x10 ? (aw & 0x1F) : (aw & 0x3E0) >> 5;
         const int g = t_.terrainSprite[static_cast<size_t>(xter)] + zoomBase;
@@ -367,7 +395,7 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
             if (yBase < -64 || yBase - margin > fb.height + 64) continue;
             int a, b;
             toFile(cam.rotation, da, db, a, b);
-            const int xter = w.xter.at(a, b);
+            const int xter = xterAt(a, b);
             const uint16_t altWord = w.altm.at(a, b);
             const int altLand = altWord & 0x1F, altWater = (altWord & 0x3E0) >> 5;
             const int alt = xter < 0x10 ? altLand : altWater;
