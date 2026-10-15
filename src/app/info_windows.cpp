@@ -89,20 +89,28 @@ void InfoWindows::drawGraphs(SDL_Renderer* r, int x, int y) {
     fill(r, gx, gy, gw, gh, 12, 14, 20);
     frame(r, gx, gy, gw, gh, 90, 90, 110);
     const int first = period_ == 0 ? 0 : period_ == 1 ? 0xC : 0x20, count = period_ == 0 ? 12 : 20;
+    const SDL_Rect clip{gx + 1, gy + 1, gw - 2, gh - 2};
+    SDL_SetRenderClipRect(r, &clip);   // nothing is drawn outside the field, whatever the values are
     for (int k = 0; k < 16; ++k) {
         if (!((shown_ >> k) & 1u)) continue;
-        // series 0..3 share a scale, 4..7 share one, the others have their own (the history keeps the running maxima)
-        const int32_t mx = std::max<int32_t>(1, s.graphMax[static_cast<size_t>(k)]);
+        // series 0..3 share a scale, 4..7 share one, the others have their own; the scale is the running maximum of the history and never below what is shown
+        const int g0 = k < 4 ? 0 : k < 8 ? 4 : k, g1 = k < 4 ? 3 : k < 8 ? 7 : k;
+        int32_t mx = 1;
+        for (int j = g0; j <= g1; ++j) {
+            mx = std::max<int32_t>(mx, s.graphMax[static_cast<size_t>(j)]);
+            for (int i = 0; i < count; ++i) mx = std::max<int32_t>(mx, s.graph[static_cast<size_t>(j) * 52 + static_cast<size_t>(first + i)]);
+        }
         const uint32_t c = kSeriesColor[k];
         int px = 0, py = 0;
         for (int i = 0; i < count; ++i) {
             const int32_t v = s.graph[static_cast<size_t>(k) * 52 + static_cast<size_t>(first + count - 1 - i)];   // oldest on the left
             const int xx = gx + 6 + i * (gw - 12) / std::max(1, count - 1);
-            const int yy = gy + gh - 6 - static_cast<int>(static_cast<long long>(std::max<int32_t>(0, v)) * (gh - 12) / mx);
+            const int yy = std::clamp(gy + gh - 6 - static_cast<int>(static_cast<long long>(std::max<int32_t>(0, v)) * (gh - 12) / mx), gy + 6, gy + gh - 6);
             if (i) { SDL_SetRenderDrawColor(r, Uint8(c >> 16), Uint8(c >> 8), Uint8(c), 255); SDL_RenderLine(r, float(px), float(py), float(xx), float(yy)); }
             px = xx; py = yy;
         }
     }
+    SDL_SetRenderClipRect(r, nullptr);
     const char* periods[3] = {"1 Year", "10 Years", "100 Yrs"};
     for (int i = 0; i < 3; ++i) {
         fill(r, gx + 8 + i * 80, gy + gh + 8, 72, 16, i == period_ ? 70 : 40, i == period_ ? 100 : 46, i == period_ ? 70 : 56);
