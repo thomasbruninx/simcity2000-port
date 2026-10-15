@@ -322,3 +322,19 @@ TEST(labels_are_c_strings_in_the_world_and_pascal_strings_in_the_file) {
     World w2 = World::fromCity(c);
     CHECK(std::strcmp(reinterpret_cast<const char*>(&w2.xlab[0xFC * 25]), "Mets") == 0);
 }
+
+TEST(unchanged_labels_keep_the_file_bytes_when_the_city_is_written_back) {
+    CityFile c;
+    c.xlab[10 * 25] = 0; for (int i = 1; i < 25; ++i) c.xlab[10 * 25 + i] = static_cast<uint8_t>(0x30 + i);   // an unused slot with stale bytes behind the empty text
+    const char* name = "Llamas";
+    c.xlab[11 * 25] = 6; std::memcpy(&c.xlab[11 * 25 + 1], name, 6); c.xlab[11 * 25 + 20] = 0x7F;           // a label with junk after the text
+    World w = World::fromCity(c);
+    CityFile same = c;
+    w.writeBack(same);
+    CHECK(same.xlab == c.xlab);                                  // nothing changed: byte-identical
+    std::memcpy(&w.xlab[11 * 25], "Mets", 5);                   // the player renames one label
+    CityFile edited = c;
+    w.writeBack(edited);
+    CHECK(edited.xlab[11 * 25] == 4 && std::memcmp(&edited.xlab[11 * 25 + 1], "Mets", 4) == 0 && edited.xlab[11 * 25 + 20] == 0);
+    CHECK(std::memcmp(&edited.xlab[10 * 25], &c.xlab[10 * 25], 25) == 0);
+}

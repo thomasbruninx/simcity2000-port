@@ -89,6 +89,8 @@ bool GameUi::openMenu(const std::string& groupName) {
 }
 
 void GameUi::setCityEdit(bool on) {
+    if (on && !cityEdit_) editTreasury_ = sim_.state().treasury;
+    if (!on && cityEdit_) sim_.state().treasury = editTreasury_;   // the city keeps its real funds
     cityEdit_ = on;
     if (on) sim_.state().treasury = 99999999;
     group_ = item_ = -1; menuOpen_ = false; dragging_ = false; queryOpen_ = false; placeSel_ = -1;
@@ -381,8 +383,13 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         return true;
     }
     if (queryOpen_ && micro_.valid && k == SDLK_N) { renameQueried(); return true; }
-    if (ctrl && k == SDLK_N) { newCityDialog(); return true; }
-    if (ctrl && k == SDLK_O && onTitle) { onTitle(); return true; }
+    if (ctrl && k == SDLK_T && onTitle) { onTitle(); return true; }   // (not in the original: back to the title screen)
+    if (ctrl && !ts_.shift) {   // the accelerators of the original's menu bar (resource 3)
+        static const std::pair<SDL_Keycode, int> kAccel[] = {{SDLK_L, 32801}, {SDLK_N, 32802}, {SDLK_E, 32803}, {SDLK_Z, 32804}, {SDLK_S, 32805}, {SDLK_X, 57665},
+            {SDLK_P, 32768}, {SDLK_1, 32769}, {SDLK_2, 32770}, {SDLK_3, 32771}, {SDLK_4, 32934},
+            {SDLK_B, 32784}, {SDLK_O, 32785}, {SDLK_C, 32786}, {SDLK_I, 32787}, {SDLK_G, 32788}, {SDLK_H, 32789}, {SDLK_M, 32783}};
+        for (const auto& a : kAccel) if (a.first == k) { menuCommand(a.second); return true; }
+    }
     if (ctrl && ts_.shift && k == SDLK_D) { enableDebugMenu(); return true; }
     if (k >= SDLK_A && k <= SDLK_Z && !ctrl && !modal_) {   // the cheat word of the original: "priscilla" attaches the Debug menu
         static const std::string word = "priscilla";
@@ -394,8 +401,6 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         }
         cheatTyped_ = next == "p" ? next : std::string();
     }
-    if (ctrl && k == SDLK_S) { saveDialog(); return true; }
-    if (ctrl && !modal_ && (k == SDLK_I || k == SDLK_H || k == SDLK_M)) { menuCommand(k == SDLK_I ? 32787 : k == SDLK_H ? 32789 : 32783); return true; }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE && !info_.closeArticle()) info_.open = InfoWindows::Which::None; return true; }
     if (k == SDLK_M && audio) { audio->setMuted(!audio->muted()); say(audio->muted() ? "Sound off" : "Sound on"); return true; }
@@ -435,6 +440,7 @@ void GameUi::newCity(int era, int difficulty, const TerrainParams* terrain) {
 void GameUi::loadCity(const CityFile& f) {
     base_ = f;
     savePath_.clear();
+    editTreasury_ = sim_.state().treasury;   // (Place & Print: the loaded file's funds)
     avail_ = ToolAvailability::fromState(sim_.state(), sim_.tables());
     info_.cityName = f.name();
     queryOpen_ = false; dragging_ = false; group_ = item_ = -1; menuOpen_ = false;
@@ -893,7 +899,10 @@ void GameUi::drawPause(SDL_Renderer* r) {
 
 bool GameUi::saveCity(const std::string& path) {
     try {
+        const int shown = sim_.state().treasury;
+        if (cityEdit_) sim_.state().treasury = editTreasury_;   // files keep the city's real funds, not the editor's unlimited amount
         const std::vector<uint8_t> bytes = sim_.toCity(base_).serialize();
+        if (cityEdit_) sim_.state().treasury = shown;
         FILE* f = std::fopen(path.c_str(), "wb");
         if (!f) return false;
         const bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();

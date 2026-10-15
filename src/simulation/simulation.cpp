@@ -31,7 +31,6 @@ struct Simulation::Impl {
         : world(World::fromCity(c)), state(CityState::fromCity(c)), tables(std::move(t)), rng(seed), lfsr(seed * 2654435761u + 0xACE1u), hooks(&defaultHooks) {
         // runtime values the game derives from saved state at load time
         state.catPop = {state.zonePop[1] + state.zonePop[2], state.zonePop[3] + state.zonePop[4], state.zonePop[5] + state.zonePop[6]};
-        if (state.rateLevel == 0) state.rateLevel = 1;
         ctx = std::make_unique<SimContext>(SimContext{world, state, tables, rng, lfsr, *hooks, traffic, {}});
         ctx->lcg.seed(seed ^ 0x5DEECE6Du);
         startScenario(*ctx);
@@ -58,7 +57,6 @@ void Simulation::replaceCity(const CityFile& c) {
     impl_->state = CityState::fromCity(c);
     CityState& st = impl_->state;
     st.catPop = {st.zonePop[1] + st.zonePop[2], st.zonePop[3] + st.zonePop[4], st.zonePop[5] + st.zonePop[6]};
-    if (st.rateLevel == 0) st.rateLevel = 1;
     impl_->ctx->things = ThingState{};
     startScenario(*impl_->ctx);
 }

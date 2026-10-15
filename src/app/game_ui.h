@@ -149,6 +149,7 @@ private:
     bool autoBudget_ = false, autoGoto_ = true, soundOn_ = true, musicOn_ = true;   // Options menu (the original keeps them in the profile; defaults = the menu's check marks)
     int lastMonth_ = -1;
     bool mapEdit_ = false, cityEdit_ = false;
+    int editTreasury_ = 0;                                 // the city's own funds while Place & Print shows an unlimited amount
     Rect reserved_{};
     std::vector<ToolGroup> editCatalog_;                   // Place & Print's toolbox, built from the game's catalogue
     const std::vector<ToolGroup>& cat() const { return cityEdit_ ? editCatalog_ : toolCatalog(); }

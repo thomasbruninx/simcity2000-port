@@ -27,9 +27,20 @@ World World::fromCity(const CityFile& c) {
 void World::writeBack(CityFile& c) const {
     c.xbld = xbld; c.xzon = xzon; c.xbit = xbit; c.xund = xund; c.xtxt = xtxt; c.xter = xter;
     c.altm = altm;
-    c.xmic = xmic; c.xlab = xlab; c.xthg = xthg;
+    c.xmic = xmic; c.xthg = xthg;
+    const std::array<uint8_t, 6400> loaded = c.xlab;   // the records as the file had them
+    c.xlab = xlab;
+    auto decoded = [](const uint8_t* rec) {   // what fromCity() makes of a record
+        const size_t n = rec[0];
+        if (n == 0 || n > 24 || std::memchr(rec + 1, 0, n) != nullptr) return std::string(reinterpret_cast<const char*>(rec), strnlen(reinterpret_cast<const char*>(rec), 24));
+        return std::string(reinterpret_cast<const char*>(rec + 1), n);
+    };
     for (size_t i = 0; i < 256; ++i) {   // back to the file's Pascal strings
         uint8_t* l = &c.xlab[i * 25];
+        if (decoded(&loaded[i * 25]) == std::string(reinterpret_cast<const char*>(l), strnlen(reinterpret_cast<const char*>(l), 24))) {   // unchanged: keep the file's bytes (including the unused tail the game left there)
+            std::memcpy(l, &loaded[i * 25], 25);
+            continue;
+        }
         const size_t n = strnlen(reinterpret_cast<const char*>(l), 24);
         if (n == 0) { std::memset(l, 0, 25); continue; }
         std::memmove(l + 1, l, n);
