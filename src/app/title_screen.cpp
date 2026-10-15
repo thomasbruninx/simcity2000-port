@@ -56,6 +56,9 @@ TitleScreen::~TitleScreen() {
 }
 
 void TitleScreen::scan() {
+    for (SDL_Texture* t : pictures_) if (t) SDL_DestroyTexture(t);   // a rescan starts from nothing (the lists were appended to before)
+    pictures_.clear();
+    scenarios_.clear();
     for (const std::string& n : listFiles(dir_ + "/SCENARIO", ".SCN")) {
         try {
             const CityFile c = CityFile::load(dir_ + "/SCENARIO/" + n);
@@ -109,7 +112,6 @@ TitleScreen::Rect TitleScreen::menuButton(int i, int w, int h) const { return {w
 TitleScreen::Rect TitleScreen::button(int which, int w, int h) const { return {w / 2 - 170 + which * 190, h - 70, 160, 34}; }
 
 void TitleScreen::openCities() {
-    scan();
     const std::string p = AudioSettings::settingsPath();
     std::string start = p.substr(0, p.rfind('/')) + "/saves";
     if (listFiles(start, ".sc2").empty()) start = dir_ + "/CITIES";   // no game saved yet: the cities of the installation
