@@ -136,6 +136,14 @@ private:
     int hoverA_ = -1, hoverB_ = -1;
     int mouseX_ = 0, mouseY_ = 0;
     bool dragging_ = false, scrolling_ = false;
+    // right button: a drag scrolls the map, a plain click opens the original's shortcut menu (resource 243: Center Map, Query Tile, Bulldoze Tile)
+    int rightX_ = 0, rightY_ = 0;
+    bool rightMoved_ = false;
+    struct ShortcutMenu { bool open = false; int x = 0, y = 0, a = 0, b = 0, hover = -1; std::vector<std::pair<int, std::string>> items; } shortcut_;
+    Rect shortcutItem(int i) const { return {shortcut_.x, shortcut_.y + i * 18, 150, 18}; }
+    bool openShortcutMenu(int x, int y);
+    void shortcutCommand(int id);
+    void drawShortcutMenu(SDL_Renderer* r);
     int startA_ = 0, startB_ = 0, lastA_ = 0, lastB_ = 0;
     PathPreview preview_;
     int previewCost_ = 0;

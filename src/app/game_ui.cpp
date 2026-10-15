@@ -210,13 +210,21 @@ void GameUi::mouseDown(int x, int y, int button) {
         for (size_t i = 0; i < l.buttons.size(); ++i) if (l.buttons[i].hit(x, y)) modal_->result = static_cast<int>(i);
         return;
     }
+    if (shortcut_.open) {   // the shortcut menu takes the next click (a click outside closes it)
+        const std::pair<int, std::string>* chosen = nullptr;
+        for (size_t i = 0; i < shortcut_.items.size(); ++i) if (button == 1 && shortcutItem(static_cast<int>(i)).contains(x, y)) chosen = &shortcut_.items[i];
+        const int id = chosen ? chosen->first : 0;
+        shortcut_.open = false;
+        if (id) shortcutCommand(id);
+        if (button == 1) return;
+    }
     if (button == 1 && !cityEdit_) {   // the menu bar of the original
         int cmd = 0;
         if (menu_.mouseDown(x, y, cmd)) { if (cmd) menuCommand(cmd); return; }
     }
     if (budget_.mouseDown(x, y, button, width_, height_)) return;
     if (queryOpen_ && button == 1) queryOpen_ = false;
-    if (button != 1) { scrolling_ = true; return; }
+    if (button != 1) { scrolling_ = true; rightX_ = x; rightY_ = y; rightMoved_ = false; return; }
     if (info_.mouseDown(x, y, width_, height_)) return;
     if (mapEdit_ && mapEditorMouse(x, y, true)) return;
     if (y >= kMenuBar && y < kTopBar && x >= width_ - kTopButtonCount * kTopButtonStep - 4) {
@@ -310,20 +318,60 @@ void GameUi::placeObjectAt(int a, int b) {   // Place & Print: the selected obje
     say(ok ? "Placed" : "Cannot place the object there");
 }
 
+bool GameUi::openShortcutMenu(int x, int y) {
+    int a, b;
+    if (overUi(x, y) || !renderer_.pickTile(sim_.world(), cam_, mapPx(x), mapPx(y), a, b)) return false;
+    shortcut_ = ShortcutMenu{};
+    if (const auto it = res_.menus().find("#243"); it != res_.menus().end() && !it->second.items.empty())
+        for (const auto& item : it->second.items[0].items) shortcut_.items.push_back({item.id, item.text});
+    if (shortcut_.items.empty()) return false;
+    shortcut_.open = true; shortcut_.a = a; shortcut_.b = b;
+    shortcut_.x = std::clamp(x, 0, std::max(0, width_ - 150));
+    shortcut_.y = std::clamp(y, 0, std::max(0, height_ - 18 * static_cast<int>(shortcut_.items.size())));
+    return true;
+}
+
+void GameUi::shortcutCommand(int id) {   // 32938 Center Map, 32939 Query Tile, 32940 Bulldoze Tile
+    const int a = shortcut_.a, b = shortcut_.b;
+    if (id == 32938) centerView(a, b);
+    else if (id == 32939) queryTile(a, b);
+    else if (id == 32940) { if (cityEdit_) demolishAt(a, b); else bulldozeAt(a, b); }
+}
+
+void GameUi::drawShortcutMenu(SDL_Renderer* r) {
+    const int n = static_cast<int>(shortcut_.items.size());
+    fill(r, shortcut_.x, shortcut_.y, 150, 18 * n, 36, 40, 54);
+    frame(r, shortcut_.x, shortcut_.y, 150, 18 * n, 190, 200, 230);
+    for (int i = 0; i < n; ++i) {
+        const Rect it = shortcutItem(i);
+        if (i == shortcut_.hover) fill(r, it.x + 2, it.y + 1, it.w - 4, it.h - 2, 70, 100, 150);
+        std::string t = shortcut_.items[static_cast<size_t>(i)].second;
+        t.erase(std::remove(t.begin(), t.end(), '&'), t.end());
+        text(r, it.x + 8, it.y + 5, t, 240, 240, 240);
+    }
+}
+
 void GameUi::mouseUp(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
     sliderDrag_ = -1;
-    if (button != 1) { scrolling_ = false; return; }
+    if (button != 1) {
+        const bool wasScrolling = scrolling_;
+        scrolling_ = false;
+        if (wasScrolling && !rightMoved_ && budget_.open == false && info_.open == InfoWindows::Which::None && !modal_ && !pauseOpen_) openShortcutMenu(x, y);
+        return;
+    }
     if (dragging_) { mouseMove(x, y); finishDrag(); }
     dragging_ = false;
 }
 
 void GameUi::mouseMove(int x, int y) {
     menu_.mouseMove(x, y);
+    if (shortcut_.open) { shortcut_.hover = -1; for (size_t i = 0; i < shortcut_.items.size(); ++i) if (shortcutItem(static_cast<int>(i)).contains(x, y)) shortcut_.hover = static_cast<int>(i); }
     if (sliderDrag_ >= 0) { mapEditorMouse(x, y, false); mouseX_ = x; mouseY_ = y; return; }
     const int dx = x - mouseX_, dy = y - mouseY_;
     mouseX_ = x; mouseY_ = y;
     if (scrolling_) {   // the map moves in its own (magnified) pixels
+        if (std::abs(x - rightX_) + std::abs(y - rightY_) > 4) rightMoved_ = true;
         scrollRemX_ += dx / mag_; scrollRemY_ += dy / mag_;
         const int ix = static_cast<int>(scrollRemX_), iy = static_cast<int>(scrollRemY_);
         cam_.scrollX += ix; cam_.scrollY += iy; scrollRemX_ -= ix; scrollRemY_ -= iy;
@@ -374,6 +422,7 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         else if (k == SDLK_BACKSPACE && modal_->textInput && !modal_->text.empty()) modal_->text.pop_back();
         return true;
     }
+    if (shortcut_.open && k == SDLK_ESCAPE) { shortcut_.open = false; return true; }
     if (queryOpen_ && k == SDLK_ESCAPE) { queryOpen_ = false; return true; }
     if (cityEdit_) {   // Place & Print: only the view keys
         if (k == SDLK_R) rotateView(1);
@@ -1178,6 +1227,7 @@ void GameUi::draw(SDL_Renderer* r) {
     if (mapEdit_) drawMapEditor(r);
     if (!cityEdit_) menu_.draw(r, width_);
     if (queryOpen_) drawQuery(r);
+    if (shortcut_.open) drawShortcutMenu(r);
     if (modal_) drawModal(r);
     if (browser_.active()) browser_.draw(r, width_, height_);
 }

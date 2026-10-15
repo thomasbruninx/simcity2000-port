@@ -21,6 +21,9 @@ headlessly (`sc2k-app <dir> city.sc2 --screenshot out.png --do "..."`).
 * **Pause menu**: Escape (with no tool, menu or window to cancel) pauses the simulation and offers Resume, Save game (asks for a name; files go to `<settings dir>/saves/`, Ctrl+S does the same), Load game (the title screen's list, saved games first; Esc returns to the game), Settings and Exit.
 * Bonds window shows each bond's rate and yearly cost, not the issue month.
 
+## Right mouse button
+Dragging with the right button scrolls the map; a plain right click opens the original's shortcut menu (resource 243: Center Map, Query Tile, Bulldoze Tile) on the tile under the pointer. A click on an item runs it, any other click or Esc closes the menu. It also works in Place & Print (Bulldoze Tile demolishes there).
+
 ## High DPI mode and zoom levels
 * **High DPI mode** (title screen > Settings, top right; saved as `uiscale=` in settings.ini): x1, x1.5, x2, x4. The whole game (map and interface) is laid out in window pixels / scale and stretched to the window with nearest-neighbour scaling through SDL's logical presentation; mouse coordinates are divided by the scale. `--uiscale PCT` overrides it (screenshots).
 * **Map zoom levels**: seven steps (`+`/`-`, wheel, top-bar buttons): the original's three sprite sets (8/16/32-pixel tiles), then the large set magnified 1.5x, 2x, 3x and 4x. The map is drawn into a framebuffer of window size / magnification and stretched, so picking, scrolling and the tile highlights work in that smaller space (`GameUi::mapPx`). Zooming keeps the tile in the middle of the view.
