@@ -471,6 +471,10 @@ int main(int argc, char** argv) {
                 else if (op == "txt") { int a, b, v; words >> a >> b >> v; sim->world().xtxt.at(a, b) = static_cast<uint8_t>(v); }   // headless: a raw XTXT value (0xFB..0xFF = flames, flood)
                 else if (op == "dispatch") { int sub, a, b; words >> sub >> a >> b; ToolState dts; startDispatch(sim->context(), dts); std::printf("dispatch %d at %d %d: %d\n", sub, a, b, placeDispatch(sim->context(), dts, sub, a, b) ? 1 : 0); }   // headless: 0 police, 1 fire, 2 military
                 else if (op == "loadtiles") { titleScreen.show(); titleScreen.openTileSets(); }   // Load Tile Set: the file browser
+                else if (op == "disaster") { int k, a, b; words >> k >> a >> b; sim->context().things.disasterRequest = k; sim->context().things.focusA = a; sim->context().things.focusB = b; }   // headless: request a disaster (1 fire, 2 flood, ...)
+                else if (op == "count") { int v; words >> v; int n = 0, fa = -1, fb = -1; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xtxt.at(a, b) == v) { if (!n) { fa = a; fb = b; } ++n; } std::printf("xtxt %d: %d tiles (first at %d %d)\n", v, n, fa, fb); }
+                else if (op == "ticks") { int n = 0; words >> n; for (int i = 0; i < n; ++i) sim->tick(); }   // headless: simulation days without thing frames
+                else if (op == "cityflood") { sim->context().things.disasterRequest = 2; sim->context().things.focusA = sim->state().centerA2 / 2; sim->context().things.focusB = sim->state().centerB2 / 2; std::printf("flood at the city centre %d %d\n", sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // headless: Disasters > Flood
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();
