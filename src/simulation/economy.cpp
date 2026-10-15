@@ -85,7 +85,7 @@ void runEconomy(SimContext& c) {
     uint32_t T[11];
     uint32_t sumA408 = 0;
     {
-        const int idx = (static_cast<int16_t>(s.startYear) - 0x76C) / 0x32 + static_cast<int16_t>(s.yearOffset()) / 0x32;
+        const int idx = std::max(0, (static_cast<int16_t>(s.startYear) - 0x76C) / 0x32 + static_cast<int16_t>(s.yearOffset()) / 0x32);   // (the port never reads before the table, for start years under 1900 either)
         const int rem = static_cast<int16_t>(s.yearOffset()) % 0x32;
         for (size_t k = 0; k < 11; ++k) {
             if (idx < 4) {

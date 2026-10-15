@@ -150,3 +150,11 @@ Ported the editor's mouse loops (spray raise/lower, stretch, level) as per-sampl
 ## 2026-10-14 — Session 21: SCURK port (Resource Editors)
 * WINSCURK.EXE menus (#200/#300/#400/#500), strings 29000+ and 32001.. (object names) read from its resources; MIF format decoded and documented ([formats/mif.md](../formats/mif.md)).
 * New main-menu entry **Resource Editors** with Place & Print, Pick & Copy and Paint The Town ([docs/scurk.md](../scurk.md)); Place & Print reuses the game's map view in an editing mode.
+
+## 2026-10-15 — Session 22: SCURK follow-ups, help, dialogs, verification
+* Verification run (see the README): all ten emulator modes identical, 61 files load / run / save without a crash, ASAN + UBSAN clean. Findings fixed: saves differed from the original's bytes in the unused label tails and in word 22 (the federal rate stayed 0 in four scenarios, the port had changed it to 1: the loader copies it as is), Place & Print saved its unlimited funds, the menu accelerators did not match the original's menu.
+* **Help files**: SC2USA.HLP / SCURK.HLP are Windows help 3.1 files; reader and format notes in docs/formats/winhelp.md (B+ tree directory, 4 KB `|TOPIC` blocks with LZ77, `|Phrases`, paragraph records with their command bytes, hyperlinks through `|CONTEXT` + `|TTLBTREE`).
+* **Cheat words**: the typed-word matcher near 0x40C5D3 holds eight words (obfuscated by index tables at 0x4E53D0): fund, cass, imacheat, noah, newhouse, priscilla, gilmartin, joke. `joke` opens dialog 232 whose window paints BITMAPS/2000WIN.BMP (OnPaint 0x485580); dialog 106 (registration) names the owner of the Windows registration; ABOUT.BMP belongs to dialog 100.
+* **Sea level**: 0x445A60 / 0x445D10 / 0x445D80 ported (tools "Raise / Lower Sea Level", strings 68 / 69), emulator-identical.
+* **Query**: the original draws the land value number and the string ",000 acre" one after the other (0x42B060 `%ld` + 0x42AF70), so there is no space between them.
+* Added: right-click shortcut menu (resource 243), Load Tile Set, one-window New City dialog, the Window menu of the editors, highway bridges in the crossing question (types 5 / 6 were never offered), editor tools as a testable module (`simulation/editor_tools.*`), more tests (menu bar, editor tools, save round trip).

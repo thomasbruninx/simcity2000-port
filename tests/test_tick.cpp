@@ -39,7 +39,7 @@ TEST(tick_day_counter_and_phases_run_on_an_empty_city) {
     KFixture f;
     f.t.econK = {1.0 / 1200, 100, 0.75, 0.5, 0.9, 1.1, 1.2, 0.8};
     f.t.econYearTab.fill(10); f.t.econFinal.fill(10);
-    f.s.population10 = 5000; f.s.rateLevel = 1; f.s.catPop[2] = 100;
+    f.s.startYear = 1900; f.s.population10 = 5000; f.s.rateLevel = 1; f.s.catPop[2] = 100;   // (a real start year: the economy indexes its year table with it)
     f.s.day = 0;
     for (int i = 0; i < 100; ++i) simulationTick(f.ctx);
     CHECK(f.s.day == 100);

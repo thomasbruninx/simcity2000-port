@@ -32,7 +32,7 @@ Series: 0 city size, 1–3 R/C/I size, 4 traffic, 5 pollution, 6 land value, 7 c
 
 ## Disaster chooser (0x4720A0)
 Sets `ThingState::disasterRequest` (and the focus tile) with probability depending on difficulty grace months (table 0x4E88F8 by MISC 7) and on fire/flood/tornado/… conditions
-(weather state, haze, pollution density, unemployment, power plants, …). The disaster *handlers* (0x45C870 and callees: fire, flood, earthquake, monster, …) are not ported yet.
+(weather state, haze, pollution density, unemployment, power plants, …). The disaster *handlers* (0x45C870 and callees: fire, flood, earthquake, monster, …) are ported and emulator-verified (src/simulation/disaster.cpp, `sc2k-emu-diff disaster`).
 
 ## Not modelled (UI / scenario data)
 Budget and newspaper dialogs, autosave (0x42FA50), military-base granting at the 4th milestone (0x413D80 shows a dialog), scenario goals, game-over screens: hooks in `ZoneHooks`.

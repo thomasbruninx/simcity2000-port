@@ -14,11 +14,13 @@ src/app/ui_draw.h  SDL drawing: fill / frame / text primitives and drawPanel, dr
 src/app/         the windows and screens built from the above
   game_ui.*        the in-game interface: top bar, toolbar, tool menus, pause menu, modal questions,
                    map editor panel, query popup, message line; routes all input
-  menu_bar.*       the original's menu bar (RT_MENU 3) with drop-downs
+  menu_bar.*       the menu bar of the original (RT_MENU 3) and of SCURK: drop-downs with submenus
   info_windows.*   tabbed window: graphs, city, advisors, newspaper (+ city_windows.cpp: industry,
                    neighbors, city map)
   budget_window.*  budget / ordinances / bonds
-  file_browser.*   "Save City As" browser
+  file_browser.*   file browser (open / save, file types)
+  help_viewer.*    the in-game viewer for the game's .HLP files (src/resources/winhelp.*)
+  scurk/           the resource editors (docs/scurk.md)
   title_screen.*   title screen, scenario / city pickers, settings
   ft_text.*        FreeType text (Times New Roman) for the newspaper and neighbours
 ```
@@ -61,9 +63,9 @@ name.textInput(utf8);              // from SDL_EVENT_TEXT_INPUT
 
 ## Input routing (`GameUi`)
 Events from `main.cpp` reach `GameUi::mouseDown / mouseMove / mouseUp / wheel / keyDown / textInput`. The first consumer wins, top-most first:
-1. the **file browser** (`browser_`), 2. the **pause menu**, 3. a **modal question** (`modal_`: option buttons, optional text field), 4. the **menu bar**, 5. the **budget window**, 6. the **information windows** (`InfoWindows::mouseDown`), 7. the **map editor panel**, 8. the toolbar and bottom bar, 9. the map (tools, query, scrolling).
+1. the **picture dialogs** (`pic_`: About, the joke), 2. the **new-city dialog** (`nc_`), 3. the **help viewer** (`help_`), 4. the **file browser** (`browser_`), 5. the **pause menu**, 6. a **modal question** (`modal_`: option buttons, optional text field), 7. the **shortcut menu** (right click, `shortcut_`), 8. the **menu bar**, 9. the **budget window**, 10. the **information windows** (`InfoWindows::mouseDown`), 11. the **map editor panel**, 12. the toolbar and bottom bar, 13. the map (tools, query, scrolling; a right-button drag scrolls, a plain right click opens the shortcut menu).
 
-While anything from 1-6 is open the keyboard is captured: `GameUi::inputCaptured()` stops the WASD / arrow-key camera scrolling, `keyDown` returns before any hotkey, and the game is paused (`GameUi::paused()`). Blocking questions (`askText`, `runModal`, `saveAs`) run a nested loop through `GameUi::pump`, which performs one iteration of the application's main loop; headless runs (`--screenshot`) answer them with their defaults.
+While anything from 1-6 or 9-10 is open the keyboard is captured: `GameUi::inputCaptured()` stops the WASD / arrow-key camera scrolling, `keyDown` returns before any hotkey, and the game is paused (`GameUi::paused()`). Blocking questions (`askText`, `runModal`, `saveAs`) run a nested loop through `GameUi::pump`, which performs one iteration of the application's main loop; headless runs (`--screenshot`) answer them with their defaults.
 
 ## Coordinates and scaling
 All UI coordinates are **logical pixels**. The window is drawn through `SDL_SetRenderLogicalPresentation`: High DPI mode (settings: x1.5 / x2 / x4) simply makes the logical size smaller than the window, so every widget scales by itself; mouse positions are divided by the scale in `main.cpp`. The map is rendered into its own framebuffer of `mapW() x mapH()` (logical size divided by the map magnification); `GameUi::mapPx()` converts a UI position to map pixels. Never mix the two spaces: UI code uses logical pixels, tile picking uses `mapPx`.
@@ -72,8 +74,10 @@ All UI coordinates are **logical pixels**. The window is drawn through `SDL_SetR
 * **A question**: fill a `Modal` (`title`, `options`, `textInput`) and call `runModal(m)`; the title wraps and the dialog grows. For text use `askText(title, text)`.
 * **An information window**: add a `Which` value and a `draw...` / click branch in `info_windows.cpp` (the tab strip is built by `tabButtons()`); keep layout in a helper that returns widgets, as `industryButtons()` does.
 * **A new top-level screen**: a class with `draw(SDL_Renderer*, w, h)`, `mouseDown`, `key`, `textInput`, `wheel`, a layout function and widget members, like `FileBrowser`; route it first in `GameUi`'s input functions and draw it last.
+* **A dialog with several widgets** (`nc_`, the new-city dialog): a struct with a `layout...()` function that rebuilds the rectangles, a `draw...()` and a mouse function that use the same layout, run with a nested loop like `askText` (`runNewCityDialog`). Text fields that open with a name filled in set `TextField::selected`, so typing replaces it.
+* **The place-and-print editor** shows how a window of the host application is borrowed by another part: `scurk::CityBridge` (editors.h) is a set of callbacks that main.cpp fills; `GameUi::setCityEdit` switches the map view into its editing mode.
 * Text from the original game is already wrapped by the helpers; never print a string of unknown length with the bare `text()` primitive.
 
 ## Testing the interface
-* `tests/test_ui.cpp` covers wrapping, ellipsizing, the layout helpers and all widgets.
-* `sc2k-app <dir> <city> --size W H --uiscale PCT --screenshot out.png --do "..."` renders the real UI headlessly. Useful commands: `window N` (1 graphs, 2 city, 3 advisors, 4 newspaper, 5 industry, 6 neighbors, 7 map), `budget [row]`, `press X Y` (a left click in logical coordinates), `key NAME`, `modal TEXT` / `modal field TEXT` (shows a question without blocking), `browser`, `mapedit`, `tile A B`, `pick X Y`. Screenshots at several `--uiscale` values are the quickest check that nothing overflows.
+* `tests/test_ui.cpp` covers wrapping, ellipsizing, the layout helpers and all widgets; `tests/test_menu.cpp` the menu bar's submenus; `tests/test_editor.cpp` the editor tools and the save round trip; `tests/test_scurk.cpp` the MIF files, object sets and the help-file reader.
+* `sc2k-app <dir> <city> --size W H --uiscale PCT --screenshot out.png --do "..."` renders the real UI headlessly. Useful commands: `window N` (1 graphs, 2 city, 3 advisors, 4 newspaper, 5 industry, 6 neighbors, 7 map), `budget [row]`, `press X Y` (a left click in logical coordinates), `key NAME`, `modal TEXT` / `modal field TEXT` (shows a question without blocking), `browser`, `mapedit`, `tile A B`, `pick X Y`, `rclick X Y` / `rdrag ...` (right button), `help N` / `type TEXT` (help viewer, text fields), `about`, `joke`, `newdlg`, `editor N` + `ecmd ID` / `eprint ID` (resource editors), `savecity PATH`, `tileset PATH`. Screenshots at several `--uiscale` values are the quickest check that nothing overflows.

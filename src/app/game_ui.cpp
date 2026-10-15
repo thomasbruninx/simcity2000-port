@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "app/ui_draw.h"
+#include "simulation/editor_tools.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -135,22 +136,8 @@ void GameUi::rotateView(int dir) {   // Place & Print: the tile in the middle of
     if (have) cam_.centerOn(a, b, mapW() / 2, mapH() / 2);
 }
 
-void GameUi::demolishAt(int a, int b) {   // Place & Print's Demolish/Clear: removes the objects without rubble; terrain and zoning stay
-    SimContext& c = sim_.context();
-    World& w = sim_.world();
-    if (!inMap(a, b)) return;
-    if (layers.underground) { ts_.underground = true; const int money = c.s.treasury; bulldozeTile(c, ts_, a, b); c.s.treasury = money; return; }
-    const int id = w.xbld.at(a, b);
-    if (id == 0) return;
-    if (id < 0xD) { setTile(c, a, b, 0); return; }
-    std::vector<std::pair<int, int>> before;   // rubble that already lies around stays; new rubble is cleared
-    for (int x = a - 4; x <= a + 4; ++x) for (int y = b - 4; y <= b + 4; ++y) if (inMap(x, y) && w.xbld.at(x, y) >= 1 && w.xbld.at(x, y) <= 4) before.push_back({x, y});
-    ts_.underground = false;
-    const int treasury = c.s.treasury;
-    bulldozeTile(c, ts_, a, b);
-    c.s.treasury = treasury;
-    for (int x = a - 4; x <= a + 4; ++x) for (int y = b - 4; y <= b + 4; ++y)
-        if (inMap(x, y) && w.xbld.at(x, y) >= 1 && w.xbld.at(x, y) <= 4 && std::find(before.begin(), before.end(), std::make_pair(x, y)) == before.end()) setTile(c, x, y, 0);
+void GameUi::demolishAt(int a, int b) {   // Place & Print's Demolish/Clear (simulation/editor_tools.h)
+    editorDemolish(sim_.context(), ts_, a, b, layers.underground);
 }
 
 bool GameUi::groupAllowed(size_t g) const {   // the map editor offers only the terrain tools
@@ -316,13 +303,7 @@ void GameUi::mouseDown(int x, int y, int button) {
 }
 
 void GameUi::placeObjectAt(int a, int b) {   // Place & Print: the selected object onto the map, without any of the game's constraints
-    SimContext& c = sim_.context();
-    const int size = placeSel_ >= 0x70 ? std::max<int>(1, c.t.footprint[static_cast<size_t>(placeSel_) & 0xFF]) : 1;
-    const int o = size > 2 ? -1 : 0;
-    for (int x = a + o; x < a + o + size; ++x) for (int y = b + o; y < b + o + size; ++y) if (inMap(x, y)) demolishAt(x, y);
-    bool ok;
-    if (placeSel_ >= 0x70) ok = placeSpecialBuilding(c, a, b, placeSel_, size, true);
-    else { ok = inMap(a, b); if (ok) setTile(c, a, b, placeSel_); }
+    const bool ok = editorPlaceObject(sim_.context(), ts_, a, b, placeSel_);
     say(ok ? "Placed" : "Cannot place the object there");
     playSound(ok ? 500 : 0x1F5);   // built / refused (0x43EBC0)
 }
@@ -1170,8 +1151,7 @@ int GameUi::chooseBridge(int length, int allowedMask) {
     Modal m;
     m.title = "Choose the crossing (" + std::to_string(length) + " tiles)";
     std::vector<int> types;
-    for (int type = 0; type < 7; ++type) {   // 0..4 road / rail bridges, 5 and 6 the highway bridges
-        if (!(allowedMask & (1 << type))) continue;
+    for (const int type : bridgeTypesOf(allowedMask)) {   // 0..4 road / rail bridges, 5 and 6 the highway bridges
         int32_t perTile;
         std::memcpy(&perTile, &sim_.tables().bridgeData[static_cast<size_t>(4 * type)], 4);
         types.push_back(type);

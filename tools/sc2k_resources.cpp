@@ -1,5 +1,5 @@
 // sc2k-resources: lists the string table and extracts the bitmap resources of the user's SIMCITY.EXE (development aid).
-// Usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | bitmaps <outdir>
+// Usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | menus | bitmaps <outdir>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -11,7 +11,7 @@
 using namespace sc2k;
 
 int main(int argc, char** argv) {
-    if (argc < 3) { std::fprintf(stderr, "usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | bitmaps <outdir>\n"); return 2; }
+    if (argc < 3) { std::fprintf(stderr, "usage: sc2k-resources <SIMCITY.EXE> strings | dialogs | menus | bitmaps <outdir>\n"); return 2; }
     try {
         const PeImage pe = PeImage::load(argv[1]);
         const PeResources res(pe);
