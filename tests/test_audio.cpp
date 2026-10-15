@@ -77,3 +77,21 @@ TEST(fluidsynth_backend_renders_the_music_when_available) {
     auto fallback = makeMusicBackend(s, 44100, &err);
     CHECK(fallback && fallback->name() == "Built-in synthesizer" && !err.empty());
 }
+
+TEST(effects_play_out_side_by_side) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    SoundBank bank(root);
+    Mixer mixer(&bank);
+    mixer.playEffect(515);          // the crash whine
+    mixer.playEffect(504);          // the explosion that follows it
+    mixer.playEffect(507, -1);      // the fire loop is (re)started every frame
+    mixer.playEffect(507, -1);
+    std::vector<float> out(2 * 200, 0.f);
+    mixer.render(out.data(), 200);
+    CHECK(mixer.activeEffects() == 3);   // none of them cut the others off; the loop runs once
+    mixer.playEffect(504);
+    CHECK(mixer.activeEffects() == 3);   // the same explosion again within a few milliseconds is not started twice
+    for (int i = 0; i < 20; ++i) mixer.playEffect(500 + i % 5 + 10 * (i % 2), 0);
+    CHECK(mixer.activeEffects() <= 8);
+}

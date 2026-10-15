@@ -1230,7 +1230,11 @@ void GameUi::gameOver(int kind) {   // 0x414470: strings 285 (won), 286 (time ra
     Modal m; m.title = text; m.options = {"OK"};
     runModal(m);
 }
-void GameUi::playSound(int id, int repeat) { if (audio) audio->playEffect(id, repeat); }
+void GameUi::playSound(int id, int repeat) {
+    static const bool log = std::getenv("SC2K_SOUNDLOG") != nullptr;   // debugging: every sound request with its time
+    if (log) std::fprintf(stderr, "[%6u ms] sound %d repeat %d\n", SDL_GetTicks(), id, repeat);
+    if (audio) audio->playEffect(id, repeat);
+}
 void GameUi::stopSound(int id) { if (audio) audio->stopEffect(id); }
 void GameUi::yearlyBudget() {   // 0x4736C0: one of four tunes while the annual budget is on the desk (the original picks with the LFSR; the port must not disturb the simulation's sequence)
     static const int kTunes[4] = {10016, 10005, 10002, 10010};
