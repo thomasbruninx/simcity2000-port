@@ -69,8 +69,8 @@ void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
     fill(r, 0, 0, sw, sh, 0, 0, 0, 100);
     fill(r, x, y, kW, kH, 30, 34, 46);
     frame(r, x, y, kW, kH, 200, 200, 220);
-    text(r, x + kW - 66, y + 10, "[Close]", 255, 255, 190);
     for (const Button& b : tabButtons(x, y)) drawButton(r, b, Color{40, 46, 56});
+    text(r, x + kW - 66, y + 10, "[Close]", 255, 255, 190);   // (after the tabs: the last tab used to hide its first character)
     switch (open) {
         case Which::Graphs: drawGraphs(r, x, y + 34); break;
         case Which::City: drawCity(r, x, y + 34); break;
@@ -177,7 +177,7 @@ void InfoWindows::drawCity(SDL_Renderer* r, int x, int y) {
         fill(r, x + 28 + i * bw, by + bh - h, bw - 3, h, ageMode_ == 0 ? 80 : (ageMode_ == 1 ? 80 : 200), ageMode_ == 0 ? 160 : (ageMode_ == 1 ? 200 : 180), ageMode_ == 0 ? 220 : (ageMode_ == 1 ? 120 : 60));
         if (i % 2 == 0) text(r, x + 28 + i * bw, by + bh + 4, std::to_string(i * 5), 150, 160, 180);
     }
-    text(r, x + 20 * bw + 40, by + 6, "age (years)", 150, 160, 180);
+    text(r, x + 24 + 20 * bw + 8 - 11 * kDebugCharW - 6, by + 6, "age (years)", 150, 160, 180);   // inside the chart, top right
 }
 
 void InfoWindows::drawAdvisors(SDL_Renderer* r, int x, int y) {
@@ -474,7 +474,7 @@ bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
     }
     if (windowClick(mx, my, x, y + 34)) return true;
     if (open == Which::City) {
-        for (int m = 0; m < 3; ++m) if (mx >= x + 24 + m * 110 && mx < x + 124 + m * 110 && my >= y + 8 + 16 * 14 + 6 && my < y + 8 + 16 * 14 + 22) ageMode_ = m;
+        for (int m = 0; m < 3; ++m) if (mx >= x + 24 + m * 110 && mx < x + 124 + m * 110 && my >= y + 34 + 8 + 16 * 14 + 6 && my < y + 34 + 8 + 16 * 14 + 22) ageMode_ = m;   // (the window's content starts 34 pixels below its top; 16 rows of statistics come first)
     }
     if (open == Which::Graphs) {
         const int gx = x + 16, gy = y + 34 + 8, gh = 260;
