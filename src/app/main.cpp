@@ -239,6 +239,13 @@ int main(int argc, char** argv) {
             titleScreen.active = false;
         };
         // Place & Print: the editor runs the application's own map view in its editing mode
+        // Load Tile Set: an object set of SCURK replaces the graphics of the game (kept while the resource editors borrow the sprites)
+        std::unique_ptr<ObjectSet> tileSet;
+        auto installTileSet = [&] { sprites.clearOverrides(); if (tileSet) tileSet->applyTo(sprites); };
+        auto loadTileSet = [&](const std::string& path) {
+            try { tileSet = std::make_unique<ObjectSet>(ObjectSet::load(path)); installTileSet(); return true; } catch (const std::exception&) { return false; }
+        };
+        ui.onLoadTileSet = loadTileSet;
         auto applyWorking = [&] {
             sprites.clearOverrides();
             editors->env().working.applyTo(sprites);
@@ -252,7 +259,7 @@ int main(int argc, char** argv) {
             b.reserve = [&](ui::Rect rc) { ui.setReserved(rc); };
             b.selectObject = [&](int id) { ui.setPlaceObject(id); };
             b.selectedObject = [&] { return ui.placeObject(); };
-            b.leave = [&] { ui.setCityEdit(false); sprites.clearOverrides(); };
+            b.leave = [&] { ui.setCityEdit(false); installTileSet(); };
             b.draw = [&](SDL_Renderer*) {};
             b.mouseDown = [&](int x, int y, int bt) { ui.mouseDown(x, y, bt); };
             b.mouseUp = [&](int x, int y, int bt) { ui.mouseUp(x, y, bt); };
@@ -301,6 +308,7 @@ int main(int argc, char** argv) {
                     else if (window) SDL_StartTextInput(window);
                     break;
                 }
+                case TitleScreen::Action::LoadTileSet: titleScreen.notice = loadTileSet(path) ? "Tile set loaded: " + path.substr(path.rfind('/') + 1) : "Not a valid *.MIF file"; break;
                 case TitleScreen::Action::Quit: running = false; break;
                 default: break;
             }
@@ -428,6 +436,7 @@ int main(int argc, char** argv) {
                 else if (op == "newdlg") ui.showNewCityDialog();
                 else if (op == "about") ui.showAbout();
                 else if (op == "joke") ui.showJoke();
+                else if (op == "tileset") { std::string p; words >> p; std::printf("tile set %s: %d\n", p.c_str(), loadTileSet(p) ? 1 : 0); }
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();

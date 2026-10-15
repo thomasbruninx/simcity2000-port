@@ -561,6 +561,16 @@ void GameUi::drawPicture(SDL_Renderer* r) {
     drawButton(r, ok);
 }
 
+void GameUi::loadTileSet() {
+    if (!onLoadTileSet) { say("Tile sets are not available"); return; }
+    if (headless || !pump) { say("Choose the tile set in the file browser"); return; }
+    browser_.open("Load Tile Set", gameDir + "/SCURKART", {}, {".mif"}, true);
+    while (browser_.result() == -2) if (!pump()) { browser_.close(); break; }
+    if (browser_.result() != 0) return;
+    const std::string path = browser_.path();
+    say(onLoadTileSet(path) ? "Tile set: " + path.substr(path.rfind('/') + 1) : "Not a valid *.MIF file");
+}
+
 void GameUi::openHelp(int what) {
     if (what == 2) { help_.openUsing(); return; }
     if (helpFile.empty() || !help_.openFile(helpFile, "SimCity 2000 Help")) { say(help_.error.empty() ? "The help file was not found" : "Help: " + help_.error); return; }
@@ -1563,7 +1573,8 @@ bool GameUi::menuChecked(int id) const {
 }
 
 bool GameUi::menuEnabled(int id) const {
-    return id != 32917;   // Load Tile Set: the port has no alternative tile sets
+    (void)id;
+    return true;
 }
 
 void GameUi::requestDisaster(int kind, int a, int b) {
@@ -1581,7 +1592,7 @@ void GameUi::menuCommand(int id) {   // the original's WM_COMMAND handlers (mess
         case 32802: newCityDialog(false); break;                                  // New City
         case 32803: newCityDialog(true); break;                                   // Edit New Map
         case 32804: if (onPauseAction) onPauseAction(4); break;                  // Load Scenario
-        case 32917: say("Tile sets are not supported by this port"); break;
+        case 32917: loadTileSet(); break;                                         // Load Tile Set
         case 32805: saveDialog(); break;                                          // Save City
         case 32806: saveAs(); break;                                              // Save City As
         case 60001: { std::string name = info_.cityName; if (askText("City name", name) && !name.empty()) setCityNameAll(name); break; }   // Rename City (not in the original)

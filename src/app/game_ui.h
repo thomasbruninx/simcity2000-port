@@ -41,6 +41,7 @@ public:
     // Runs one iteration of the application's main loop while a modal question is open; returns false when the application should quit.
     std::function<bool()> pump;
     std::function<void()> onTitle;     // Ctrl+O: back to the title screen
+    std::function<bool(const std::string&)> onLoadTileSet;   // File > Load Tile Set: installs an object set (*.MIF) as the game's graphics
     std::function<void(int)> onPauseAction;   // pause menu / menu bar: 1 load game, 2 settings, 3 exit, 4 load scenario
     static constexpr int kZoomLevelCount = 7;
     void setZoomLevel(int level);                       // 0..6, see game_ui.cpp
@@ -102,7 +103,8 @@ public:
     std::string defaultMapPath;
     std::string gameDir;                               // the game directory (BITMAPS/ABOUT.BMP, BITMAPS/2000WIN.BMP)
     std::string helpFile;                              // SC2USA.HLP of the game directory (Help menu)
-    void openHelp(int what);                           // 0 contents, 1 search, 2 using help
+    void openHelp(int what);
+    void loadTileSet();                           // 0 contents, 1 search, 2 using help
     void setCityName(const std::string& n) { info_.cityName = n; }
     void initNews(const std::string& dir) { info_.initNews(dir); }                        // DEFAULT.SC2 of the game directory
 

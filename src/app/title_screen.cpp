@@ -36,12 +36,13 @@ std::vector<std::string> listFiles(const std::string& dir, const std::string& ex
 
 TitleScreen::TitleScreen(const std::string& gameDir, const PeResources& res, const std::array<uint32_t, 256>& gamePalette) : dir_(gameDir), res_(res), palette_(gamePalette) {
     // labels of the original's main menu (dialog 103)
-    menuLabels_ = {"Start New City", "Edit New Map", "Load Scenario", "Load Saved City", "Settings", "Resource Editors", "Quit"};
+    menuLabels_ = {"Start New City", "Edit New Map", "Load Scenario", "Load Saved City", "Load Tile Set", "Settings", "Resource Editors", "Quit"};
     if (const auto* d = res.dialog(103)) {
         auto text = [&](int id) { for (const auto& c : d->controls) if (c.id == id) return c.text; return std::string(); };
         const int ids[4] = {112, 113, 114, 111};
         for (int i = 0; i < 4; ++i) if (!text(ids[i]).empty()) menuLabels_[static_cast<size_t>(i)] = text(ids[i]);
-        if (!text(115).empty()) menuLabels_[6] = text(115);
+        if (!text(115).empty()) menuLabels_[7] = text(115);
+        if (!text(116).empty()) menuLabels_[4] = text(116);
     }
     try { palette_ = Bmp8::load(gameDir + "/BITMAPS/PAL_MAC.BMP").palette; } catch (const std::exception&) {}   // the scenario pictures use the Macintosh palette
     settings = AudioSettings::load();
@@ -75,6 +76,7 @@ void TitleScreen::scan() {
     }
     for (const std::string& n : listFiles(dir_ + "/CITIES", ".SC2")) cities_.push_back(n);
     for (const std::string& n : listFiles(dir_, ".SC2")) cities_.push_back("../" + n);
+    tileSets_ = listFiles(dir_ + "/SCURKART", ".MIF");   // object sets of SCURK (Load Tile Set)
 }
 
 void TitleScreen::ensureTextures(SDL_Renderer* r) {
@@ -127,23 +129,24 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
         return;
     }
     if (mode_ == Mode::Menu) {
-        for (int i = 0; i < 7; ++i) {
+        for (int i = 0; i < 8; ++i) {
             const Rect b = menuButton(i, w, h);
             fill(r, b.x, b.y, b.w, b.h, 40, 56, 96); frame(r, b.x, b.y, b.w, b.h, 190, 200, 230);
             text(r, b.x + 16, b.y + 15, menuLabels_[static_cast<size_t>(i)], 255, 255, 220);
         }
-        text(r, w - 330, h / 2 + 175, "SimCity 2000 (port) - needs your own game files", 150, 160, 190);
+        text(r, w - 330, h / 2 + 215, "SimCity 2000 (port) - needs your own game files", 150, 160, 190);
+        if (!notice.empty()) clippedText(r, w - 330, h / 2 + 232, 300, notice, theme::kTextDim);
         return;
     }
     if (mode_ == Mode::Settings) { drawSettings(r, w, h); return; }
-    const bool scen = mode_ == Mode::Scenarios;
-    text(r, 60, 70, scen ? "Select Scenario" : "Load Saved City", 255, 255, 190);
-    const size_t n = scen ? scenarios_.size() : cities_.size();
+    const bool scen = mode_ == Mode::Scenarios, tiles = mode_ == Mode::TileSets;
+    text(r, 60, 70, scen ? "Select Scenario" : tiles ? "Load Tile Set (an object set of SCURK)" : "Load Saved City", 255, 255, 190);
+    const size_t n = scen ? scenarios_.size() : tiles ? tileSets_.size() : cities_.size();
     for (size_t i = 0; i < n; ++i) {
         const int y = 110 + static_cast<int>(i) * 20;
         const bool sel = static_cast<int>(i) == selected_;
         fill(r, 60, y, 300, 18, sel ? 70 : 20, sel ? 90 : 28, sel ? 140 : 44);
-        clippedText(r, 68, y + 5, 284, scen ? scenarios_[i].name : cities_[i], theme::kText);
+        clippedText(r, 68, y + 5, 284, scen ? scenarios_[i].name : tiles ? tileSets_[i] : cities_[i], theme::kText);
     }
     if (scen && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) {
         const ScenarioEntry& e = scenarios_[static_cast<size_t>(selected_)];
@@ -230,14 +233,16 @@ void TitleScreen::activateMenu(int i) {
         case 1: action = Action::NewMap; break;
         case 2: mode_ = Mode::Scenarios; selected_ = 0; break;
         case 3: mode_ = Mode::Cities; selected_ = 0; break;
-        case 4: mode_ = Mode::Settings; status_.clear(); break;
-        case 5: mode_ = Mode::Editors; break;
+        case 4: mode_ = Mode::TileSets; selected_ = 0; break;
+        case 5: mode_ = Mode::Settings; status_.clear(); break;
+        case 6: mode_ = Mode::Editors; break;
         default: action = Action::Quit; break;
     }
 }
 
 void TitleScreen::choose() {
-    if (mode_ == Mode::Scenarios && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) { chosenPath = scenarios_[static_cast<size_t>(selected_)].path; action = Action::LoadScenario; }
+    if (mode_ == Mode::TileSets && selected_ >= 0 && static_cast<size_t>(selected_) < tileSets_.size()) { chosenPath = dir_ + "/SCURKART/" + tileSets_[static_cast<size_t>(selected_)]; action = Action::LoadTileSet; }
+    else if (mode_ == Mode::Scenarios && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) { chosenPath = scenarios_[static_cast<size_t>(selected_)].path; action = Action::LoadScenario; }
     else if (mode_ == Mode::Cities && selected_ >= 0 && static_cast<size_t>(selected_) < cities_.size()) {
         const std::string& n = cities_[static_cast<size_t>(selected_)];
         if (n.rfind("saves/", 0) == 0) { const std::string p = AudioSettings::settingsPath(); chosenPath = p.substr(0, p.rfind('/')) + "/" + n; }
@@ -248,7 +253,7 @@ void TitleScreen::choose() {
 
 void TitleScreen::mouseDown(int x, int y, int w, int h) {
     if (mode_ == Mode::Menu) {
-        for (int i = 0; i < 7; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
+        for (int i = 0; i < 8; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
         return;
     }
     if (mode_ == Mode::Editors) {   // the Resource Editors submenu: the three utilities of SCURK, then Back
@@ -256,7 +261,7 @@ void TitleScreen::mouseDown(int x, int y, int w, int h) {
         return;
     }
     if (mode_ == Mode::Settings) { settingsClick(x, y, w, h); return; }
-    const size_t n = mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size();
+    const size_t n = mode_ == Mode::Scenarios ? scenarios_.size() : mode_ == Mode::TileSets ? tileSets_.size() : cities_.size();
     for (size_t i = 0; i < n; ++i) if (Rect{60, 110 + static_cast<int>(i) * 20, 300, 18}.in(x, y)) { selected_ = static_cast<int>(i); return; }
     if (button(0, w, h).in(x, y)) choose();
     if (button(1, w, h).in(x, y)) leave();
@@ -268,9 +273,10 @@ void TitleScreen::keyDown(SDL_Keycode k) {
         else if (k == SDLK_E) activateMenu(1);
         else if (k == SDLK_S) activateMenu(2);
         else if (k == SDLK_L) activateMenu(3);
-        else if (k == SDLK_C) activateMenu(4);
-        else if (k == SDLK_R) activateMenu(5);
-        else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(6);
+        else if (k == SDLK_T) activateMenu(4);
+        else if (k == SDLK_C) activateMenu(5);
+        else if (k == SDLK_R) activateMenu(6);
+        else if (k == SDLK_Q || k == SDLK_ESCAPE) activateMenu(7);
         return;
     }
     if (mode_ == Mode::Editors) {
@@ -281,7 +287,7 @@ void TitleScreen::keyDown(SDL_Keycode k) {
         return;
     }
     if (mode_ == Mode::Settings) { if (k == SDLK_ESCAPE) { settings.save(); leave(); } return; }
-    const int n = static_cast<int>(mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size());
+    const int n = static_cast<int>(mode_ == Mode::Scenarios ? scenarios_.size() : mode_ == Mode::TileSets ? tileSets_.size() : cities_.size());
     if (k == SDLK_ESCAPE) leave();
     else if (k == SDLK_DOWN && selected_ + 1 < n) ++selected_;
     else if (k == SDLK_UP && selected_ > 0) --selected_;
