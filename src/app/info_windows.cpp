@@ -70,7 +70,12 @@ void InfoWindows::draw(SDL_Renderer* r, int sw, int sh) {
     fill(r, x, y, kW, kH, 30, 34, 46);
     frame(r, x, y, kW, kH, 200, 200, 220);
     for (const Button& b : tabButtons(x, y)) drawButton(r, b, Color{40, 46, 56});
-    text(r, x + kW - 66, y + 10, "[Close]", 255, 255, 190);   // (after the tabs: the last tab used to hide its first character)
+    {   // the close button: a small box with an x in the top right corner
+        const Rect cb = closeButton(x, y);
+        fill(r, cb, Color{70, 44, 44});
+        frame(r, cb, Color{200, 150, 150});
+        text(r, cb.x + (cb.w - kDebugCharW) / 2, cb.y + (cb.h - kDebugLineH) / 2, "x", 255, 230, 200);
+    }
     switch (open) {
         case Which::Graphs: drawGraphs(r, x, y + 34); break;
         case Which::City: drawCity(r, x, y + 34); break;
@@ -453,13 +458,15 @@ void InfoWindows::drawArticle(SDL_Renderer* r, int x, int y) {
 bool InfoWindows::closeArticle() { const bool was = articleOpen_; articleOpen_ = false; return was; }
 
 
+InfoWindows::Rect InfoWindows::closeButton(int x, int y) const { return Rect{x + kW - 24, y + 6, 18, 18}; }
+
 bool InfoWindows::mouseDown(int mx, int my, int sw, int sh) {
     if (open == Which::None) return false;
     if (articleOpen_) { articleOpen_ = false; return true; }   // the message box: any click is its OK (also outside the paper)
     const int x = ox(sw), y = oy(sh);
     if (mx < x || my < y || mx >= x + kW || my >= y + kH) return true;
     if (my < y + 26) {
-        if (mx > x + kW - 70) open = Which::None;
+        if (closeButton(x, y).contains(mx, my)) open = Which::None;
         const auto tabs = tabButtons(x, y);
         for (int i = 0; i < 7; ++i) if (tabs[static_cast<size_t>(i)].hit(mx, my)) open = static_cast<Which>(i + 1);
         return true;

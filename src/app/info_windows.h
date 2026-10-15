@@ -71,6 +71,8 @@ private:
     void drawMap(SDL_Renderer* r, int x, int y);        // dialog 246 "City Map"
     std::vector<ui::Button> industryButtons(int x, int y) const;
     std::vector<ui::Button> tabButtons(int x, int y) const;
+    using Rect = ui::Rect;
+    Rect closeButton(int x, int y) const;   // the small x in the top right corner
     bool windowClick(int mx, int my, int x, int y);     // clicks inside the three windows
     void drawArticle(SDL_Renderer* r, int x, int y);
     std::string storyText(int k, bool article);

@@ -85,3 +85,17 @@ TEST(a_played_city_saves_and_loads_back_unchanged) {
         CHECK(again.toCity(back).serialize() == bytes);
     }
 }
+
+TEST(the_start_year_of_a_new_city_survives_saving) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    const CityFile map = CityFile::load(dir + "/DEFAULT.SC2");
+    for (int era = 0; era < 4; ++era) {
+        Simulation sim(map, GameTables::fromExe(dir + "/SIMCITY.EXE"), 3);
+        sim.startNewCity(map, era, 0, nullptr);
+        CHECK(sim.state().startYear == 1900 + 50 * era);
+        const CityFile back = CityFile::parse(sim.toCity(map).serialize());
+        CHECK(CityState::fromCity(back).startYear == 1900 + 50 * era);   // it came back as 1900 for every era
+    }
+}

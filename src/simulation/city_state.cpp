@@ -85,6 +85,7 @@ void CityState::writeBack(CityFile& c) const {
     put(913, c84d8); put(914, ca410);
     put(misc::kLandValueTotal, landValueTotal); put(misc::kCrimeTotal, crimeTotal); put(misc::kTrafficTotal, trafficTotal);
     put16(misc::kWaterFlag, static_cast<int16_t>(waterFlag));
+    put(misc::kStartYear, startYear);   // (a city started in 1950 / 2000 / 2050 must not come back as 1900)
     put(misc::kDay, day); put(misc::kTreasury, treasury); put(misc::kDebt, debt); put(misc::kEconIndex, econIndex);
     put(misc::kPopHistorySum, popHistorySum); put(misc::kRatioMemory, ratioMemory);
     c.setMiscWord(misc::kOrdinances, ordinances);
