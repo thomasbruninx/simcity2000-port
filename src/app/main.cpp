@@ -475,6 +475,7 @@ int main(int argc, char** argv) {
                 else if (op == "count") { int v; words >> v; int n = 0, fa = -1, fb = -1; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xtxt.at(a, b) == v) { if (!n) { fa = a; fb = b; } ++n; } std::printf("xtxt %d: %d tiles (first at %d %d)\n", v, n, fa, fb); }
                 else if (op == "ticks") { int n = 0; words >> n; for (int i = 0; i < n; ++i) sim->tick(); }   // headless: simulation days without thing frames
                 else if (op == "cityflood") { sim->context().things.disasterRequest = 2; sim->context().things.focusA = sim->state().centerA2 / 2; sim->context().things.focusB = sim->state().centerB2 / 2; std::printf("flood at the city centre %d %d\n", sim->state().centerA2 / 2, sim->state().centerB2 / 2); }   // headless: Disasters > Flood
+                else if (op == "post") { int id = 0; words >> id; ui.postMessage(id, 0); }   // headless: a news / status message of the simulation (0x2E..0x3C: the demands)
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();

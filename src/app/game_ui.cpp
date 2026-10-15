@@ -262,6 +262,7 @@ void GameUi::mouseDown(int x, int y, int button) {
             else if (k == 3) layers.signs = !layers.signs; else if (k == 4) layers.zones = !layers.zones;
             return;
         }
+        if (y >= height_ - kBottomBar && !cityEdit_ && sim_.state().disasterActive != 0 && gotoButton().contains(x, y)) { centerView(sim_.context().things.focusA, sim_.context().things.focusB); return; }   // GoTo: to the disaster
         if (y >= height_ - kBottomBar) {   // view buttons
             if (x < 100) layers.underground = !layers.underground;
             else if (x < 180) { layers.powerOverlay = !layers.powerOverlay; }
@@ -1189,7 +1190,13 @@ void GameUi::scheduledEvent(int index) {
     say(index <= 11 ? "A new tool has been invented!" : "A new arcology design is available!");
 }
 
-void GameUi::postMessage(int id, int arg) { info_.postMessage(id, arg); }
+void GameUi::postMessage(int id, int arg) {
+    info_.postMessage(id, arg);
+    if (id >= 0x2E && id <= 0x3C) {   // the DEMAND messages (power plant needed ... commerce needs connections) also go to the status bar: strings 265..279
+        notice_ = res_.string(265 + id - 0x2E);
+        noticeUntil_ = SDL_GetTicks() + 12000;
+    }
+}
 void GameUi::showDialog(int id) { toolMessage(id); }
 ZoneHooks::StadiumChoice GameUi::chooseStadiumTeam(int takenMask) {   // dialog 190 "Pick a Team and Name It"
     StadiumChoice out;
@@ -1376,11 +1383,29 @@ void GameUi::draw(SDL_Renderer* r) {
     button(264, 72, "Streets", layers.streets);   // underground view: show / hide the roads and rails of the surface
     }
     const int hintX = cityEdit_ ? 500 : 346;
-    const SDL_Rect hintClip{hintX, height_ - kBottomBar, std::max(0, width_ - hintX), kBottomBar};
+    const bool disaster = !cityEdit_ && s.disasterActive != 0;
+    const int statusEnd = width_ - (disaster ? 70 : 6);
+    const SDL_Rect hintClip{hintX, height_ - kBottomBar, std::max(0, statusEnd - hintX), kBottomBar};
     SDL_SetRenderClipRect(r, &hintClip);
-    if (cityEdit_) text(r, hintX, height_ - kBottomBar + 7, "R rotate  +/- zoom  arrows scroll  right-drag scroll  Esc deselect", 150, 160, 180); else
-    text(r, 346, height_ - kBottomBar + 7, "Space pause  1-5 speed  +/- wheel zoom  R rotate  U/P/O/T views  right-drag scroll  B budget  G graphs  Ctrl+S save  Esc", 150, 160, 180);
+    if (cityEdit_) text(r, hintX, height_ - kBottomBar + 7, "R rotate  +/- zoom  arrows scroll  right-drag scroll  Esc deselect", 150, 160, 180);
+    else {   // the status bar: pause, tool, pointer, supplies - and the notification (red) at the right
+        std::string left;
+        if (paused() || clock_.speed == GameSpeed::Paused) left += "*PAUSED*  ";
+        if (const ToolItem* t = tool()) left += std::string(t->name) + "  ";
+        if (hoverA_ >= 0) left += "X " + std::to_string(hoverA_) + " Y " + std::to_string(hoverB_) + "  ";
+        left += "Power " + std::to_string(s.powerPct) + "%  Water " + std::to_string(s.waterPct) + "%";
+        const bool showNotice = !notice_.empty() && SDL_GetTicks() < noticeUntil_;
+        const int noticeW = showNotice ? debugWidth(notice_) + 12 : 0;
+        text(r, hintX, height_ - kBottomBar + 7, ellipsize(left, std::max(0, statusEnd - hintX - noticeW)), 190, 200, 220);
+        if (showNotice) text(r, statusEnd - noticeW + 6, height_ - kBottomBar + 7, notice_, 255, 110, 90);
+    }
     SDL_SetRenderClipRect(r, nullptr);
+    if (disaster) {   // the GoTo button of the original's status bar
+        const Rect g = gotoButton();
+        fill(r, g, Color{110, 50, 40});
+        frame(r, g, Color{230, 170, 150});
+        text(r, g.x + (g.w - 4 * kDebugCharW) / 2, g.y + (g.h - kDebugLineH) / 2, "GoTo", 255, 235, 210);
+    }
     budget_.draw(r, width_, height_);
     info_.draw(r, width_, height_);
     if (mapEdit_) drawMapEditor(r);

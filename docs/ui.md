@@ -21,6 +21,9 @@ headlessly (`sc2k-app <dir> city.sc2 --screenshot out.png --do "..."`).
 * **Pause menu**: Escape (with no tool, menu or window to cancel) pauses the simulation and offers Resume, Save game (asks for a name; files go to `<settings dir>/saves/`, Ctrl+S does the same), Load game (the title screen's list, saved games first; Esc returns to the game), Settings and Exit.
 * Bonds window shows each bond's rate and yearly cost, not the issue month.
 
+## Status bar
+The bottom bar (right of the view buttons) is the port's version of the original's status bar (CStatusControlBar, dialog 255): *PAUSED* (string 4), the selected tool, the tile under the pointer (X / Y, strings 5 / 6), the power and water supply used (the port's addition) and, in red at the right, the **notification**: the DEMAND messages of the simulation (`ZoneHooks::postMessage` ids 0x2E..0x3C, the same events that feed the newspaper, which the original also shows in the status bar) as the strings 265..279 - "Power Plant Needed", "Citizens Demand Road & Rail", "Water Shortage Reported", "Industry Demands Seaport" ... - for twelve seconds. During a disaster a **GoTo** button appears at the right end and centres the view on it. Not shown yet: "Brownouts Reported" and the blizzard / hurricane / tornado warnings (strings 280..283; where the original raises them is not analysed).
+
 ## Right mouse button
 Dragging with the right button scrolls the map; a plain right click opens the original's shortcut menu (resource 243: Center Map, Query Tile, Bulldoze Tile) on the tile under the pointer. A click on an item runs it, any other click or Esc closes the menu. It also works in Place & Print (Bulldoze Tile demolishes there).
 

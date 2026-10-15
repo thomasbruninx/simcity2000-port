@@ -114,7 +114,7 @@ public:
     bool confirm(int stringId, int amount = 0) override;
     int chooseBridge(int length, int allowedMask) override;
     void toolMessage(int id) override;
-    void postMessage(int id, int arg) override;
+    void postMessage(int id, int arg) override;     // the news queue and (for the "demands") the status bar's notification
     void newsAge() override { info_.age(); }
     void showDialog(int stringId) override;
     const uint8_t* labelTemplate(int id, bool custom) override;   // default building names (strings 831..888) for new microsim buildings
@@ -192,6 +192,10 @@ private:
     MenuBar menu_;
     bool autoBudget_ = false, autoGoto_ = true, soundOn_ = true, musicOn_ = true;   // Options menu (the original keeps them in the profile; defaults = the menu's check marks)
     int lastMonth_ = -1;
+    // the status bar (bottom): *PAUSED*, the tool, the tile under the pointer, the stats and the notification of the original (strings 265..283, e.g. "Water Shortage Reported")
+    std::string notice_;
+    uint32_t noticeUntil_ = 0;
+    Rect gotoButton() const { return {width_ - 64, height_ - 22 + 3, 58, 22 - 6}; }   // (the bottom bar is 22 pixels high)   // GoTo (dialog 255): the view jumps to a running disaster
     bool mapEdit_ = false, cityEdit_ = false;
     int editTreasury_ = 0;                                 // the city's own funds while Place & Print shows an unlimited amount
     Rect reserved_{};
