@@ -108,9 +108,28 @@ void TitleScreen::ensureTextures(SDL_Renderer* r) {
 TitleScreen::Rect TitleScreen::menuButton(int i, int w, int h) const { return {w - 330, h / 2 - 160 + i * 46, 260, 38}; }
 TitleScreen::Rect TitleScreen::button(int which, int w, int h) const { return {w / 2 - 170 + which * 190, h - 70, 160, 34}; }
 
+void TitleScreen::openCities() {
+    scan();
+    const std::string p = AudioSettings::settingsPath();
+    std::string start = p.substr(0, p.rfind('/')) + "/saves";
+    if (listFiles(start, ".sc2").empty()) start = dir_ + "/CITIES";   // no game saved yet: the cities of the installation
+    browser_.open("Load City", start, {}, {".sc2"}, true);
+    mode_ = Mode::Browser;
+}
+
+void TitleScreen::pollBrowser() {
+    if (mode_ != Mode::Browser || browser_.active()) return;
+    if (browser_.result() == 0) { chosenPath = browser_.path(); action = Action::LoadCity; mode_ = Mode::Menu; }
+    else leave();   // cancelled: back to the menu (or to the game)
+}
+
+void TitleScreen::wheel(int dy) { if (mode_ == Mode::Browser) browser_.wheel(dy); }
+void TitleScreen::textInput(const std::string& utf8) { if (mode_ == Mode::Browser) browser_.textInput(utf8); }
+
 void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
     ensureTextures(r);
     fill(r, 0, 0, w, h, 8, 12, 24);
+    if (mode_ == Mode::Browser) { browser_.draw(r, w, h); pollBrowser(); return; }
     if (titleTex_ && mode_ == Mode::Menu) {
         const float scale = std::min(static_cast<float>(w - 380) / static_cast<float>(titleW_), static_cast<float>(h - 40) / static_cast<float>(titleH_));
         const SDL_FRect dst{20.f, (static_cast<float>(h) - titleH_ * scale) / 2.f, titleW_ * scale, titleH_ * scale};
@@ -232,7 +251,7 @@ void TitleScreen::activateMenu(int i) {
         case 0: action = Action::NewCity; break;
         case 1: action = Action::NewMap; break;
         case 2: mode_ = Mode::Scenarios; selected_ = 0; break;
-        case 3: mode_ = Mode::Cities; selected_ = 0; break;
+        case 3: openCities(); break;
         case 4: mode_ = Mode::TileSets; selected_ = 0; break;
         case 5: mode_ = Mode::Settings; status_.clear(); break;
         case 6: mode_ = Mode::Editors; break;
@@ -252,6 +271,7 @@ void TitleScreen::choose() {
 }
 
 void TitleScreen::mouseDown(int x, int y, int w, int h) {
+    if (mode_ == Mode::Browser) { browser_.mouseDown(x, y, w, h); pollBrowser(); return; }
     if (mode_ == Mode::Menu) {
         for (int i = 0; i < 8; ++i) if (menuButton(i, w, h).in(x, y)) { activateMenu(i); return; }
         return;
@@ -268,6 +288,7 @@ void TitleScreen::mouseDown(int x, int y, int w, int h) {
 }
 
 void TitleScreen::keyDown(SDL_Keycode k) {
+    if (mode_ == Mode::Browser) { browser_.key(k); pollBrowser(); return; }
     if (mode_ == Mode::Menu) {
         if (k == SDLK_N) activateMenu(0);
         else if (k == SDLK_E) activateMenu(1);

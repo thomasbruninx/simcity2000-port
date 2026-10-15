@@ -354,6 +354,8 @@ int main(int argc, char** argv) {
                     }
                     continue;
                 }
+                if (titleScreen.active && e.type == SDL_EVENT_TEXT_INPUT) { titleScreen.textInput(e.text.text); continue; }
+                if (titleScreen.active && e.type == SDL_EVENT_MOUSE_WHEEL) { titleScreen.wheel(e.wheel.y > 0 ? 1 : (e.wheel.y < 0 ? -1 : 0)); continue; }
                 if (titleScreen.active && (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
                     if (e.type == SDL_EVENT_KEY_DOWN) titleScreen.keyDown(e.key.key);
                     else titleScreen.mouseDown(static_cast<int>(e.button.x * scaleX), static_cast<int>(e.button.y * scaleY), width, height);
@@ -393,6 +395,11 @@ int main(int argc, char** argv) {
                 if (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]) cam.scrollY -= pan;
             }
 
+            {   // the file browser of the title screen needs typed text
+                static bool textOn = false;
+                const bool want = titleScreen.active && titleScreen.browsing();
+                if (want != textOn && window) { if (want) SDL_StartTextInput(window); else SDL_StopTextInput(window); textOn = want; }
+            }
             handleTitle();
             const Uint64 now = SDL_GetTicks();
             const int dt = static_cast<int>(now - last);
@@ -468,6 +475,7 @@ int main(int argc, char** argv) {
                 else if (op == "rotate") { cam.rotation = (cam.rotation + 1) & 3; ui.centerView(sim->state().centerA2 / 2, sim->state().centerB2 / 2); }
                 else if (op == "find") { int id = 0; words >> id; for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) if (sim->world().xbld.at(a, b) == id) { std::printf("building %d at %d %d\n", id, a, b); a = b = 128; } }
                 else if (op == "title") titleScreen.show();
+                else if (op == "loadcity") { titleScreen.show(); titleScreen.openCities(); }   // File > Load City: the file browser
                 else if (op == "settings") { titleScreen.show(); titleScreen.openSettings(); }
                 else if (op == "scenarios") { int k = 0; words >> k; titleScreen.show(); titleScreen.openScenarioList(); titleScreen.select(k); }
                 else if (op == "loadscenario") { int k = 0; words >> k; const auto& list = titleScreen.scenarios(); if (k >= 0 && static_cast<size_t>(k) < list.size()) loadGame(list[static_cast<size_t>(k)].path); }

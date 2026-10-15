@@ -11,6 +11,7 @@
 
 #include <functional>
 
+#include "app/file_browser.h"
 #include "audio/music_backend.h"
 #include "resources/bmp.h"
 #include "resources/pe_resources.h"
@@ -42,7 +43,10 @@ public:
     // scripting
     void openScenarioList() { mode_ = Mode::Scenarios; }
     void openSettings() { mode_ = Mode::Settings; status_.clear(); }
-    void openCities() { mode_ = Mode::Cities; selected_ = 0; cities_.clear(); scan(); }
+    void openCities();               // Load Saved City / File > Load City: the file browser (open mode), starting in the saved games or the game's CITIES folder
+    bool browsing() const { return mode_ == Mode::Browser; }
+    void wheel(int dy);
+    void textInput(const std::string& utf8);
     bool fromGame = false;           // opened from the pause menu: Esc / Cancel / Back return to the game
     // Settings screen: `apply` activates the chosen synthesizer and returns a status text; `test` starts a tune with it
     std::function<std::string(const AudioSettings&)> applySettings;
@@ -51,7 +55,9 @@ public:
     void select(int index) { selected_ = index; }
 
 private:
-    enum class Mode { Menu, Scenarios, Cities, TileSets, Settings, Editors };
+    enum class Mode { Menu, Scenarios, Cities, TileSets, Settings, Editors, Browser };
+    FileBrowser browser_;
+    void pollBrowser();
     std::string dir_;
     const PeResources& res_;
     std::array<uint32_t, 256> palette_;
