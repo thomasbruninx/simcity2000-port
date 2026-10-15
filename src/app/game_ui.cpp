@@ -1,5 +1,8 @@
 #include "app/game_ui.h"
 
+#include <pwd.h>
+#include <unistd.h>
+
 #include "app/ui_draw.h"
 
 #include <algorithm>
@@ -199,6 +202,7 @@ void GameUi::update(int dtMs) {
 void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
     if (cityEdit_) sim_.state().treasury = 99999999;   // the editor never runs update(): editing stays free
+    if (pic_.open) { if (button == 1) pic_.open = false; return; }
     if (nc_.open) { if (button == 1) newCityMouse(x, y); return; }
     if (help_.active) { help_.mouseDown(x, y, button, width_, height_); return; }
     if (browser_.active()) { if (button == 1) browser_.mouseDown(x, y, width_, height_); return; }
@@ -409,6 +413,7 @@ void GameUi::wheel(int x, int y, int dy) {
 }
 
 bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
+    if (pic_.open) { if (k == SDLK_ESCAPE || k == SDLK_RETURN || k == SDLK_SPACE) pic_.open = false; return true; }
     if (nc_.open) {
         if (k == SDLK_ESCAPE) nc_.result = -1;
         else if (k == SDLK_RETURN) nc_.result = 0;
@@ -451,15 +456,22 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
         for (const auto& a : kAccel) if (a.first == k) { menuCommand(a.second); return true; }
     }
     if (ctrl && ts_.shift && k == SDLK_D) { enableDebugMenu(); return true; }
-    if (k >= SDLK_A && k <= SDLK_Z && !ctrl && !modal_) {   // the cheat word of the original: "priscilla" attaches the Debug menu
-        static const std::string word = "priscilla";
+    if (k >= SDLK_A && k <= SDLK_Z && !ctrl && !modal_) {   // the cheat words of the original (typed in the game): "priscilla" attaches the Debug menu, "joke" shows a joke
+        static const char* const words[] = {"priscilla", "joke"};
         const std::string next = cheatTyped_ + static_cast<char>('a' + (k - SDLK_A));
-        if (next.size() >= 2 && word.compare(0, next.size(), next) == 0) {   // swallowed, so the word does not rotate the view and so on
-            cheatTyped_ = next;
-            if (next == word) { cheatTyped_.clear(); layers.powerOverlay = !layers.powerOverlay; enableDebugMenu(); }   // the first letter 'p' had toggled the power overlay
-            return true;
+        for (const char* w : words) {
+            const std::string word = w;
+            if (next.size() >= 2 && word.compare(0, next.size(), next) == 0) {   // swallowed, so the word does not rotate the view and so on
+                cheatTyped_ = next;
+                if (next == word) {
+                    cheatTyped_.clear();
+                    if (word == "priscilla") { layers.powerOverlay = !layers.powerOverlay; enableDebugMenu(); }   // the first letter 'p' had toggled the power overlay
+                    else openPicture(false);
+                }
+                return true;
+            }
         }
-        cheatTyped_ = next == "p" ? next : std::string();
+        cheatTyped_ = (next == "p" || next == "j") ? next : std::string();
     }
     if (budget_.open) { if (k == SDLK_ESCAPE || k == SDLK_B) budget_.open = false; return true; }
     if (info_.open != InfoWindows::Which::None) { if (k == SDLK_ESCAPE && !info_.closeArticle()) info_.open = InfoWindows::Which::None; return true; }
@@ -480,6 +492,73 @@ bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
     else if (k == SDLK_P) layers.powerOverlay = !layers.powerOverlay;
     else if (k == SDLK_O) layers.waterOverlay = !layers.waterOverlay;
     return true;
+}
+
+std::string GameUi::registeredOwner() {   // dialog 106 names the registered owner; the original reads the Windows registration, the port uses the login's full name
+    std::string name;
+    if (const passwd* pw = getpwuid(getuid())) {
+        name = pw->pw_gecos ? pw->pw_gecos : "";
+        const size_t comma = name.find(',');
+        if (comma != std::string::npos) name.resize(comma);
+        if (name.empty() && pw->pw_name) name = pw->pw_name;
+    }
+    return name.empty() ? "SimCity player" : name;
+}
+
+void GameUi::openPicture(bool about) {
+    pic_.open = true; pic_.about = about;
+    pic_.file = gameDir + (about ? "/BITMAPS/ABOUT.BMP" : "/BITMAPS/2000WIN.BMP");
+    pic_.title = about ? res_.string(0) : "A Joke";
+    if (about) pic_.title = "About SimCity 2000";
+}
+
+GameUi::PictureTex& GameUi::pictureTexture(SDL_Renderer* r, const std::string& file) {
+    PictureTex& t = pictureTextures_[file];
+    if (!t.tried) {
+        t.tried = true;
+        try {
+            const Bmp8 b = Bmp8::load(file);
+            std::vector<uint32_t> px(static_cast<size_t>(b.width) * static_cast<size_t>(b.height));
+            for (size_t i = 0; i < px.size(); ++i) px[i] = b.palette[b.index[i]];
+            t.tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, b.width, b.height);
+            if (t.tex) { SDL_UpdateTexture(t.tex, nullptr, px.data(), b.width * 4); SDL_SetTextureScaleMode(t.tex, SDL_SCALEMODE_NEAREST); }
+            t.w = b.width; t.h = b.height;
+        } catch (const std::exception&) {}
+    }
+    return t;
+}
+
+GameUi::Rect GameUi::pictureRect(const PictureTex& t) const {   // the picture at its own size (smaller windows scale it down), centred, with room for the title and the button
+    const int availW = std::max(100, width_ - 40), availH = std::max(100, height_ - 110);
+    float s = 1.f;
+    if (t.w > availW) s = static_cast<float>(availW) / static_cast<float>(t.w);
+    if (t.h * s > availH) s = static_cast<float>(availH) / static_cast<float>(t.h);
+    const int w = std::max(1, static_cast<int>(t.w * s)), h = std::max(1, static_cast<int>(t.h * s));
+    return Rect{(width_ - w) / 2, (height_ - h) / 2 - 8, w, h};
+}
+
+void GameUi::drawPicture(SDL_Renderer* r) {
+    PictureTex& t = pictureTexture(r, pic_.file);
+    fill(r, 0, 0, width_, height_, 0, 0, 0, 150);
+    const Rect pr = t.tex ? pictureRect(t) : Rect{width_ / 2 - 150, height_ / 2 - 60, 300, 100};
+    const Rect panel{pr.x - 12, pr.y - 30, pr.w + 24, pr.h + 78};
+    drawPanel(r, panel, pic_.title);
+    if (t.tex) {
+        const SDL_FRect dst{static_cast<float>(pr.x), static_cast<float>(pr.y), static_cast<float>(pr.w), static_cast<float>(pr.h)};
+        SDL_RenderTexture(r, t.tex, nullptr, &dst);
+        if (pic_.about) {   // the gray box of ABOUT.BMP: the registration text of dialog 106
+            const float sx = static_cast<float>(pr.w) / static_cast<float>(t.w), sy = static_cast<float>(pr.h) / static_cast<float>(t.h);
+            const Rect box{pr.x + static_cast<int>(228 * sx), pr.y + static_cast<int>(100 * sy), static_cast<int>(236 * sx), static_cast<int>(180 * sy)};
+            std::string owner = registeredOwner();
+            const std::string head = "This copy of SimCity 2000 is the exclusive registered property of:";
+            int y = box.y + 6;
+            y += wrappedText(r, Rect{box.x + 6, y, box.w - 12, 0}, head, Color{20, 20, 30}) + 8;
+            wrappedText(r, Rect{box.x + 6, y, box.w - 12, 0}, owner, Color{90, 0, 0});
+            wrappedText(r, Rect{box.x + 6, box.bottom() - 40, box.w - 12, 0}, "Port: an independent re-implementation. It needs your own copy of the game.", Color{60, 60, 70});
+        }
+    } else text(r, pr.x + 12, pr.y + 20, "The picture was not found.", theme::kTextWarn);
+    ui::Button ok{Rect{panel.x + panel.w / 2 - 40, panel.bottom() - 36, 80, 26}, "OK"};
+    drawButton(r, ok);
 }
 
 void GameUi::openHelp(int what) {
@@ -1290,6 +1369,7 @@ void GameUi::draw(SDL_Renderer* r) {
     if (browser_.active()) browser_.draw(r, width_, height_);
     if (help_.active) help_.draw(r, width_, height_);
     if (nc_.open) drawNewCity(r);
+    if (pic_.open) drawPicture(r);
 }
 
 void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {
@@ -1537,7 +1617,7 @@ void GameUi::menuCommand(int id) {   // the original's WM_COMMAND handlers (mess
         case 32893: openHelp(1); break;                                           // Search For Help On...
         case 57667: openHelp(2); break;                                           // Using Help
         case 32908: case 32909: case 32910: case 32911: case 32922: case 32923: case 32924: case 32925: case 32926: case 32927: case 32928: case 32931: debugCommand(id); break;
-        case 57664: { Modal m; m.title = "SimCity 2000 (port) - an independent re-implementation; it needs your own copy of the game."; m.options = {"OK"}; runModal(m); break; }
+        case 57664: openPicture(true); break;                                     // About SimCity 2000
         default: break;
     }
 }

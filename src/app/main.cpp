@@ -119,6 +119,7 @@ int main(int argc, char** argv) {
         sim->setHooks(ui);
         ui.defaultMapPath = args.dir + "/DEFAULT.SC2";
         ui.helpFile = args.dir + "/SC2USA.HLP";
+        ui.gameDir = args.dir;
         ui.initNews(args.dir);
         ui.setCityName(city.name());
         TitleScreen titleScreen(args.dir, resources, pal.palette);
@@ -425,6 +426,8 @@ int main(int argc, char** argv) {
                 else if (op == "help") { int w2 = 0; words >> w2; ui.openHelp(w2); }   // 0 contents, 1 search, 2 using help
                 else if (op == "type") { std::string t; std::getline(words >> std::ws, t); ui.textInput(t); }
                 else if (op == "newdlg") ui.showNewCityDialog();
+                else if (op == "about") ui.showAbout();
+                else if (op == "joke") ui.showJoke();
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();
