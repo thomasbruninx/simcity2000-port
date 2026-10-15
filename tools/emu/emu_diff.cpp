@@ -572,6 +572,31 @@ int destroyRun(const std::string& exe, const GameTables& t, const CityFile& c, i
     return ok ? 0 : 1;
 }
 
+// the terrain editor's sea level (0x445A60) on the real cities: raised, lowered and set to extreme levels
+int seaLevelDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
+    CityFile c = CityFile::load(path);
+    GameTables t = GameTables::fromExe(exe);
+    int failures = 0;
+    const int base = CityState::fromCity(c).seaLevel;
+    for (int level : {base + 1, base - 1, 0, 4, 12, 31}) {
+        if (level < 0 || level > 31) continue;
+        World w = World::fromCity(c); CityState s = CityState::fromCity(c);
+        Emu e(exe); e.installCrtRand(5);
+        SimImage img(e);
+        img.load(w, s); img.setLfsr(0xBEEF); img.stubUi();
+        World pw = w; CityState ps = s;
+        CrtRand rng(5); Lfsr lf(0xBEEF); ZoneHooks hooks; TrafficStats ts;
+        SimContext ctx{pw, ps, t, rng, lf, hooks, ts, {}};
+        e.call(0x445A60, {uint32_t(level)}, img.fakeView);
+        applySeaLevel(ctx, level);
+        World ew = pw; CityState es = ps; img.store(ew, es);
+        std::string d; const long n = diffWorld(ew, pw, d) + diffState(es, ps, d);
+        ++tiles; bad += n ? 1 : 0; failures += n ? 1 : 0;
+        std::printf("%-34s sea level %2d (was %d): %s%s\n", path.c_str(), level, base, n ? "DIFF" : "identical", d.c_str());
+    }
+    return failures;
+}
+
 int destroyDiff(const std::string& exe, const std::string& path, long& tiles, long& bad) {
     CityFile c = CityFile::load(path);
     GameTables t = GameTables::fromExe(exe);
@@ -1096,6 +1121,7 @@ int main(int argc, char** argv) {
             else if (mode == "advisor") failures += advisorDiff(exe, argv[i], tiles, bad);
             else if (mode == "terrain") failures += terrainGenDiff(exe, argv[i], tiles, bad);
             else if (mode == "destroy") failures += destroyDiff(exe, argv[i], tiles, bad);
+            else if (mode == "sealevel") failures += seaLevelDiff(exe, argv[i], tiles, bad);
             else if (mode == "demand") failures += demandDiff(exe, argv[i], tiles, bad);
             else if (mode == "finance") failures += financeDiff(exe, argv[i], tiles, bad);
         } catch (const std::exception& ex) { std::fprintf(stderr, "%s: %s\n", argv[i], ex.what()); ++failures; }

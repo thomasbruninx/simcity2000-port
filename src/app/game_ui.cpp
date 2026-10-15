@@ -292,6 +292,7 @@ void GameUi::mouseDown(int x, int y, int button) {
     switch (t->kind) {
         case ToolKind::Bulldoze: playSound(0x1FC, -1); dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b; bulldozeAt(a, b); break;
         case ToolKind::TerrainEdit:
+            if (t->sub >= 5) { seaLevelStep(t->sub == 5 ? 1 : -1); break; }   // Raise / Lower Sea Level: one step per click
             dragging_ = true; startA_ = lastA_ = a; startB_ = lastB_ = b;
             editStartAlt_ = editLastAlt_ = sim_.world().altm.at(a, b) & 0x1F; editStartY_ = mapPx(y); editPrevA_ = editPrevB_ = -1; sprayMs_ = 0;
             editSample(a, b, mapPx(y));
@@ -624,6 +625,12 @@ void GameUi::enterMapEditor() {
     makeTerrain();
 }
 
+void GameUi::seaLevelStep(int dir) {
+    SimContext& ctx = sim_.context();
+    if (dir > 0 ? raiseSeaLevel(ctx) : lowerSeaLevel(ctx)) say(res_.string(dir > 0 ? 68 : 69) + ": " + std::to_string(sim_.state().seaLevel));
+    else say(dir > 0 ? "The sea is at its highest level" : "The sea is at its lowest level");
+}
+
 void GameUi::makeTerrain() {   // MAKE: a new random landscape from the sliders
     progressText_.clear();
     generateTerrain(sim_.context(), editParams_);
@@ -676,6 +683,11 @@ GameUi::EditorWidgets GameUi::editorWidgets() const {
     auto btns = ui::columns(in.cutTop(26), 2, 20);
     e.make.r = btns[0]; e.make.label = res_.string(793);
     e.done.r = btns[1]; e.done.label = res_.string(794);
+    in.cutTop(30);   // the sea level readout
+    e.seaUp.r = in.cutTop(24); e.seaUp.label = res_.string(68);       // "Raise Sea Level"
+    in.cutTop(6);
+    e.seaDown.r = in.cutTop(24); e.seaDown.label = res_.string(69);   // "Lower Sea Level"
+    e.seaUp.enabled = sim_.state().seaLevel < 0x1F; e.seaDown.enabled = sim_.state().seaLevel > 0;
     return e;
 }
 
@@ -694,6 +706,8 @@ bool GameUi::mapEditorMouse(int x, int y, bool press) {
     else if (e.river.click(x, y)) editParams_.river = e.river.checked;
     else if (e.make.hit(x, y)) makeTerrain();
     else if (e.done.hit(x, y)) finishMapEditor();
+    else if (e.seaUp.hit(x, y)) seaLevelStep(1);
+    else if (e.seaDown.hit(x, y)) seaLevelStep(-1);
     return true;
 }
 
@@ -710,7 +724,10 @@ void GameUi::drawMapEditor(SDL_Renderer* r) {
     drawCheckbox(r, e.river);
     drawButton(r, e.make, Color{40, 80, 56});
     drawButton(r, e.done, Color{80, 60, 40});
-    wrappedText(r, Rect{e.panel.x + 16, e.make.r.bottom() + 12, e.panel.w - 32, 48}, "Use the tools on the left to shape the land, then press DONE.", theme::kTextDim);
+    text(r, e.panel.x + 16, e.make.r.bottom() + 12, "Sea level " + std::to_string(sim_.state().seaLevel), theme::kText);
+    drawButton(r, e.seaUp);
+    drawButton(r, e.seaDown);
+    wrappedText(r, Rect{e.panel.x + 16, e.seaDown.r.bottom() + 12, e.panel.w - 32, 48}, "Use the tools on the left to shape the land, then press DONE.", theme::kTextDim);
 }
 
 void GameUi::newCityDialog(bool randomMap) {
@@ -1350,7 +1367,7 @@ void GameUi::draw(SDL_Renderer* r) {
             const Uint8 shade = dead ? 120 : 235;
             text(r, rc.x + 6, rc.y + 5, g.items[i].name, shade, shade, shade);
             const int c = toolCost(sim_.context(), g.items[i].cat, g.items[i].sub);
-            if (c >= 0 && g.items[i].kind != ToolKind::Query && !cityEdit_) {
+            if (c >= 0 && g.items[i].kind != ToolKind::Query && !cityEdit_ && !mapEdit_) {
                 const std::string ct = moneyText(c);
                 text(r, rc.x + rc.w - static_cast<int>(ct.size()) * 8 - 6, rc.y + 5, ct, shade, shade, dead ? 120 : 160);
             }

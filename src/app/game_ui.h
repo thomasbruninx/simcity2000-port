@@ -202,13 +202,14 @@ private:
     TerrainParams editParams_;
     int sliderDrag_ = -1;
     std::string progressText_;
-    Rect editPanel() const { return {width_ - 236, kTopBarPx + 8, 228, 276}; }
+    Rect editPanel() const { return {width_ - 236, kTopBarPx + 8, 228, 352}; }
+    void seaLevelStep(int dir);                            // terrain editor: raise / lower the sea level (0x445D10 / 0x445D80)
     static constexpr int kTopBarPx = 46;
     // dialogs laid out from the widget toolkit (src/ui): the same functions give the rectangles for drawing and for hit testing
     struct ModalLayout { Rect panel, title, field; std::vector<ui::Button> buttons; };
     ModalLayout modalLayout() const;
     std::vector<ui::Button> pauseButtons() const;
-    struct EditorWidgets { Rect panel; ui::Slider slider[3]; ui::Checkbox coast, river; ui::Button make, done; };
+    struct EditorWidgets { Rect panel; ui::Slider slider[3]; ui::Checkbox coast, river; ui::Button make, done, seaUp, seaDown; };
     EditorWidgets editorWidgets() const;
     void drawMapEditor(SDL_Renderer* r);
     bool mapEditorMouse(int x, int y, bool press);

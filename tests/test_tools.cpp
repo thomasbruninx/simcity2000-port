@@ -338,3 +338,19 @@ TEST(unchanged_labels_keep_the_file_bytes_when_the_city_is_written_back) {
     CHECK(edited.xlab[11 * 25] == 4 && std::memcmp(&edited.xlab[11 * 25 + 1], "Mets", 4) == 0 && edited.xlab[11 * 25 + 20] == 0);
     CHECK(std::memcmp(&edited.xlab[10 * 25], &c.xlab[10 * 25], 25) == 0);
 }
+
+TEST(sea_level_floods_low_land_and_dries_it_again) {
+    World w; CityState s; GameTables t; CrtRand rng(1); Lfsr lf(1); ZoneHooks hooks; TrafficStats ts;
+    SimContext ctx{w, s, t, rng, lf, hooks, ts, {}};
+    for (int a = 0; a < 128; ++a) for (int b = 0; b < 128; ++b) w.altm.at(a, b) = static_cast<uint16_t>(a < 64 ? 2 : 9);   // a low half and a high half
+    w.xbld.at(10, 10) = 8;   // a tree on the low land
+    s.seaLevel = 4;
+    CHECK(raiseSeaLevel(ctx) && s.seaLevel == 5);
+    CHECK((w.xbit.at(10, 10) & xbit::kWater) != 0 && (w.altm.at(10, 10) >> 5 & 0x1F) == 5 && w.xter.at(10, 10) == 0x10 && w.xbld.at(10, 10) == 0);
+    CHECK((w.xbit.at(100, 10) & xbit::kWater) == 0 && w.xter.at(100, 10) == 0);
+    CHECK(lowerSeaLevel(ctx) && lowerSeaLevel(ctx) && lowerSeaLevel(ctx) && lowerSeaLevel(ctx) && lowerSeaLevel(ctx) && s.seaLevel == 0);
+    CHECK(!lowerSeaLevel(ctx));
+    CHECK((w.xbit.at(10, 10) & xbit::kWater) == 0);   // the water is gone again
+    s.seaLevel = 0x1F;
+    CHECK(!raiseSeaLevel(ctx));
+}

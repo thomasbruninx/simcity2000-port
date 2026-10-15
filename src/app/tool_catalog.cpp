@@ -9,7 +9,7 @@ const std::vector<ToolGroup>& toolCatalog() {
     static const std::vector<ToolGroup> groups = {
         {"Bulldozer", {{"Bulldozer", K::Bulldoze, 0, 0}, {"De-zone", K::Zone, 0, 4, 0}}},
         {"Landscape", {{"Tree (shift: remove)", K::Landscape, 1, 0}, {"Water", K::Landscape, 1, 1}, {"Forest (editor)", K::Landscape, 1, 2}, {"Stream (editor)", K::Landscape, 1, 3}}},
-        {"Terrain editor", {{"Raise land (spray)", K::TerrainEdit, 0, 1}, {"Lower land (spray)", K::TerrainEdit, 0, 2}, {"Stretch land (drag up/down)", K::TerrainEdit, 0, 3}, {"Level land (drag)", K::TerrainEdit, 0, 4}}},
+        {"Terrain editor", {{"Raise land (spray)", K::TerrainEdit, 0, 1}, {"Lower land (spray)", K::TerrainEdit, 0, 2}, {"Stretch land (drag up/down)", K::TerrainEdit, 0, 3}, {"Level land (drag)", K::TerrainEdit, 0, 4}, {"Raise sea level", K::TerrainEdit, 0, 5}, {"Lower sea level", K::TerrainEdit, 0, 6}}},
         {"Dispatch", {{"Police", K::Dispatch, 2, 0}, {"Fire", K::Dispatch, 2, 1}, {"Military", K::Dispatch, 2, 2}}},
         {"Terrain", {{"Level terrain", K::Terrain, 0, 1}, {"Raise terrain", K::Terrain, 0, 2}, {"Lower terrain", K::Terrain, 0, 3}}},
         {"Zones", {{"Light residential", K::Zone, 9, 0, 1}, {"Dense residential", K::Zone, 9, 1, 2}, {"Light commercial", K::Zone, 10, 0, 3},

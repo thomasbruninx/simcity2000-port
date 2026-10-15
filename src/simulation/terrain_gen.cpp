@@ -207,4 +207,42 @@ void generateTerrain(SimContext& c, const TerrainParams& p) {
     }
 }
 
+void applySeaLevel(SimContext& c, int level) {   // 0x445A60
+    World& w = c.w;
+    for (int a = 0; a < 128; ++a)
+        for (int b = 0; b < 128; ++b) {
+            const uint16_t alt = w.altm.at(a, b);
+            const int land = alt & 0x1F, xt = w.xter.at(a, b);
+            if (level > land) {   // below the sea: water
+                w.altm.at(a, b) = static_cast<uint16_t>((level << 5) | (alt & 0xFC1F));
+                const int bld = w.xbld.at(a, b);
+                if (bld >= 6 && bld <= 0xD) setTile(c, a, b, 0);
+                w.xbit.at(a, b) |= xbit::kWater;
+                if (xt >= 0x30) w.xter.at(a, b) = 0x10;
+                else if (land + 1 >= level && xt != 0) w.xter.at(a, b) = static_cast<uint8_t>((xt & 0xF) + 0x20);   // shallow next to the shore
+                else w.xter.at(a, b) = static_cast<uint8_t>((xt & 0xF) + 0x10);
+            } else if (w.xbit.at(a, b) & xbit::kWater) {   // water that the sea no longer reaches
+                w.xbit.at(a, b) &= static_cast<uint8_t>(~xbit::kWater);
+                if (xt < 0x30) {
+                    w.altm.at(a, b) = static_cast<uint16_t>((level << 5) | (alt & 0xFC1F));
+                    w.xter.at(a, b) = static_cast<uint8_t>(xt & 0xF);
+                }
+            }
+        }
+}
+
+bool raiseSeaLevel(SimContext& c) {   // 0x445D10
+    if (c.s.seaLevel >= 0x1F) return false;
+    ++c.s.seaLevel;
+    applySeaLevel(c, c.s.seaLevel);
+    return true;
+}
+
+bool lowerSeaLevel(SimContext& c) {   // 0x445D80
+    if (c.s.seaLevel <= 0) return false;
+    --c.s.seaLevel;
+    applySeaLevel(c, c.s.seaLevel);
+    return true;
+}
+
 }  // namespace sc2k

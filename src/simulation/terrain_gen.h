@@ -18,4 +18,10 @@ struct TerrainParams {
 // (coast, river). The cities' buildings are cleared (every tile becomes id 0).
 void generateTerrain(SimContext& c, const TerrainParams& p);
 
+// The sea level of the terrain editor (MISC 912 @0x4C9830, 0..31): 0x445A60 floods every tile whose land altitude is below `level` (water flag, shore shape in XTER,
+// water altitude bits of ALTM, trees and small objects removed) and dries the tiles that are now at or above it. Raise = 0x445D10, lower = 0x445D80.
+void applySeaLevel(SimContext& c, int level);
+bool raiseSeaLevel(SimContext& c);   // false at the highest level (0x1F)
+bool lowerSeaLevel(SimContext& c);   // false at 0
+
 }  // namespace sc2k
