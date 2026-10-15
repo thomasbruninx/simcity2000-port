@@ -223,6 +223,8 @@ int main(int argc, char** argv) {
                 if (tex) SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
             }
             fb.clear(0xFF101820u);
+            ui.layers.animTick = SDL_GetTicks() / 120;   // the flames change frame about eight times a second
+            ui.layers.animTick = SDL_GetTicks() / 120;   // the flames change frame about eight times a second
             renderer.draw(fb, sim->world(), sim->state(), cam, ui.layers);
             ui.overlay(fb);
             SDL_UpdateTexture(tex, nullptr, fb.pixels.data(), mw * 4);
@@ -465,6 +467,8 @@ int main(int argc, char** argv) {
                         std::printf("working %s dirty=%d name='%s' gfx=%016llx | source %s gfx=%016llx | msg: %s\n", env.working.path().c_str(), env.working.dirty ? 1 : 0, env.working.name(id, "?").c_str(), static_cast<unsigned long long>(hash(env.working)), env.source.path().c_str(), static_cast<unsigned long long>(hash(env.source)), env.message.c_str());
                     }
                 }
+                else if (op == "fire") { int a, b; words >> a >> b; std::printf("fire at %d %d: %d\n", a, b, startFire(sim->context(), a, b, 1) ? 1 : 0); }   // headless: set a tile on fire
+                else if (op == "txt") { int a, b, v; words >> a >> b >> v; sim->world().xtxt.at(a, b) = static_cast<uint8_t>(v); }   // headless: a raw XTXT value (0xFB..0xFF = flames, flood)
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();

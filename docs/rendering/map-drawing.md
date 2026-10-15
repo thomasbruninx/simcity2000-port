@@ -21,3 +21,13 @@ Things (ships, planes, trains, …: sprite table `0x4E7070`, positions from tile
 
 ## Verification
 `sc2k-render` writes PNGs; NYC, Paris, a rotated view and zoom 0–2 were inspected. `tests/test_render.cpp` pins a fingerprint of the output of this renderer (regression only — it is not recorded from the original, which cannot be run headless).
+
+## Flames, flood water and burning vehicles (overlay, 0x44D320 -> 0x460530) — VERIFIED from the disassembly
+After a tile is drawn the original calls the overlay painter 0x44D320 for every tile whose XTXT is not 0: values 1..0x32 are text labels, 0xC9..0xF0 things (0x401320), and **0xFB..0xFF go to 0x460530**, which draws one sprite on the tile, standing on the land altitude (on the water altitude for 0xFB / 0xFC; a tile with the water flag shows nothing for 0xFD..0xFF):
+| XTXT | sprite (small set; + 500 / 1000 for the other zooms) | |
+|---|---|---|
+| 0xFB | 0x1F0 | fire spreading on water (smoke) |
+| 0xFC | 0x1EC | flood water |
+| 0xFD, 0xFE | 0x1ED + rand&1 | a burning vehicle on a road |
+| 0xFF | 0x18C + rand&3 | flames on a burnt tile |
+The sprite is centred on the tile (x = tile left + tile width - sprite width / 2, y = tile bottom - lift - sprite height) and mirrored at random; the original draws a new random frame and mirroring on every repaint, which is the flicker of the fire. The port (`MapRenderer`, `drawThings` lambda) picks them from a hash of the tile and `RenderLayers::animTick` (the application advances it about eight times a second). The renderer did not draw them at all before; the sprite ids are the objects "Fire" / "Explosion" of SCURK's Animated groups.

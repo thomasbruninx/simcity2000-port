@@ -389,6 +389,21 @@ void MapRenderer::draw(Framebuffer& fb, const World& w, const CityState& s, cons
             };
             auto drawThings = [&] {
                 if (layers.things && thingValue >= 0xC9 && thingValue <= 0xF0) drawThing(fb, w, cam, a, b, da, db, thingValue - 0xC9);
+                if (thingValue >= 0xFB) {   // 0x460530: flames and flood water, drawn over the tile (0xFB fire on water, 0xFC flood, 0xFD / 0xFE a burning vehicle, 0xFF flames)
+                    const bool onWater = (w.xbit.at(a, b) & xbit::kWater) != 0;
+                    if (onWater && thingValue != 0xFB && thingValue != 0xFC) return;
+                    const int lift = (onWater ? (altWord & 0x3E0) >> 5 : altWord & 0x1F) * step;
+                    const unsigned hsh = static_cast<unsigned>(a) * 73856093u ^ static_cast<unsigned>(b) * 19349663u ^ layers.animTick * 83492791u;
+                    int sid;
+                    switch (thingValue) {
+                        case 0xFB: sid = zoomBase + 0x1F0; break;
+                        case 0xFC: sid = zoomBase + 0x1EC; break;
+                        case 0xFD: case 0xFE: sid = zoomBase + 0x1ED + static_cast<int>((hsh >> 8) & 1); break;
+                        default: sid = zoomBase + 0x18C + static_cast<int>((hsh >> 8) & 3); break;
+                    }
+                    const Sprite* sp = sprites_.get(sid);
+                    if (sp) blit(fb, sid, x + tw - (sp->width >> 1), yBase - lift - sp->height, ((hsh >> 12) & 1) != 0);
+                }
             };
 
             if (id >= 0x70) {

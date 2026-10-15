@@ -46,3 +46,31 @@ TEST(render_sprites_and_map_match_the_recorded_output) {
     CHECK(drawn > 100000);                           // the city fills the view
     CHECK(fnv(fb) == 0xbc68d1d2bfa08ae6ull);        // regression fingerprint of THIS renderer (visually checked, not recorded from the original)
 }
+
+TEST(flames_flood_and_burning_vehicles_are_drawn_over_their_tiles) {
+    const char* root = std::getenv("SC2K_DATA_PATH");
+    if (!root) { std::printf("  (skipped: SC2K_DATA_PATH not set)\n"); return; }
+    const std::string dir = root;
+    SpriteSet sprites = SpriteSet::load(dir);
+    Bmp8 pal = Bmp8::load(dir + "/BITMAPS/PAL_MSTR.BMP");
+    CityFile city = CityFile::load(dir + "/DEFAULT.SC2");   // flat, empty land
+    World w = World::fromCity(city);
+    CityState s = CityState::fromCity(city);
+    GameTables t = GameTables::fromExe(dir + "/SIMCITY.EXE");
+    Camera cam; cam.centerOn(64, 64, 320, 200);
+    auto render = [&](uint32_t tick) {
+        RenderLayers layers; layers.animTick = tick;
+        Framebuffer fb(640, 400, 0xFF101820u);
+        MapRenderer(t, sprites, pal.palette).draw(fb, w, s, cam, layers);
+        return fb;
+    };
+    const uint64_t plain = fnv(render(0));
+    for (int v : {0xFB, 0xFC, 0xFD, 0xFE, 0xFF}) {
+        w.xtxt.at(64, 64) = static_cast<uint8_t>(v);
+        CHECK(fnv(render(0)) != plain);           // the tile shows something (it used to look like plain land)
+    }
+    w.xtxt.at(64, 64) = 0xFF;
+    bool animated = false;
+    for (uint32_t tick = 1; tick < 16 && !animated; ++tick) animated = fnv(render(tick)) != fnv(render(0));
+    CHECK(animated);                              // the flames change frame over time
+}

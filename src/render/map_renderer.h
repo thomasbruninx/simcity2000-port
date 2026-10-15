@@ -27,7 +27,8 @@ struct RenderLayers {
     bool underground = false;     // pipes, subway and water table instead of the surface (0x43A9E0)
     bool powerOverlay = false;    // tint powered / unpowered tiles
     bool waterOverlay = false;    // tint watered / piped / dry tiles
-    bool blinkOn = true;          // phase of the blinking no-power bolt
+    bool blinkOn = true;
+    uint32_t animTick = 0;        // animation clock for the flames (the original picks a frame and a mirroring at random on every repaint)          // phase of the blinking no-power bolt
     bool infrastructure = true;   // objects below 0x70: roads, rails, power lines, trees, parks ... (Place & Print: Show Infrastructure)
     bool signs = true;            // sign labels (drawn by the interface)
     bool bolts = true;            // the power-outage icon
