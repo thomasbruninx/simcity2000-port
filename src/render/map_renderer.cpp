@@ -232,7 +232,14 @@ void MapRenderer::drawThing(Framebuffer& fb, const World& w, const Camera& cam, 
         blit(fb, sid, x, y, t_.railFlip[static_cast<size_t>(idx)] != 0);
         return;
     }
-    if (type == 0xC || type == 0xD || type == 7 || type == 8 || type == 0xE || type == 4) return;
+    if (type == 7 || type == 8 || type == 0xE) {   // the dispatch markers (police, fire, military): one sprite standing on the tile (0x450A60)
+        const int sid = t_.thingSprite[static_cast<size_t>(type)] + 500 * z;
+        const Sprite* sp = spriteAt(sid);
+        if (!sp) return;
+        blit(fb, sid, tileLeft + tw - (sp->width >> 1), tileBase - (altWord & 0x1F) * step - sp->height, false);
+        return;
+    }
+    if (type == 0xC || type == 0xD || type == 4) return;
 
     int sprite = 0;
     bool flip = false;

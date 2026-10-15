@@ -79,7 +79,6 @@ void TitleScreen::scan() {
     }
     for (const std::string& n : listFiles(dir_ + "/CITIES", ".SC2")) cities_.push_back(n);
     for (const std::string& n : listFiles(dir_, ".SC2")) cities_.push_back("../" + n);
-    tileSets_ = listFiles(dir_ + "/SCURKART", ".MIF");   // object sets of SCURK (Load Tile Set)
 }
 
 void TitleScreen::ensureTextures(SDL_Renderer* r) {
@@ -116,12 +115,19 @@ void TitleScreen::openCities() {
     std::string start = p.substr(0, p.rfind('/')) + "/saves";
     if (listFiles(start, ".sc2").empty()) start = dir_ + "/CITIES";   // no game saved yet: the cities of the installation
     browser_.open("Load City", start, {}, {".sc2"}, true);
+    browserAction_ = Action::LoadCity;
+    mode_ = Mode::Browser;
+}
+
+void TitleScreen::openTileSets() {
+    browser_.open("Load Tile Set", dir_ + "/SCURKART", {}, {".mif"}, true);
+    browserAction_ = Action::LoadTileSet;
     mode_ = Mode::Browser;
 }
 
 void TitleScreen::pollBrowser() {
     if (mode_ != Mode::Browser || browser_.active()) return;
-    if (browser_.result() == 0) { chosenPath = browser_.path(); action = Action::LoadCity; mode_ = Mode::Menu; }
+    if (browser_.result() == 0) { chosenPath = browser_.path(); action = browserAction_; mode_ = Mode::Menu; }
     else leave();   // cancelled: back to the menu (or to the game)
 }
 
@@ -160,14 +166,14 @@ void TitleScreen::draw(SDL_Renderer* r, int w, int h) {
         return;
     }
     if (mode_ == Mode::Settings) { drawSettings(r, w, h); return; }
-    const bool scen = mode_ == Mode::Scenarios, tiles = mode_ == Mode::TileSets;
-    text(r, 60, 70, scen ? "Select Scenario" : tiles ? "Load Tile Set (an object set of SCURK)" : "Load Saved City", 255, 255, 190);
-    const size_t n = scen ? scenarios_.size() : tiles ? tileSets_.size() : cities_.size();
+    const bool scen = mode_ == Mode::Scenarios;
+    text(r, 60, 70, scen ? "Select Scenario" : "Load Saved City", 255, 255, 190);
+    const size_t n = scen ? scenarios_.size() : cities_.size();
     for (size_t i = 0; i < n; ++i) {
         const int y = 110 + static_cast<int>(i) * 20;
         const bool sel = static_cast<int>(i) == selected_;
         fill(r, 60, y, 300, 18, sel ? 70 : 20, sel ? 90 : 28, sel ? 140 : 44);
-        clippedText(r, 68, y + 5, 284, scen ? scenarios_[i].name : tiles ? tileSets_[i] : cities_[i], theme::kText);
+        clippedText(r, 68, y + 5, 284, scen ? scenarios_[i].name : cities_[i], theme::kText);
     }
     if (scen && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) {
         const ScenarioEntry& e = scenarios_[static_cast<size_t>(selected_)];
@@ -254,7 +260,7 @@ void TitleScreen::activateMenu(int i) {
         case 1: action = Action::NewMap; break;
         case 2: mode_ = Mode::Scenarios; selected_ = 0; break;
         case 3: openCities(); break;
-        case 4: mode_ = Mode::TileSets; selected_ = 0; break;
+        case 4: openTileSets(); break;
         case 5: mode_ = Mode::Settings; status_.clear(); break;
         case 6: mode_ = Mode::Editors; break;
         default: action = Action::Quit; break;
@@ -262,8 +268,7 @@ void TitleScreen::activateMenu(int i) {
 }
 
 void TitleScreen::choose() {
-    if (mode_ == Mode::TileSets && selected_ >= 0 && static_cast<size_t>(selected_) < tileSets_.size()) { chosenPath = dir_ + "/SCURKART/" + tileSets_[static_cast<size_t>(selected_)]; action = Action::LoadTileSet; }
-    else if (mode_ == Mode::Scenarios && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) { chosenPath = scenarios_[static_cast<size_t>(selected_)].path; action = Action::LoadScenario; }
+    if (mode_ == Mode::Scenarios && selected_ >= 0 && static_cast<size_t>(selected_) < scenarios_.size()) { chosenPath = scenarios_[static_cast<size_t>(selected_)].path; action = Action::LoadScenario; }
     else if (mode_ == Mode::Cities && selected_ >= 0 && static_cast<size_t>(selected_) < cities_.size()) {
         const std::string& n = cities_[static_cast<size_t>(selected_)];
         if (n.rfind("saves/", 0) == 0) { const std::string p = AudioSettings::settingsPath(); chosenPath = p.substr(0, p.rfind('/')) + "/" + n; }
@@ -283,7 +288,7 @@ void TitleScreen::mouseDown(int x, int y, int w, int h) {
         return;
     }
     if (mode_ == Mode::Settings) { settingsClick(x, y, w, h); return; }
-    const size_t n = mode_ == Mode::Scenarios ? scenarios_.size() : mode_ == Mode::TileSets ? tileSets_.size() : cities_.size();
+    const size_t n = mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size();
     for (size_t i = 0; i < n; ++i) if (Rect{60, 110 + static_cast<int>(i) * 20, 300, 18}.in(x, y)) { selected_ = static_cast<int>(i); return; }
     if (button(0, w, h).in(x, y)) choose();
     if (button(1, w, h).in(x, y)) leave();
@@ -310,7 +315,7 @@ void TitleScreen::keyDown(SDL_Keycode k) {
         return;
     }
     if (mode_ == Mode::Settings) { if (k == SDLK_ESCAPE) { settings.save(); leave(); } return; }
-    const int n = static_cast<int>(mode_ == Mode::Scenarios ? scenarios_.size() : mode_ == Mode::TileSets ? tileSets_.size() : cities_.size());
+    const int n = static_cast<int>(mode_ == Mode::Scenarios ? scenarios_.size() : cities_.size());
     if (k == SDLK_ESCAPE) leave();
     else if (k == SDLK_DOWN && selected_ + 1 < n) ++selected_;
     else if (k == SDLK_UP && selected_ > 0) --selected_;

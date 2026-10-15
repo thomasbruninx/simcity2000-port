@@ -43,6 +43,7 @@ public:
     // scripting
     void openScenarioList() { mode_ = Mode::Scenarios; }
     void openSettings() { mode_ = Mode::Settings; status_.clear(); }
+    void openTileSets();             // Load Tile Set: the file browser on SCURKART (*.MIF)
     void openCities();               // Load Saved City / File > Load City: the file browser (open mode), starting in the saved games or the game's CITIES folder
     bool browsing() const { return mode_ == Mode::Browser; }
     void wheel(int dy);
@@ -55,7 +56,8 @@ public:
     void select(int index) { selected_ = index; }
 
 private:
-    enum class Mode { Menu, Scenarios, Cities, TileSets, Settings, Editors, Browser };
+    enum class Mode { Menu, Scenarios, Cities, Settings, Editors, Browser };
+    Action browserAction_ = Action::LoadCity;   // what an accepted browser means
     FileBrowser browser_;
     void pollBrowser();
     std::string dir_;
@@ -66,7 +68,7 @@ private:
     int titleW_ = 0, titleH_ = 0;
     bool triedTitle_ = false;
     std::vector<ScenarioEntry> scenarios_;
-    std::vector<std::string> cities_, tileSets_;
+    std::vector<std::string> cities_;
     int selected_ = 0;
     std::vector<std::string> fonts_;
     std::string status_;

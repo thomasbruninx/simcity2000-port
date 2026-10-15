@@ -469,6 +469,8 @@ int main(int argc, char** argv) {
                 }
                 else if (op == "fire") { int a, b; words >> a >> b; std::printf("fire at %d %d: %d\n", a, b, startFire(sim->context(), a, b, 1) ? 1 : 0); }   // headless: set a tile on fire
                 else if (op == "txt") { int a, b, v; words >> a >> b >> v; sim->world().xtxt.at(a, b) = static_cast<uint8_t>(v); }   // headless: a raw XTXT value (0xFB..0xFF = flames, flood)
+                else if (op == "dispatch") { int sub, a, b; words >> sub >> a >> b; ToolState dts; startDispatch(sim->context(), dts); std::printf("dispatch %d at %d %d: %d\n", sub, a, b, placeDispatch(sim->context(), dts, sub, a, b) ? 1 : 0); }   // headless: 0 police, 1 fire, 2 military
+                else if (op == "loadtiles") { titleScreen.show(); titleScreen.openTileSets(); }   // Load Tile Set: the file browser
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();
