@@ -199,6 +199,7 @@ void GameUi::update(int dtMs) {
 void GameUi::mouseDown(int x, int y, int button) {
     mouseX_ = x; mouseY_ = y;
     if (cityEdit_) sim_.state().treasury = 99999999;   // the editor never runs update(): editing stays free
+    if (nc_.open) { if (button == 1) newCityMouse(x, y); return; }
     if (help_.active) { help_.mouseDown(x, y, button, width_, height_); return; }
     if (browser_.active()) { if (button == 1) browser_.mouseDown(x, y, width_, height_); return; }
     if (pauseOpen_ && !modal_) {
@@ -408,6 +409,12 @@ void GameUi::wheel(int x, int y, int dy) {
 }
 
 bool GameUi::keyDown(SDL_Keycode k, bool ctrl) {
+    if (nc_.open) {
+        if (k == SDLK_ESCAPE) nc_.result = -1;
+        else if (k == SDLK_RETURN) nc_.result = 0;
+        else if (k == SDLK_BACKSPACE) nc_.name.backspace();
+        return true;
+    }
     if (help_.active) { help_.key(k); return true; }
     if (browser_.active()) { browser_.key(k); return true; }
     if (k == SDLK_F1 && !cityEdit_) { openHelp(0); return true; }
@@ -617,36 +624,75 @@ void GameUi::drawMapEditor(SDL_Renderer* r) {
 }
 
 void GameUi::newCityDialog(bool randomMap) {
-    if (randomMap) { enterMapEditor(); return; }
-    // the original: "Edit New Map" (terrain generation dialog 104) or the flat default map, then the start year and difficulty (dialog 101)
-    Modal mapChoice; mapChoice.title = "New city: map"; mapChoice.options = {"Flat default map", "Random terrain (hills, water, trees)"};
-    const int m = randomMap ? 1 : runModal(mapChoice);
-    if (m < 0) return;
-    TerrainParams tp;
-    if (m == 1) {
-        Modal shore; shore.title = "Landform"; shore.options = {"Inland", "Coast", "River", "Coast and river"};
-        const int l = runModal(shore);
-        if (l < 0) return;
-        tp.coast = (l & 1) != 0; tp.river = (l & 2) != 0;
-        auto level = [&](const char* title, int& out) {
-            Modal q; q.title = title; q.options = {"0 %", "25 %", "50 %", "75 %", "100 %"};
-            const int v = runModal(q);
-            if (v < 0) return false;
-            out = v * 47 / 4;
-            return true;
-        };
-        if (!level("Hills", tp.hills) || !level("Water", tp.water) || !level("Trees", tp.trees)) return;
-    }
-    Modal year; year.title = "Starting year"; year.options = {"1900", "1950", "2000", "2050"};
-    const int era = runModal(year);
-    if (era < 0) return;
-    Modal diff; diff.title = "Difficulty"; diff.options = {"Easy ($20,000)", "Medium ($10,000)", "Hard ($10K bond)"};
-    const int d = runModal(diff);
-    if (d < 0) return;
+    if (randomMap) { enterMapEditor(); return; }   // Edit New Map: the terrain generator panel (dialog 104)
+    // File > New City: the start dialog 101 (city name, starting year, difficulty) on the default map
+    int era = 0, d = 0;
     std::string name = "New City";
-    if (!askText("Name your city", name) || name.empty()) name = "New City";   // the start dialog 101 has a name field
-    newCity(era, d, m == 1 ? &tp : nullptr);
+    if (!runNewCityDialog(era, d, name)) return;
+    if (name.empty()) name = "New City";
+    newCity(era, d, nullptr);
     setCityNameAll(name);
+}
+
+static const char* const kYearLabels[4] = {"1900", "1950", "2000", "2050"};
+static const char* const kLevelLabels[3] = {"Easy      $20,000", "Medium    $10,000", "Hard      $10K Bond"};
+
+void GameUi::layoutNewCity() {
+    NewCityDialog& n = nc_;
+    n.panel = ui::centered(Rect{0, 0, width_, height_}, std::min(400, width_ - 40), 276);
+    Rect inner = n.panel.inset(18, 0);
+    inner.cutTop(40);   // title and the caption of the name field
+    n.name.r = inner.cutTop(22);
+    inner.cutTop(14);
+    inner.cutTop(18);   // group captions
+    n.years.assign(4, ui::Checkbox{});
+    n.levels.assign(3, ui::Checkbox{});
+    const int half = inner.w / 2;
+    for (int i = 0; i < 4; ++i) { n.years[static_cast<size_t>(i)].r = Rect{inner.x + half + 8, inner.y + i * 22, half - 8, 20}; n.years[static_cast<size_t>(i)].label = kYearLabels[i]; n.years[static_cast<size_t>(i)].checked = i == n.era; }
+    for (int i = 0; i < 3; ++i) { n.levels[static_cast<size_t>(i)].r = Rect{inner.x, inner.y + i * 22, half - 8, 20}; n.levels[static_cast<size_t>(i)].label = kLevelLabels[i]; n.levels[static_cast<size_t>(i)].checked = i == n.difficulty; }
+    const int by = n.panel.bottom() - 42;
+    n.done = ui::Button{Rect{n.panel.x + n.panel.w / 2 - 110, by, 100, 28}, "Done"};
+    n.cancel = ui::Button{Rect{n.panel.x + n.panel.w / 2 + 10, by, 100, 28}, "Cancel"};
+}
+
+void GameUi::drawNewCity(SDL_Renderer* r) {
+    layoutNewCity();
+    NewCityDialog& n = nc_;
+    fill(r, 0, 0, width_, height_, 0, 0, 0, 140);
+    drawPanel(r, n.panel, "New City");
+    text(r, n.name.r.x, n.name.r.y - 14, "City name", theme::kTextDim);
+    drawTextField(r, n.name, true);
+    const int cy = n.name.r.bottom() + 14;
+    text(r, n.levels[0].r.x, cy, "Difficulty", theme::kTextDim);
+    text(r, n.years[0].r.x, cy, "Starting year", theme::kTextDim);
+    for (const auto& c : n.levels) drawCheckbox(r, c);
+    for (const auto& c : n.years) drawCheckbox(r, c);
+    drawButton(r, n.done);
+    drawButton(r, n.cancel);
+}
+
+bool GameUi::newCityMouse(int x, int y) {
+    layoutNewCity();
+    NewCityDialog& n = nc_;
+    if (n.done.hit(x, y)) n.result = 0;
+    else if (n.cancel.hit(x, y)) n.result = -1;
+    for (int i = 0; i < 4; ++i) if (n.years[static_cast<size_t>(i)].r.contains(x, y)) n.era = i;
+    for (int i = 0; i < 3; ++i) if (n.levels[static_cast<size_t>(i)].r.contains(x, y)) n.difficulty = i;
+    return true;
+}
+
+bool GameUi::runNewCityDialog(int& era, int& difficulty, std::string& name) {
+    nc_ = NewCityDialog{};
+    nc_.era = era; nc_.difficulty = difficulty;
+    nc_.name.text = name; nc_.name.maxLen = 24;
+    if (headless || !pump) return true;
+    nc_.open = true;
+    SDL_StartTextInput(SDL_GetKeyboardFocus());
+    while (nc_.result == -2) if (!pump()) { nc_.result = -1; break; }
+    SDL_StopTextInput(SDL_GetKeyboardFocus());
+    nc_.open = false;
+    era = nc_.era; difficulty = nc_.difficulty; name = nc_.name.text;
+    return nc_.result == 0;
 }
 
 // ---- tools -------------------------------------------------------------------------------------------------------------
@@ -866,6 +912,7 @@ bool GameUi::askText(const std::string& title, std::string& text) {
 }
 
 void GameUi::textInput(const std::string& utf8) {
+    if (nc_.open) { nc_.name.textInput(utf8); return; }
     if (help_.active) { help_.textInput(utf8); return; }
     if (browser_.active()) { browser_.textInput(utf8); return; }
     if (modal_ && modal_->textInput) {
@@ -1242,6 +1289,7 @@ void GameUi::draw(SDL_Renderer* r) {
     if (modal_) drawModal(r);
     if (browser_.active()) browser_.draw(r, width_, height_);
     if (help_.active) help_.draw(r, width_, height_);
+    if (nc_.open) drawNewCity(r);
 }
 
 void GameUi::drawIcon(SDL_Renderer* r, int strip, int cell, int x, int y) {

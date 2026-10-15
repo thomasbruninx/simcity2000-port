@@ -80,8 +80,9 @@ public:
     void newCityDialog(bool randomMap = false);
     void enterMapEditor();                              // File > Edit New Map: the terrain generator panel (Hills / Water / Trees, Coast, River, MAKE, DONE) and the terrain tools
     void showTestModal(const std::string& title, bool field) { testModal_ = Modal{}; testModal_.title = title; testModal_.textInput = field; testModal_.text = "A long city name"; testModal_.options = {"Yes", "No"}; modal_ = &testModal_; }   // screenshots
+    void showNewCityDialog() { nc_ = NewCityDialog{}; nc_.name.text = "New City"; nc_.name.maxLen = 24; nc_.open = true; }   // screenshots
     void showBrowser() { browser_.open("Save City As", savesDir(), "city"); }   // screenshots
-    bool inputCaptured() const { return browser_.active() || help_.active || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
+    bool inputCaptured() const { return browser_.active() || help_.active || nc_.open || modal_ || pauseOpen_ || budget_.open || info_.open != InfoWindows::Which::None || menu_.isOpen(); }   // dialogs swallow the keyboard (no camera panning)
     bool mapEditing() const { return mapEdit_; }
     // Place & Print (SCURK): the city is edited in this view - paused, free, SCURK's own toolbox and view buttons; the object selector belongs to the editor.
     void setCityEdit(bool on);
@@ -153,6 +154,20 @@ private:
     std::string message_;
     int messageMs_ = 0;
     Modal* modal_ = nullptr;
+    // the original's start dialog 101: city name, starting year and difficulty in one window
+    struct NewCityDialog {
+        bool open = false;
+        int result = -2;                    // -2 open, 0 Done, -1 Cancel
+        int era = 0, difficulty = 0;
+        ui::TextField name;
+        ui::Rect panel;
+        std::vector<ui::Checkbox> years, levels;
+        ui::Button done, cancel;
+    } nc_;
+    void layoutNewCity();
+    void drawNewCity(SDL_Renderer* r);
+    bool newCityMouse(int x, int y);
+    bool runNewCityDialog(int& era, int& difficulty, std::string& name);
     Modal testModal_;
     BudgetWindow budget_;
     InfoWindows info_;

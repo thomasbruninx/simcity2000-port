@@ -424,6 +424,7 @@ int main(int argc, char** argv) {
                 else if (op == "rdrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; ui.mouseDown(a, b, 3); ui.mouseMove(c2, d2); ui.mouseUp(c2, d2, 3); }
                 else if (op == "help") { int w2 = 0; words >> w2; ui.openHelp(w2); }   // 0 contents, 1 search, 2 using help
                 else if (op == "type") { std::string t; std::getline(words >> std::ws, t); ui.textInput(t); }
+                else if (op == "newdlg") ui.showNewCityDialog();
                 else if (op == "frame") renderFrame();   // draw once (editors lay out during drawing)
                 else if (op == "edrag") { int a, b, c2, d2; words >> a >> b >> c2 >> d2; if (editorsActive()) { editors->mouseDown(a, b, 1, width, height); editors->mouseMove(c2, d2); editors->mouseUp(c2, d2, 1); } }
                 else if (op == "mapedit") ui.enterMapEditor();
