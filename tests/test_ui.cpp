@@ -64,7 +64,7 @@ TEST(ui_slider_checkbox_list_and_text_field) {
 }
 
 TEST(ui_text_field_selection_is_replaced_by_the_next_input) {
-    ui::TextField f;
+    TextField f;
     f.text = "MYSET"; f.selected = true;
     f.textInput("ab");
     CHECK(f.text == "ab" && !f.selected);
